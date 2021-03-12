@@ -1,0 +1,45 @@
+_cvat_credentials: &cvat_credentials
+  host: "http://localhost:8080/api/v1"
+  credentials: dev_cvat
+
+# CVAT dataset containing raw frame data.
+cotton_videos:
+  type: pycvat.CvatDataSet
+  task_id: 169
+  << : *cvat_credentials
+
+# Raw annotations, in MOT 1.1 format, corresponding to the frames.
+annotations_mot_1_1:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/flower_annotations_2021_03_08/gt.txt
+  load_args:
+    # MOT format column names.
+    names:
+      - frame
+      - id
+      - bb_left
+      - bb_top
+      - bb_width
+      - bb_height
+      - conf
+      - x
+      - y
+      - z
+
+# Training data, as TFRecords.
+tfrecord_train:
+  type: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/train.tfrecord
+  versioned: True
+
+# Testing data, as TFRecords.
+tfrecord_test:
+  type: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/test.tfrecord
+  versioned: True
+
+# Training data, as TFRecords.
+tfrecord_valid:
+  type: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/valid.tfrecord
+  versioned: True

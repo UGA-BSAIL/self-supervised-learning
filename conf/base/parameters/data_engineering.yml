@@ -1,0 +1,10 @@
+# Max length of the clips to use when training and evaluating, in frames.
+max_clip_length: 300
+
+# Fraction of clips to use for training.
+train_fraction: 0.8
+# Fraction of clips to use for testing.
+test_fraction: 0.1
+
+# Use only this number of frames from the beginning of the video.
+use_first_frames: 5320
