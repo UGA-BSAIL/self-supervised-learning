@@ -26,6 +26,12 @@ annotations_mot_1_1:
       - y
       - z
 
+# Cleaned and wrangled annotations.
+annotations_pandas:
+  type: pandas.ParquetDataSet
+  filepath: data/03_primary/annotations
+  versioned: True
+
 # Training data, as TFRecords.
 tfrecord_train:
   type: cotton_flower_mot.data_sets.TfRecordsDataSet
