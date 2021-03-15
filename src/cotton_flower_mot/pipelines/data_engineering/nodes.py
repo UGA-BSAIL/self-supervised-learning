@@ -290,11 +290,7 @@ def _make_example(
 
     """
     # Create the feature dictionary.
-    features = {
-        Otf.IMAGE_ENCODED.value: _FEATURES_TO_FACTORIES[
-            Otf.IMAGE_ENCODED.value
-        ](image)
-    }
+    features = {}
     for column_name, column_data in frame_annotations.items():
         # Collapse the frame number column since all frame numbers should be the
         # same.
@@ -307,6 +303,11 @@ def _make_example(
 
     # Add default values for missing columns.
     features.update(_get_missing_columns(frame_annotations))
+
+    # Add the image data.
+    features[Otf.IMAGE_ENCODED.value] = _FEATURES_TO_FACTORIES[
+        Otf.IMAGE_ENCODED.value
+    ](image)
 
     return tf.train.Example(features=tf.train.Features(feature=features))
 
