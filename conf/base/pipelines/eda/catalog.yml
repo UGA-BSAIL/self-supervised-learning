@@ -1,0 +1,17 @@
+# Plot showing the distribution of bounding-box sizes in the annotations.
+bounding_box_size_dist:
+  type: matplotlib.MatplotlibWriter
+  filepath: data/08_reporting/eda/bounding_box_size_dist.png
+  versioned: True
+
+# Plot showing the number of annotations per frame.
+annotations_per_frame:
+  type: matplotlib.MatplotlibWriter
+  filepath: data/08_reporting/eda/annotations_per_frame.png
+  versioned: True
+
+# Plot showing the track lengths.
+track_lengths:
+  type: matplotlib.MatplotlibWriter
+  filepath: data/08_reporting/eda/track_lengths.png
+  versioned: True

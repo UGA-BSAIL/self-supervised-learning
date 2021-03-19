@@ -4,13 +4,40 @@ https://arxiv.org/pdf/2010.00067.pdf
 """
 
 
-from typing import Any, Callable
+from typing import Any, Callable, Tuple
 
+import spektral
 import tensorflow as tf
 from loguru import logger
+from pydantic.dataclasses import dataclass
 from tensorflow.keras import layers
 
+from .graph_utils import (
+    augment_adjacency_matrix,
+    compute_bipartite_edge_features,
+)
 from .layers.dense import DenseBlock, TransitionLayer
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    """
+    Encapsulates configuration for the model.
+
+    Attributes:
+        image_input_shape: The shape of the detections and tracklets being
+            input to the appearance feature extractor.
+        num_appearance_features: The number of appearance features to extract
+            from each image.
+
+        num_gcn_channels: Number of output channels to use for the GCN blocks.
+
+    """
+
+    image_input_shape: Tuple[int, int, int]
+    num_appearance_features: int
+
+    num_gcn_channels: int
 
 
 def _bn_relu_conv(
@@ -38,22 +65,49 @@ def _bn_relu_conv(
     return _apply_block
 
 
+def _bn_relu_dense(
+    *args: Any, **kwargs: Any
+) -> Callable[[tf.Tensor], tf.Tensor]:
+    """
+    Small helper function that builds a bn-relu-dense block.
+
+    Args:
+        *args: Forwarded to `Dense()`.
+        **kwargs: Forwarded to `Dense()`.
+
+    Returns:
+        The block, which can be called to apply it to some input, similar to
+        a Keras layer.
+
+    """
+    dense = layers.Dense(*args, **kwargs)
+    norm = layers.BatchNormalization()
+    relu = layers.Activation("relu")
+
+    def _apply_block(block_input: tf.Tensor) -> tf.Tensor:
+        return dense(relu(norm(block_input)))
+
+    return _apply_block
+
+
 def _build_appearance_feature_extractor(
-    normalized_input: tf.Tensor, num_features: int
+    normalized_input: tf.Tensor, *, config: ModelConfig
 ) -> tf.Tensor:
     """
     Builds a CNN for extracting appearance features from detection images.
 
     Args:
         normalized_input: The normalized input detections.
-        num_features: The number of appearance features we want to output
-            per image.
+        config: Model configuration.
 
     Returns:
         A batch of corresponding appearance features.
 
     """
-    logger.debug("Appearance features will have length {}.", num_features)
+    logger.debug(
+        "Appearance features will have length {}.",
+        config.num_appearance_features,
+    )
 
     # Input convolution layers.
     conv1_1 = _bn_relu_conv(48, 3, padding="same")(normalized_input)
@@ -73,24 +127,284 @@ def _build_appearance_feature_extractor(
     dense4 = DenseBlock(8, growth_rate=4)(transition3)
 
     # Fully-connected layer to generate feature vector.
-    fc4_1 = layers.Dense(num_features)(dense4)
-    norm4_1 = layers.BatchNormalization()(fc4_1)
-    return layers.Activation("relu")(norm4_1)
+    flat5 = layers.Flatten()(dense4)
+    return _bn_relu_dense(config.num_appearance_features)(flat5)
 
 
-def _update_affinity_matrix(
-    *, affinity_matrix: tf.Tensor, node_features: tf.Tensor
+def _build_appearance_model(*, config: ModelConfig) -> tf.keras.Model:
+    """
+    Creates a sub-model that extracts appearance features.
+
+    Args:
+        config: Model configuration.
+
+    Returns:
+        The model that it created.
+
+    """
+    logger.debug(
+        "Using input shape {} for appearance feature extractor.",
+        config.image_input_shape,
+    )
+    images = layers.Input(shape=config.image_input_shape)
+
+    def _normalize(_images: tf.Tensor) -> tf.Tensor:
+        # Normalize the images before putting them through the model.
+        float_images = tf.cast(_images, tf.keras.backend.floatx())
+        return tf.image.per_image_standardization(float_images)
+
+    normalized = layers.Lambda(_normalize)(images)
+
+    # Apply the model layers.
+    features = _build_appearance_feature_extractor(normalized, config=config)
+
+    # Create the model.
+    return tf.keras.Model(inputs=images, outputs=features)
+
+
+def _build_edge_mlp(
+    *,
+    geometric_features: Tuple[tf.Tensor, tf.Tensor],
+    appearance_features: Tuple[tf.Tensor, tf.Tensor],
 ) -> tf.Tensor:
+    """
+    Builds the MLP that computes edge features.
+
+    Args:
+        geometric_features: Batch of geometric features for both the
+            detections and tracklets, in that order. Should have the
+            shape `[batch_size, n_nodes, n_features]`.
+        appearance_features: Batch of appearance features for both the
+            detections and tracklets, in that order. Should have the shape
+            `[batch_size, n_nodes, n_features]`.
+
+    Returns:
+        The computed edge features. It will be a tensor of shape
+        `[batch_size, n_left_nodes, n_right_nodes, 1]`.
+
+    """
+    right_features, left_features = geometric_features
+    num_right_nodes = tf.shape(right_features)[1]
+    num_left_nodes = tf.shape(left_features)[1]
+
+    def _combine_input_impl(
+        detections: tf.Tensor, tracklets: tf.Tensor
+    ) -> tf.Tensor:
+        input_edge_features = compute_bipartite_edge_features(
+            left_nodes=tracklets, right_nodes=detections
+        )
+        # We need to get rid of the node dimension so we can
+        # feed it into an MLP. We also concatenate the detection and tracklet
+        # features at the same time.
+        num_features = tf.shape(input_edge_features)[-1]
+        return tf.reshape(input_edge_features, (-1, num_features * 2))
+
+    geometric_combined = layers.Lambda(_combine_input_impl)(geometric_features)
+    appearance_combined = layers.Lambda(_combine_input_impl)(
+        appearance_features
+    )
+    all_features = layers.Concatenate()(
+        (geometric_combined, appearance_combined)
+    )
+
+    # Apply the MLP. We need to use a feature size of one for the output,
+    # since these values are going directly in the affinity matrix.
+    edge_features = _bn_relu_dense(1)(all_features)
+
+    # Transform back to the expanded shape.
+    return tf.reshape(edge_features, (-1, num_left_nodes, num_right_nodes, 1))
+
+
+def _update_adjacency_matrix() -> Callable[
+    [Tuple[tf.Tensor, tf.Tensor]], tf.Tensor
+]:
     """
     Updates the affinity matrix for the next layer according to the method
     specified in https://arxiv.org/pdf/2010.00067.pdf.
 
-    Args:
-        affinity_matrix: The affinity matrix from the previous layer.
-            Should have the shape `[batch_size, n_nodes, n_nodes, 1]`.
-        node_features: The node features from the previous layer. Should
-            have the shape `[batch_size, n_nodes, n_features]`.
+    Returns:
+        A function returning the adjacency matrix for the next layer.
 
-    Returns: The affinity matrix for the next layer.
+    """
+    # Combine the affinity matrix with node features.
+    aug1_1 = layers.Lambda(augment_adjacency_matrix)
+    # The MLP operation over all edges is actually implemented as a 1x1
+    # convolution for convenience.
+    conv1_1 = _bn_relu_conv(1, 1, padding="same")
+
+    def _apply_block(inputs: Tuple[tf.Tensor, tf.Tensor]) -> tf.Tensor:
+        """
+        Args:
+            inputs: Inputs for this operation, including:
+            - node_features: The node features from the previous layer. Should
+                have the shape `[batch_size, n_nodes, n_features]`.
+            - adjacency_matrix: The adjacency matrix from the previous layer.
+                Should have the shape `[batch_size, n_nodes, n_nodes, 1]`.
+
+        Returns:
+            The adjacency matrix for the next layer.
+
+        """
+        node_features, adjacency_matrix = inputs
+        return conv1_1(
+            aug1_1(
+                adjacency_matrix=adjacency_matrix, node_features=node_features
+            )
+        )
+
+    return _apply_block
+
+
+def _gcn_block(
+    *args: Any, **kwargs: Any
+) -> Callable[[Tuple[tf.Tensor, tf.Tensor]], Tuple[tf.Tensor, tf.Tensor]]:
+    """
+    Creates a new GCN layer with a corresponding affinity matrix update,
+    in accordance with the method described in
+    https://arxiv.org/pdf/2010.00067.pdf
+
+    Args:
+        *args: Will be forwarded to the `GCNConv` layer.
+        **kwargs: Will be forwarded to the `GCNConv` layer.
+
+    Returns:
+        A function taking the same inputs as `GCNConv`. As output, it returns
+        both the new node features and the new adjacency matrix.
+
+    """
+    # Compute the next node features.
+    laplacian1_1 = layers.Lambda(spektral.utils.gcn_filter)
+    gcn1_1 = spektral.layers.GCNConv(*args, **kwargs)
+
+    # Compute the next edge features.
+    edges1_1 = _update_adjacency_matrix()
+
+    def _apply_block(
+        inputs: Tuple[tf.Tensor, tf.Tensor]
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
+        """
+        Args:
+            inputs: Inputs for this operation, including:
+            - node_features: The node features from the previous layer. Should
+                have the shape `[batch_size, n_nodes, n_features]`.
+            - adjacency_matrix: The adjacency matrix from the previous layer.
+                Should have the shape `[batch_size, n_nodes, n_nodes, 1]`.
+
+        Returns:
+            The new node features and the new adjacency matrix.
+
+        """
+        node_features, adjacency_matrix = inputs
+        new_nodes = gcn1_1((node_features, laplacian1_1(adjacency_matrix)))
+        return new_nodes, edges1_1((new_nodes, adjacency_matrix))
+
+    return _apply_block
+
+
+def _build_gnn(
+    *,
+    adjacency_matrix: tf.Tensor,
+    node_features: tf.Tensor,
+    num_gcn_channels: int,
+) -> tf.Tensor:
+    """
+    Builds the GNN for performing feature association.
+
+    Args:
+        adjacency_matrix: The initial affinity matrix. Should have the shape
+            `[batch_size, n_nodes, n_nodes, 1]`.
+        node_features: The input node features. Should have the shape
+            `[batch_size, n_nodes, n_features]`.
+        num_gcn_channels: Number of output channels to use in the GCN layers.
+
+    Returns:
+        The output node features from the GNN.
+
+    """
+    gcn1_1 = _gcn_block(num_gcn_channels)((node_features, adjacency_matrix))
+    gcn1_2 = _gcn_block(num_gcn_channels)(gcn1_1)
+
+    nodes, _ = gcn1_2
+    return nodes
+
+
+def extract_appearance_features(
+    *,
+    detections: tf.RaggedTensor,
+    tracklets: tf.RaggedTensor,
+    config: ModelConfig,
+) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
+    """
+    Builds the portion of the system that extracts appearance features.
+
+    Args:
+        detections: Extracted detection images. Should have the shape
+            `[batch_size, n_detections, height, width, channels]`, where the
+            second dimension is ragged.
+        tracklets: Extracted final images from each tracklet. Should have the
+            shape `[batch_size, n_tracklets, height, width, channels]`, where
+            the second dimension is ragged.
+        config: The model configuration.
+
+    Returns:
+        The extracted appearance features, for both the detections and
+        tracklets. Each set will have the shape
+        `[batch_size, n_nodes, n_features]`, where the second dimension
+        is ragged.
+
+    """
+    # Convert detections and tracklets to a normal batch for appearance
+    # feature extraction.
+    detections_flat = detections.merge_dims(0, 1)
+    tracklets_flat = tracklets.merge_dims(0, 1)
+
+    # Extract appearance features.
+    appearance_feature_extractor = _build_appearance_model(config=config)
+    detections_features_flat = appearance_feature_extractor(detections_flat)
+    tracklets_features_flat = appearance_feature_extractor(tracklets_flat)
+
+    # Add the flattened dimensions back.
+    detections_features_ragged = tf.RaggedTensor.from_row_lengths(
+        detections_features_flat, detections.row_lengths()
+    )
+    tracklets_features_ragged = tf.RaggedTensor.from_row_lengths(
+        tracklets_features_flat, tracklets.row_lengths()
+    )
+    return detections_features_ragged, tracklets_features_ragged
+
+
+def _build_interaction_feature_extractor(
+    *,
+    detections: tf.RaggedTensor,
+    tracklets: tf.RaggedTensor,
+    detections_geometry: tf.RaggedTensor,
+    tracklets_geometry: tf.RaggedTensor,
+    config: ModelConfig,
+) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
+    """
+    Builds the portion of the system that extracts interaction features.
+
+    Args:
+        detections: Extracted detection images. Should have the shape
+            `[batch_size, n_detections, height, width, channels]`, where the
+            second dimension is ragged.
+        tracklets: Extracted final images from each tracklet. Should have the
+            shape `[batch_size, n_tracklets, height, width, channels]`, where
+            the second dimension is ragged.
+        detections_geometry: The geometric features associated with the
+            detections. Should have the shape
+            `[batch_size, n_detections, n_features]`, where the second dimension
+            is ragged.
+        tracklets_geometry: The geometric features associated with the
+            tracklets. Should have the shape
+            `[batch_size, n_tracklets, n_features]`, where the second dimension
+            is ragged.
+        config: The model configuration.
+
+    Returns:
+        The extracted interaction features, for both the left and right nodes
+        in the graph. Each set will have the shape
+        `[batch_size, n_nodes, n_inter_features]`, where the second dimension
+        is ragged.
 
     """

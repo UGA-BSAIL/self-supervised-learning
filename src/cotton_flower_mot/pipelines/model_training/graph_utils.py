@@ -105,18 +105,18 @@ def make_affinity_matrix(edge_features: tf.Tensor) -> tf.Tensor:
         return tf.pad(edge_features, paddings)
 
 
-def augment_affinity_matrix(
-    *, affinity_matrix: tf.Tensor, node_features: tf.Tensor
+def augment_adjacency_matrix(
+    *, adjacency_matrix: tf.Tensor, node_features: tf.Tensor
 ) -> tf.Tensor:
     """
-    Creates an "augmented" affinity matrix where the corresponding features
+    Creates an "augmented" adjacency matrix where the corresponding features
     for both nodes in each edge are concatenated to that edge feature. For
     instance, the feature at `(n, m)` is going to be
 
     `concat(affinity_matrix[n, m], node_features[n], node_features[m])`.
 
     Args:
-        affinity_matrix: The input affinity matrix. Should have the shape
+        adjacency_matrix: The input affinity matrix. Should have the shape
             `[batch_size, n_nodes, n_nodes, n_edge_features]`.
         node_features: The complete node features. Should have the shape
             `[batch_size, n_nodes, n_node_features]`.
@@ -125,7 +125,7 @@ def augment_affinity_matrix(
         The affinity matrix concatenated with corresponding node features.
 
     """
-    affinity_rank_4 = tf.assert_rank(affinity_matrix, 4)
+    affinity_rank_4 = tf.assert_rank(adjacency_matrix, 4)
     nodes_rank_3 = tf.assert_rank(node_features, 3)
 
     with tf.control_dependencies([affinity_rank_4, nodes_rank_3]):
@@ -144,5 +144,5 @@ def augment_affinity_matrix(
 
         # Concatenate on the feature dimension.
         return tf.concat(
-            (affinity_matrix, node_features_left, node_features_right), axis=3
+            (adjacency_matrix, node_features_left, node_features_right), axis=3
         )

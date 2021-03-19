@@ -4,11 +4,11 @@ Tests for the `graph_utils` module.
 
 
 import itertools
-from typing import Any, Callable, Iterable, Tuple
+from typing import Iterable, Tuple
 
 import numpy as np
 import pytest
-import tensorflow as tf
+from faker import Faker
 
 from src.cotton_flower_mot.pipelines.model_training import graph_utils
 
@@ -35,40 +35,6 @@ def _iter_feature_pairs(
         yield feature_pair[0], feature_pair[1]
 
 
-TensorFactory = Callable[..., tf.Tensor]
-
-
-@pytest.fixture
-def tensor_factory() -> TensorFactory:
-    """
-    Returns:
-        A function that creates arbitrary fake tensors.
-
-    """
-
-    def _tensor_factory_impl(*args: Any) -> tf.Tensor:
-        """
-        Creates a fake tensor.
-
-        Args:
-            *args: The shape of the tensor.
-
-        Returns:
-            The tensor that it created.
-
-        """
-        # Build up the tensor from the last dimension inward.
-        reverse_dimensions = list(reversed(args))
-
-        tensor = tf.linspace(0.0, 1.0, reverse_dimensions[0])
-        for dim_size in reverse_dimensions[1:]:
-            tensor = tf.linspace(tensor, tensor + 1.0, dim_size)
-
-        return tensor
-
-    return _tensor_factory_impl
-
-
 @pytest.mark.parametrize(
     ("batch_size", "num_left_nodes", "num_right_nodes", "num_features"),
     [(1, 2, 3, 4), (3, 2, 3, 4), (3, 5, 5, 5), (3, 4, 4, 1)],
@@ -80,7 +46,7 @@ def tensor_factory() -> TensorFactory:
     ),
 )
 def test_compute_bipartite_edge_features(
-    tensor_factory: TensorFactory,
+    faker: Faker,
     batch_size: int,
     num_left_nodes: int,
     num_right_nodes: int,
@@ -90,8 +56,7 @@ def test_compute_bipartite_edge_features(
     Tests that `compute_bipartite_edge_features` works.
 
     Args:
-        tensor_factory: The factory function to use for creating fake
-            node features.
+        faker: The fixture to use for generating fake data.
         batch_size: The batch size to use for testing.
         num_left_nodes: The number of nodes on the left side of the graph.
         num_right_nodes: The number of nodes on the right side of the graph.
@@ -100,16 +65,8 @@ def test_compute_bipartite_edge_features(
     """
     # Arrange.
     # Create two sets of features.
-    left_nodes = tensor_factory(
-        batch_size,
-        num_left_nodes,
-        num_features,
-    )
-    right_nodes = tensor_factory(
-        batch_size,
-        num_right_nodes,
-        num_features,
-    )
+    left_nodes = faker.tensor((batch_size, num_left_nodes, num_features))
+    right_nodes = faker.tensor((batch_size, num_right_nodes, num_features))
 
     # Act.
     edge_features = graph_utils.compute_bipartite_edge_features(
@@ -174,7 +131,7 @@ def test_compute_bipartite_edge_features(
     ),
 )
 def test_make_affinity_matrix(
-    tensor_factory: TensorFactory,
+    faker: Faker,
     batch_size: int,
     num_left: int,
     num_right: int,
@@ -184,8 +141,7 @@ def test_make_affinity_matrix(
     Tests that `make_affinity_matrix` works.
 
     Args:
-        tensor_factory: The factory to use for creating fake edge
-            features.
+        faker: The fixture to use for generating fake data.
         batch_size: The batch size to use for testing.
         num_left: The number of left nodes to use for testing.
         num_right: The number of right nodes to use for testing.
@@ -194,11 +150,8 @@ def test_make_affinity_matrix(
     """
     # Arrange.
     # Create features to test with.
-    edge_features = tensor_factory(
-        batch_size,
-        num_left,
-        num_right,
-        num_features,
+    edge_features = faker.tensor(
+        (batch_size, num_left, num_right, num_features)
     )
 
     # Act.
