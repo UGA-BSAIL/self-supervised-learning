@@ -8,6 +8,7 @@ import json
 import numpy as np
 import pytest
 import tensorflow as tf
+import yaml
 from pytest_snapshot.plugin import Snapshot
 
 from src.cotton_flower_mot.pipelines.model_training import sinkhorn
@@ -112,4 +113,4 @@ def test_solve_optimal_transport_deserts(snapshot: Snapshot) -> None:
         "transport": transport.numpy().tolist(),
         "dist": dist.numpy().tolist(),
     }
-    snapshot.assert_match(json.dumps(results), "desert_dist.json")
+    snapshot.assert_match(yaml.dump(results), "desert_dist.yml")

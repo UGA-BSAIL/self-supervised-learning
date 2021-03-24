@@ -28,6 +28,8 @@ pre-commit = "^2.11.0"
 pytest-snapshot = "^0.5.0"
 Faker = "^6.6.2"
 pytest-coverage = "^0.0"
+PyYAML = "^5.4.1"
+pytest-flake8 = "^1.0.7"
 
 [tool.black]
 line-length = 79

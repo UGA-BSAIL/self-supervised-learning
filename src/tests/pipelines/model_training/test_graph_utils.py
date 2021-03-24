@@ -8,6 +8,7 @@ from typing import Iterable, Tuple
 
 import numpy as np
 import pytest
+import spektral
 from faker import Faker
 
 from src.cotton_flower_mot.pipelines.model_training import graph_utils
@@ -130,7 +131,7 @@ def test_compute_bipartite_edge_features(
         "same_num_nodes",
     ),
 )
-def test_make_affinity_matrix(
+def test_make_adjacency_matrix(
     faker: Faker,
     batch_size: int,
     num_left: int,
@@ -138,7 +139,7 @@ def test_make_affinity_matrix(
     num_features: int,
 ) -> None:
     """
-    Tests that `make_affinity_matrix` works.
+    Tests that `make_adjacency_matrix` works.
 
     Args:
         faker: The fixture to use for generating fake data.
@@ -155,7 +156,7 @@ def test_make_affinity_matrix(
     )
 
     # Act.
-    affinity_matrix = graph_utils.make_affinity_matrix(edge_features).numpy()
+    affinity_matrix = graph_utils.make_adjacency_matrix(edge_features).numpy()
 
     # Assert.
     # It should have the correct shape.
@@ -183,3 +184,157 @@ def test_make_affinity_matrix(
         np.testing.assert_array_almost_equal(
             zero_feature, affinity_matrix[b][num_left + l][r]
         )
+
+
+@pytest.mark.parametrize(
+    ["batch_size", "num_nodes", "num_edge_features", "num_node_features"],
+    [(1, 16, 10, 20), (5, 16, 1, 30), (8, 16, 10, 20)],
+    ids=["single_batch", "single_edge_feature", "multiple_edge_features"],
+)
+def test_augment_adjacency_matrix(
+    faker: Faker,
+    batch_size: int,
+    num_nodes: int,
+    num_edge_features: int,
+    num_node_features: int,
+) -> None:
+    """
+    Tests that `augment_adjacency_matrix` works.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+        batch_size: The batch size to use for the fake data.
+        num_nodes: The number of nodes to use for the fake data.
+        num_edge_features: The number of edge features to use.
+        num_node_features: The number of node features to use.
+
+    """
+    # Arrange.
+    # Create fake edge and node features.
+    node_features = faker.tensor((batch_size, num_nodes, num_node_features))
+    edge_features = faker.tensor(
+        (batch_size, num_nodes, num_nodes, num_edge_features)
+    )
+
+    # Act.
+    # Create the augmented adjacency matrix.
+    augmented_edge_features = graph_utils.augment_adjacency_matrix(
+        adjacency_matrix=edge_features, node_features=node_features
+    ).numpy()
+
+    # Assert.
+    # Make sure we get the right concatenated feature at each point.
+    for batch, row, col in itertools.product(
+        *map(range, [batch_size, num_nodes, num_nodes])
+    ):
+        expected_feature = np.concatenate(
+            [
+                edge_features[batch][row][col].numpy(),
+                node_features[batch][col].numpy(),
+                node_features[batch][row].numpy(),
+            ],
+            axis=0,
+        )
+        actual_feature = augmented_edge_features[batch][row][col]
+
+        np.testing.assert_array_max_ulp(expected_feature, actual_feature)
+
+
+@pytest.mark.parametrize("power", [-0.5, -1.0, 0.5])
+def test_degree_power(faker: Faker, power: float) -> None:
+    """
+    Tests that `degree_power` works as a substitute for the Spektral version.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+        power: The power to try raising it to.
+
+    """
+    # Arrange.
+    # Create a tensor to test with. Don't include negatives since in real life,
+    # the adjacency matrix should always be positive.
+    adjacency = faker.tensor((10, 8, 8), min_value=0.0)
+    adjacency_np = adjacency.numpy()
+
+    # Act.
+    # Compute with our version.
+    tensor_result = graph_utils.degree_power(adjacency, power).numpy()
+    # Compute with the Spektral version.
+    spektral_result = np.empty_like(adjacency_np)
+    for i in range(adjacency_np.shape[0]):
+        spektral_result[i] = spektral.utils.degree_power(
+            adjacency_np[i], power
+        )
+
+    # Assert.
+    # They should be equivalent.
+    np.testing.assert_array_max_ulp(spektral_result, tensor_result, 2)
+
+
+@pytest.mark.parametrize(
+    "symmetric", [True, False], ids=["symmetric", "not_symmetric"]
+)
+def test_normalized_adjacency(faker: Faker, symmetric: bool) -> None:
+    """
+    Tests that `normalized_adjacency` works as a substitute for the Spektral
+    version.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+        symmetric: Whether to test symmetric normalization.
+
+    """
+    # Arrange.
+    # Create a tensor to test with. Don't include negatives since in real life,
+    # the adjacency matrix should always be positive.
+    adjacency = faker.tensor((10, 8, 8), min_value=0.0)
+    adjacency_np = adjacency.numpy()
+
+    # Act.
+    # Compute with our version.
+    tensor_result = graph_utils.normalized_adjacency(
+        adjacency, symmetric=symmetric
+    ).numpy()
+    # Compute with the Spektral version.
+    spektral_result = np.empty_like(adjacency_np)
+    for i in range(adjacency_np.shape[0]):
+        spektral_result[i] = spektral.utils.normalized_adjacency(
+            adjacency_np[i], symmetric=symmetric
+        )
+
+    # Assert.
+    # They should be equivalent.
+    np.testing.assert_array_max_ulp(spektral_result, tensor_result, 3)
+
+
+@pytest.mark.parametrize(
+    "symmetric", [True, False], ids=["symmetric", "not_symmetric"]
+)
+def test_gcn_filter(faker: Faker, symmetric: bool) -> None:
+    """
+    Tests that `gcn_filter` works as a substitute for the Spektral version.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+        symmetric: Whether to test symmetric normalization.
+
+    """
+    # Arrange.
+    # Create a tensor to test with. Don't include negatives since in real life,
+    # the adjacency matrix should always be positive.
+    adjacency = faker.tensor((10, 8, 8), min_value=0.0)
+    adjacency_np = adjacency.numpy()
+
+    # Act.
+    # Compute with our version.
+    tensor_result = graph_utils.gcn_filter(
+        adjacency, symmetric=symmetric
+    ).numpy()
+    # Compute with the Spektral version.
+    spektral_result = spektral.utils.gcn_filter(
+        adjacency_np, symmetric=symmetric
+    )
+
+    # Assert.
+    # They should be equivalent.
+    np.testing.assert_array_max_ulp(spektral_result, tensor_result, 3)
