@@ -135,4 +135,5 @@ class TensorProvider(BaseProvider):
             image_input_shape=image_shape,
             num_appearance_features=self.random_int(min=1, max=256),
             num_gcn_channels=self.random_int(min=1, max=256),
+            sinkhorn_lambda=self.__faker.pyfloat(min_value=1, max_value=1000),
         )

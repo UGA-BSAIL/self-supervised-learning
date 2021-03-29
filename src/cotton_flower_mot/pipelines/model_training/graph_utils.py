@@ -3,7 +3,7 @@ Selection of utilities for dealing with graphs.
 """
 
 
-from typing import Union
+from typing import Tuple, Union
 
 import tensorflow as tf
 

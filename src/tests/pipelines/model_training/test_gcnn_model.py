@@ -141,17 +141,88 @@ def test_extract_interaction_features_smoke(faker: Faker) -> None:
 
     # Assert.
     # Make sure our results are the right shape.
-    detection_shape = got_detection_features.bounding_shape()
-    tracklet_shape = got_tracklet_features.bounding_shape()
+    detection_shape = tf.shape(got_detection_features).numpy()
+    tracklet_shape = tf.shape(got_tracklet_features).numpy()
     assert len(detection_shape) == len(tracklet_shape) == 3
     # It should have the correct number of features.
     assert detection_shape[2] == tracklet_shape[2] == config.num_gcn_channels
     # It should have the correct number of nodes.
-    assert np.all(
-        got_detection_features.row_lengths().numpy()
-        == detections.row_lengths().numpy()
+    assert detection_shape[1] == np.max(detections.row_lengths().numpy())
+    assert tracklet_shape[1] == np.max(tracklets.row_lengths().numpy())
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_compute_association_smoke(faker: Faker) -> None:
+    """
+    Tests that `compute_association` builds a functional graph.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+
+    """
+    # Arrange.
+    image_shape = (100, 100, 3)
+    batch_size = faker.random_int(min=1, max=16)
+    detections = faker.detected_objects(
+        image_shape=image_shape, batch_size=batch_size
     )
-    assert np.all(
-        got_tracklet_features.row_lengths().numpy()
-        == tracklets.row_lengths().numpy()
+    tracklets = faker.detected_objects(
+        image_shape=image_shape, batch_size=batch_size
+    )
+
+    # Create fake geometry features.
+    detections_geometry = faker.ragged_tensor(
+        row_lengths=detections.row_lengths(), inner_shape=(4,)
+    )
+    tracklets_geometry = faker.ragged_tensor(
+        row_lengths=detections.row_lengths(), inner_shape=(4,)
+    )
+
+    config = faker.model_config(image_shape=image_shape)
+
+    # Act.
+    input_shape = (None,) + image_shape
+    detection_input = tf.keras.Input(input_shape, ragged=True)
+    tracklet_input = tf.keras.Input(input_shape, ragged=True)
+
+    geom_input_shape = (None, 4)
+    detection_geometry_input = tf.keras.Input(geom_input_shape, ragged=True)
+    tracklet_geometry_input = tf.keras.Input(geom_input_shape, ragged=True)
+
+    sinkhorn_matrices = gcnn_model.compute_association(
+        detections=detection_input,
+        tracklets=tracklet_input,
+        detections_geometry=detection_geometry_input,
+        tracklets_geometry=tracklet_geometry_input,
+        config=config,
+    )
+
+    # Turn this into a model.
+    model = tf.keras.Model(
+        inputs=[
+            detection_input,
+            tracklet_input,
+            detection_geometry_input,
+            tracklet_geometry_input,
+        ],
+        outputs=[sinkhorn_matrices],
+    )
+
+    # Apply the model to the inputs we generated.
+    got_associations = model.predict(
+        (detections, tracklets, detections_geometry, tracklets_geometry)
+    )
+
+    # Assert.
+    # Make sure our results are the right shape.
+    association_shape = got_associations.bounding_shape()
+    assert len(association_shape) == 2
+
+    # Make sure the Sinkhorn matrices are the expected size.
+    row_sizes = tracklets.row_lengths().numpy()
+    col_sizes = detections.row_lengths().numpy()
+    expected_lengths = (row_sizes + 1) * (col_sizes + 1)
+    np.testing.assert_array_equal(
+        got_associations.row_lengths().numpy(), expected_lengths
     )

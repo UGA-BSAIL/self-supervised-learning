@@ -64,7 +64,7 @@ def solve_optimal_transport(
             row_sums = tf.ones(cost_shape[:2])
         if column_sums is None:
             column_sums = tf.ones(
-                tf.concat([cost_shape[0], cost_shape[2]], axis=0)
+                tf.stack([cost_shape[0], cost_shape[2]], axis=0)
             )
 
     row_sums_2d = tf.assert_rank(row_sums, 2)
@@ -78,6 +78,10 @@ def solve_optimal_transport(
         # Create initial optimal transport matrix.
         transport = tf.exp(-lamb * cost)
         transport /= tf.reduce_sum(transport)
+
+        # Add extra dimension to row and column sums for easy multiplication.
+        row_sums = tf.expand_dims(row_sums, axis=2)
+        column_sums = tf.expand_dims(column_sums, axis=1)
 
         last_actual_row_sum = tf.zeros_like(row_sums)
 
@@ -96,7 +100,7 @@ def solve_optimal_transport(
 
             """
             # Check for convergence.
-            new_row_sums = tf.reduce_sum(_transport, axis=2)
+            new_row_sums = tf.reduce_sum(_transport, axis=2, keepdims=True)
             max_change = tf.reduce_max(
                 tf.abs(_last_actual_row_sum - new_row_sums)
             )
@@ -113,15 +117,19 @@ def solve_optimal_transport(
                 New values for the loop variables.
 
             """
-            next_row_sum = tf.reduce_sum(_transport, axis=2)
-            next_transport = _transport * tf.expand_dims(
-                (row_sums / next_row_sum), axis=2
-            )
+            next_row_sum = tf.reduce_sum(_transport, axis=2, keepdims=True)
+            next_transport = _transport * (row_sums / next_row_sum)
 
-            next_column_sum = tf.reduce_sum(next_transport, axis=1)
-            next_transport *= tf.expand_dims(
-                column_sums / next_column_sum, axis=1
+            next_column_sum = tf.reduce_sum(
+                next_transport, axis=1, keepdims=True
             )
+            # This broadcast is needed so that Tensorflow can statically
+            # verify that the shape of the Sinkhorn matrix doesn't change
+            # between iterations.
+            column_scale = tf.broadcast_to(
+                column_sums / next_column_sum, tf.shape(_transport)
+            )
+            next_transport *= column_scale
 
             return next_row_sum, next_transport
 

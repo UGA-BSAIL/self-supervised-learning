@@ -19,6 +19,8 @@ from .graph_utils import (
     make_adjacency_matrix,
 )
 from .layers.dense import DenseBlock, TransitionLayer
+from .similarity_utils import compute_ious, cosine_similarity
+from .sinkhorn import solve_optimal_transport
 
 
 @dataclass(frozen=True)
@@ -34,12 +36,16 @@ class ModelConfig:
 
         num_gcn_channels: Number of output channels to use for the GCN blocks.
 
+        sinkhorn_lambda: The lambda parameter to use for Sinkhorn normalization.
+
     """
 
     image_input_shape: Tuple[int, int, int]
     num_appearance_features: int
 
     num_gcn_channels: int
+
+    sinkhorn_lambda: float
 
 
 def _bn_relu_conv(
@@ -224,11 +230,111 @@ def _build_edge_mlp(
     return tf.reshape(edge_features, (-1, num_left_nodes, num_right_nodes, 1))
 
 
+def _compute_pairwise_similarities(
+    similarity_function: Callable[[tf.Tensor, tf.Tensor], tf.Tensor],
+    *,
+    detection_features: tf.Tensor,
+    tracklet_features: tf.Tensor,
+) -> tf.Tensor:
+    """
+    Computes some similarity metric between every possible combination of
+    detection and tracklet features.
+
+    Args:
+        similarity_function: A function that computes a similarity metric
+            between two batches of feature vectors. Should return a batch
+            of scalar similarity values.
+        detection_features: The padded detection features,
+            with shape `[batch_size, max_n_detections, n_features]`.
+        tracklet_features: The padded tracklet features,
+            with shape `[batch_size, max_n_tracklets, n_features]`.
+
+    Returns:
+        The similarities computed between every combination of detections and
+        tracklets. Will have shape `[batch_size, max_n_tracklets,
+        max_n_detections]`.
+
+    """
+    # Compute all possible combinations.
+    combinations = compute_bipartite_edge_features(
+        tracklet_features, detection_features
+    )
+
+    combinations_shape = tf.shape(combinations)
+    combinations_outer_shape = combinations_shape[:3]
+    num_features = combinations_shape[-1]
+
+    # Reshape so we can compute IOUs in one pass.
+    flat_shape = tf.stack((-1, 2, num_features), axis=0)
+    combinations = tf.reshape(combinations, flat_shape)
+    tracklet_boxes = combinations[:, 0, :]
+    detection_boxes = combinations[:, 1, :]
+
+    # Compute similarities.
+    similarities = similarity_function(tracklet_boxes, detection_boxes)
+
+    # Add the other dimensions back.
+    return tf.reshape(similarities, combinations_outer_shape)
+
+
+def _build_affinity_mlp(
+    *,
+    detection_geom_features: tf.Tensor,
+    tracklet_geom_features: tf.Tensor,
+    detection_inter_features: tf.Tensor,
+    tracklet_inter_features: tf.Tensor,
+) -> tf.Tensor:
+    """
+    Builds the MLP that computes the affinity score between two nodes.
+
+    Args:
+        detection_geom_features: The padded detection geometry features,
+            with shape `[batch_size, max_n_detections, 4]`.
+        tracklet_geom_features: The padded tracklet geometry features,
+            with shape `[batch_size, max_n_tracklets, 4]`.
+        detection_inter_features: The padded detection interaction features,
+            with shape `[batch_size, max_n_detections, 4]`.
+        tracklet_inter_features: The padded tracklet interaction features,
+            with shape `[batch_size, max_n_tracklets, 4]`.
+
+    Returns:
+        The final affinity scores between each pair of tracklet and detections.
+        Will have a shape of `[batch_size, max_n_tracklets, max_n_detections]`.
+
+    """
+    # Compute IOUs and cosine similarity.
+    iou = layers.Lambda(
+        lambda f: _compute_pairwise_similarities(
+            compute_ious, tracklet_features=f[0], detection_features=f[1]
+        ),
+        name="iou",
+    )((tracklet_geom_features, detection_geom_features))
+    cosine = layers.Lambda(
+        lambda f: _compute_pairwise_similarities(
+            cosine_similarity, tracklet_features=f[0], detection_features=f[1]
+        ),
+        name="cosine_similarity",
+    )((tracklet_inter_features, detection_inter_features))
+
+    # Concatenate into our input.
+    similarity_input = tf.stack((iou, cosine), axis=-1)
+    # Make sure the channels dimension is defined statically so Keras layers
+    # work.
+    similarity_input = tf.ensure_shape(similarity_input, (None, None, None, 2))
+
+    # Apply the MLP. 1x1 convolution is an efficient way to apply the same MLP
+    # to every detection/tracklet pair.
+    conv1_1 = layers.Conv2D(1, 1)(similarity_input)
+
+    # Remove the extraneous 1 dimension.
+    return conv1_1[:, :, :, 0]
+
+
 def _update_adjacency_matrix() -> Callable[
     [Tuple[tf.Tensor, tf.Tensor]], tf.Tensor
 ]:
     """
-    Updates the affinity matrix for the next layer according to the method
+    Updates the adjacency matrix for the next layer according to the method
     specified in https://arxiv.org/pdf/2010.00067.pdf.
 
     Returns:
@@ -345,6 +451,67 @@ def _build_gnn(
     return nodes
 
 
+def _solve_association(
+    *,
+    affinity_scores: tf.Tensor,
+    num_detections: tf.Tensor,
+    num_tracklets: tf.Tensor,
+    config: ModelConfig,
+) -> tf.RaggedTensor:
+    """
+    Solves the association problem using Sinkhorn normalization.
+
+    Args:
+        affinity_scores: The affinity scores computed for each possible
+            tracklet/detection pair. Should have a shape of
+            `[batch_size, max_n_tracklets, max_n_detections]`.
+        num_detections: The number of detections in each example. Should be
+            a vector of shape `[batch_size]`.
+        num_tracklets: The number of tracklets in each example. Should be
+            a vector of shape `[batch_size]`.
+        config: The model configuration to use.
+
+    Returns:
+        The normalized optimal transport matrix. This will be a `RaggedTensor`
+        where the second dimension is ragged, so it will have the shape
+        `[batch_size, n_tracklets * n_detections]`.
+
+    """
+
+    def _normalize(
+        element: Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
+    ) -> tf.Tensor:
+        affinity_matrix, _num_detections, _num_tracklets = element
+
+        # Remove the padding.
+        affinity_un_padded = affinity_matrix[:_num_tracklets, :_num_detections]
+        # Add additional row and column for track births/deaths.
+        affinity_expanded = tf.pad(affinity_un_padded, [[0, 1], [0, 1]])
+        # Add fake batch dimension.
+        affinity_expanded = tf.expand_dims(affinity_expanded, axis=0)
+
+        # Normalize it.
+        transport, _ = solve_optimal_transport(
+            affinity_expanded, lamb=config.sinkhorn_lambda
+        )
+        # Remove fake batch dimension.
+        return tf.reshape(transport, (-1,))
+
+    # Unfortunately, we can't have padding for the affinity scores, because
+    # it affects the optimization. Therefore, this process has to be done
+    # with map_fn instead of vectorized.
+    return layers.Lambda(
+        lambda f: tf.map_fn(
+            _normalize,
+            f,
+            fn_output_signature=tf.RaggedTensorSpec(
+                shape=[None], dtype=tf.float32
+            ),
+        ),
+        name="sinkhorn",
+    )((affinity_scores, num_detections, num_tracklets))
+
+
 def extract_appearance_features(
     *,
     detections: tf.RaggedTensor,
@@ -397,7 +564,7 @@ def extract_interaction_features(
     detections_geometry: tf.RaggedTensor,
     tracklets_geometry: tf.RaggedTensor,
     config: ModelConfig,
-) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
+) -> Tuple[tf.Tensor, tf.Tensor]:
     """
     Builds the portion of the system that extracts interaction features.
 
@@ -421,9 +588,9 @@ def extract_interaction_features(
     Returns:
         The extracted interaction features, for both the left and right nodes
         in the graph, in that order. Each set will have the shape
-        `[batch_size, n_nodes, n_inter_features]`, where the second dimension
-        is ragged. Left nodes correspond to tracklets, and right nodes to
-        detections.
+        `[batch_size, max_n_nodes, n_inter_features]`, where the second
+        dimension will be padded. Left nodes correspond to tracklets, and
+        right nodes to detections.
 
     """
     # Extract the appearance features.
@@ -465,11 +632,70 @@ def extract_interaction_features(
     max_num_tracklets = tf.shape(tracklets_app_features)[1]
     tracklets_inter_features = final_node_features[:, :max_num_tracklets, :]
     detections_inter_features = final_node_features[:, max_num_tracklets:, :]
-    # Convert back to ragged tensors.
-    tracklets_inter_features = tf.RaggedTensor.from_tensor(
-        tracklets_inter_features, lengths=tracklets.row_lengths()
-    )
-    detections_inter_features = tf.RaggedTensor.from_tensor(
-        detections_inter_features, lengths=detections.row_lengths()
-    )
     return tracklets_inter_features, detections_inter_features
+
+
+def compute_association(
+    *,
+    detections: tf.RaggedTensor,
+    tracklets: tf.RaggedTensor,
+    detections_geometry: tf.RaggedTensor,
+    tracklets_geometry: tf.RaggedTensor,
+    config: ModelConfig,
+) -> tf.RaggedTensor:
+    """
+    Builds a model that computes associations between tracklets and detections.
+
+    Args:
+        detections: Extracted detection images. Should have the shape
+            `[batch_size, n_detections, height, width, channels]`, where the
+            second dimension is ragged.
+        tracklets: Extracted final images from each tracklet. Should have the
+            shape `[batch_size, n_tracklets, height, width, channels]`, where
+            the second dimension is ragged.
+        detections_geometry: The geometric features associated with the
+            detections. Should have the shape
+            `[batch_size, n_detections, n_features]`, where the second dimension
+            is ragged.
+        tracklets_geometry: The geometric features associated with the
+            tracklets. Should have the shape
+            `[batch_size, n_tracklets, n_features]`, where the second dimension
+            is ragged.
+        config: The model configuration.
+
+    Returns:
+        The association Sinkhorn matrices. Will have shape
+        `[batch_size, n_tracklets * n_detections]`, where the inner dimension
+         is ragged and represents the flattened Sinkhorn matrix.
+
+    """
+    # Extract interaction features.
+    (
+        tracklets_inter_features,
+        detections_inter_features,
+    ) = extract_interaction_features(
+        detections=detections,
+        tracklets=tracklets,
+        detections_geometry=detections_geometry,
+        tracklets_geometry=tracklets_geometry,
+        config=config,
+    )
+
+    # Compute affinity scores. For this, we need a dense representation of
+    # the geometric features.
+    detections_geom_features = detections_geometry.to_tensor()
+    tracklets_geom_features = tracklets_geometry.to_tensor()
+    affinity_scores = _build_affinity_mlp(
+        detection_geom_features=detections_geom_features,
+        tracklet_geom_features=tracklets_geom_features,
+        detection_inter_features=detections_inter_features,
+        tracklet_inter_features=tracklets_inter_features,
+    )
+
+    # Compute the Sinkhorn matrices.
+    return _solve_association(
+        affinity_scores=affinity_scores,
+        num_detections=detections.row_lengths(),
+        num_tracklets=tracklets.row_lengths(),
+        config=config,
+    )
