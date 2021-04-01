@@ -222,7 +222,7 @@ def test_compute_association_smoke(faker: Faker) -> None:
     # Make sure the Sinkhorn matrices are the expected size.
     row_sizes = tracklets.row_lengths().numpy()
     col_sizes = detections.row_lengths().numpy()
-    expected_lengths = (row_sizes + 1) * (col_sizes + 1)
+    expected_lengths = row_sizes * col_sizes
     np.testing.assert_array_equal(
         got_associations.row_lengths().numpy(), expected_lengths
     )

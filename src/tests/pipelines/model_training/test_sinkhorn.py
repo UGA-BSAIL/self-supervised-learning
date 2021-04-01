@@ -3,7 +3,7 @@ Tests for the `sinkhorn` module.
 """
 
 
-import json
+from typing import Iterable
 
 import numpy as np
 import pytest
@@ -114,3 +114,56 @@ def test_solve_optimal_transport_deserts(snapshot: Snapshot) -> None:
         "dist": dist.numpy().tolist(),
     }
     snapshot.assert_match(yaml.dump(results), "desert_dist.yml")
+
+
+@pytest.mark.parametrize(
+    ("detection_ids", "tracklet_ids", "expected_matrix"),
+    [
+        (
+            [3, 1, 2],
+            [3, 0, 4, 1],
+            np.array(
+                [
+                    [1, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 0],
+                    [0, 1, 0],
+                ]
+            ),
+        ),
+        ([], [], np.empty((0, 0))),
+        (
+            [24, 25, 26],
+            [26, 25, 24],
+            np.array([[0, 0, 1], [0, 1, 0], [1, 0, 0]]),
+        ),
+    ],
+    ids=["nominal", "empty", "no_births_or_deaths"],
+)
+def test_construct_gt_sinkhorn_matrix(
+    detection_ids: Iterable[int],
+    tracklet_ids: Iterable[int],
+    expected_matrix: np.ndarray,
+) -> None:
+    """
+    Tests that `construct_gt_sinkhorn_matrix` works.
+
+    Args:
+        detection_ids: The list of detection IDs.
+        tracklet_ids: The list of tracklet IDs.
+        expected_matrix: The expected sinkhorn matrix.
+
+    """
+    # Arrange.
+    detection_ids = tf.constant(detection_ids)
+    tracklet_ids = tf.constant(tracklet_ids)
+
+    # Act.
+    got_matrix = sinkhorn.construct_gt_sinkhorn_matrix(
+        detection_ids=detection_ids, tracklet_ids=tracklet_ids
+    ).numpy()
+
+    # Assert.
+    np.testing.assert_array_equal(
+        got_matrix, expected_matrix.astype(np.float32)
+    )

@@ -53,7 +53,7 @@ class ProjectHooks:
 
         return {
             "__default__": data_pipeline + tfrecord_pipeline + eda_pipeline,
-            "data_engineering": data_pipeline + tfrecord_pipeline,
+            "build_tfrecords": data_pipeline + tfrecord_pipeline,
             "eda": eda_pipeline,
         }
 

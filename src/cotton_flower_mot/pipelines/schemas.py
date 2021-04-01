@@ -114,3 +114,40 @@ ObjectTrackingFeatures = enum.unique(
 Extends `ObjectDetectionFeatures` with non-standard features unique to the
 tracking problem.
 """
+
+
+@enum.unique
+class ModelInputs(enum.Enum):
+    """
+    Key names for the inputs to the model.
+    """
+
+    DETECTIONS = "detections"
+    """
+    Extracted detection crops.
+    """
+    TRACKLETS = "tracklets"
+    """
+    Extracted tracklet crops.
+    """
+
+    DETECTION_GEOMETRY = "detection_geometry"
+    """
+    Corresponding geometric features for the detection crops.
+    """
+    TRACKLET_GEOMETRY = "tracklet_geometry"
+    """
+    Corresponding geometric features for the tracklet crops.
+    """
+
+
+@enum.unique
+class ModelTargets(enum.Enum):
+    """
+    Key names for the model targets.
+    """
+
+    SINKHORN = "sinkhorn"
+    """
+    The ground-truth Sinkhorn matrix.
+    """

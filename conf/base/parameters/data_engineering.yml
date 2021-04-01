@@ -1,5 +1,5 @@
 # Max length of the clips to use when training and evaluating, in frames.
-max_clip_length: 300
+max_clip_length: 2
 
 # Fraction of clips to use for training.
 train_fraction: 0.8

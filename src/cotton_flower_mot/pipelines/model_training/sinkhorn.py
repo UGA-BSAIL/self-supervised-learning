@@ -139,3 +139,35 @@ def solve_optimal_transport(
 
     # Calculate the sinkhorn distance.
     return transport, tf.reduce_sum(transport * cost)
+
+
+def construct_gt_sinkhorn_matrix(
+    *, detection_ids: tf.Tensor, tracklet_ids: tf.Tensor
+) -> tf.Tensor:
+    """
+    Utility for constructing ground-truth Sinkhorn matrix based on lists
+    of corresponding object IDs for two consecutive frames.
+
+    Args:
+        detection_ids: The list of IDs for the detections. Should have shape
+            `[n_detections]`.
+        tracklet_ids: The list of IDs for the tracklets. Should have shape
+            `[n_tracklets]`.
+
+    Returns:
+        The ground-truth Sinkhorn matrix. Will have the shape
+        `[n_tracklets, n_detections]`.
+
+    """
+    detections_1d = tf.assert_rank(detection_ids, 1)
+    tracklets_1d = tf.assert_rank(tracklet_ids, 1)
+
+    with tf.control_dependencies([detections_1d, tracklets_1d]):
+        # Create the base matrix.
+        sinkhorn_matrix = tf.equal(
+            tf.expand_dims(tracklet_ids, axis=1),
+            tf.expand_dims(detection_ids, axis=0),
+        )
+
+    # Convert booleans to floats.
+    return tf.cast(sinkhorn_matrix, tf.float32)

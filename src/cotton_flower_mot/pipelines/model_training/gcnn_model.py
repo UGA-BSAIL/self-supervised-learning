@@ -451,6 +451,26 @@ def _build_gnn(
     return nodes
 
 
+def _compute_row_or_column_sum(length: tf.Tensor) -> tf.Tensor:
+    """
+    For Sinkhorn normalization, we expect rows and columns to sum to one,
+    except for the births/deaths row/column, which we expect to sum to their
+    own length.
+
+    Args:
+        length: The length of the row or column.
+
+    Returns:
+        The expected sums. This will have the form `[1, 1, ..., length]`.
+
+    """
+    row_shape = tf.expand_dims(length, axis=0)
+    sums = tf.ones(row_shape, dtype=tf.float32)
+
+    # Add the last element.
+    return tf.concat((sums, tf.cast(row_shape, tf.float32)), axis=0)
+
+
 def _solve_association(
     *,
     affinity_scores: tf.Tensor,
@@ -487,14 +507,26 @@ def _solve_association(
         affinity_un_padded = affinity_matrix[:_num_tracklets, :_num_detections]
         # Add additional row and column for track births/deaths.
         affinity_expanded = tf.pad(affinity_un_padded, [[0, 1], [0, 1]])
+
+        row_sums = _compute_row_or_column_sum(_num_tracklets)
+        column_sums = _compute_row_or_column_sum(_num_detections)
+
         # Add fake batch dimension.
         affinity_expanded = tf.expand_dims(affinity_expanded, axis=0)
+        row_sums = tf.expand_dims(row_sums, axis=0)
+        column_sums = tf.expand_dims(column_sums, axis=0)
 
         # Normalize it.
         transport, _ = solve_optimal_transport(
-            affinity_expanded, lamb=config.sinkhorn_lambda
+            affinity_expanded,
+            lamb=config.sinkhorn_lambda,
+            row_sums=row_sums,
+            column_sums=column_sums,
         )
-        # Remove fake batch dimension.
+
+        # Remove births/deaths row/column.
+        transport = transport[:, :-1, :-1]
+        # Flatten and remove fake batch dimension.
         return tf.reshape(transport, (-1,))
 
     # Unfortunately, we can't have padding for the affinity scores, because
@@ -665,8 +697,8 @@ def compute_association(
 
     Returns:
         The association Sinkhorn matrices. Will have shape
-        `[batch_size, n_tracklets * n_detections]`, where the inner dimension
-         is ragged and represents the flattened Sinkhorn matrix.
+        `[batch_size, n_tracklets * n_detections]`, where the inner
+        dimension is ragged and represents the flattened Sinkhorn matrix.
 
     """
     # Extract interaction features.

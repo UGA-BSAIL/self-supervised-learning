@@ -1,6 +1,5 @@
 import random
-from functools import partial
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -66,7 +65,12 @@ def random_splits(
             train_clips.append(clip)
 
     # Concatenate the clips back into single dataframes.
-    concat = partial(pd.concat, ignore_index=True)
+    def concat(clips: List[pd.DataFrame]) -> pd.DataFrame:
+        if len(clips) > 0:
+            return pd.concat(clips, ignore_index=True)
+        else:
+            return pd.DataFrame([], columns=[e.value for e in Otf])
+
     return concat(train_clips), concat(test_clips), concat(validation_clips)
 
 
