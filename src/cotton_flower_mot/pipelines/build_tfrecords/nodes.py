@@ -140,7 +140,7 @@ def _make_example(
     return tf.train.Example(features=tf.train.Features(feature=features))
 
 
-def generate_examples(
+def _generate_clip_examples(
     video_frames: Task, annotations: pd.DataFrame
 ) -> Iterable[tf.train.Example]:
     """
@@ -170,4 +170,31 @@ def generate_examples(
 
         yield _make_example(
             image=frame_image, frame_annotations=frame_annotations
+        )
+
+
+def generate_examples(
+    video_frames: Task, annotations: pd.DataFrame
+) -> Iterable[Iterable[tf.train.Example]]:
+    """
+    Generates TFRecord examples from annotations and corresponding video
+    frames for all clips.
+
+    Args:
+        video_frames: The CVAT `Task` to source frames from.
+        annotations: The loaded annotations, transformed to the TF format.
+
+    Yields:
+        Iterables of TFRecord examples for each clip.
+
+    """
+    # Set the index to the sequence ID to speed up filtering operations.
+    annotations.set_index(
+        Otf.IMAGE_SEQUENCE_ID.value, inplace=True, drop=False
+    )
+
+    for sequence_id in annotations.index.unique():
+        logger.info("Generating TFRecords for clip {}.", sequence_id)
+        yield _generate_clip_examples(
+            video_frames, annotations.iloc[annotations.index == sequence_id]
         )

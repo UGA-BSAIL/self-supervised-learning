@@ -1,7 +1,6 @@
 import enum
-from functools import partial
 from multiprocessing import cpu_count
-from typing import Dict, Iterable, Tuple, Union
+from typing import Any, Dict, Iterable, Tuple, Union
 
 import tensorflow as tf
 
@@ -129,15 +128,24 @@ def _extract_detection_images(
         Will have shape `[num_detections, d_height, d_width, num_channels]`.
 
     """
+    # Convert from pixel to normalize coordinates.
+    image_height_width = tf.shape(image)[:2]
+    image_height_width = tf.cast(image_height_width, tf.float32)
+    image_height_width = tf.tile(image_height_width, (2,))
+    bbox_coords = bbox_coords / image_height_width
+
     # We only have one image...
     image = tf.expand_dims(image, axis=0)
     num_detections = tf.shape(bbox_coords)[0]
     box_indices = tf.zeros((num_detections,), dtype=tf.int32)
 
     detection_size = config.image_input_shape[:2]
-    return tf.image.crop_and_resize(
+    extracted = tf.image.crop_and_resize(
         image, bbox_coords, box_indices, crop_size=detection_size
     )
+
+    # Convert back to uint8s.
+    return tf.cast(extracted, tf.uint8)
 
 
 def _load_single_image_features(
@@ -204,19 +212,37 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     """
 
     def _process_pair(
-        feature_batch: Dict[str, tf.Tensor]
+        pair_features: Dict[str, tf.data.Dataset],
     ) -> Tuple[Dict[str, tf.Tensor]]:
+        # Windowing combines features into sub-datasets with two elements. To
+        # access them, we will batch them into a single element and then
+        # extract them.
+        def _as_single_element(
+            feature_key: str,
+        ) -> Union[tf.Tensor, tf.RaggedTensor]:
+            window_dataset = pair_features[feature_key]
+            window_dataset = window_dataset.apply(
+                tf.data.experimental.dense_to_ragged_batch(2)
+            )
+            return tf.data.experimental.get_single_element(window_dataset)
+
+        frame_nums = _as_single_element(FeatureNames.FRAME_NUM.value)
+        object_ids = _as_single_element(FeatureNames.OBJECT_IDS.value)
+        detections = _as_single_element(FeatureNames.DETECTIONS.value)
+        geometry = _as_single_element(FeatureNames.GEOMETRY.value)
+
         # Compare frame numbers to ensure that these frames actually are
         # sequential.
-        first_frame_num = feature_batch[FeatureNames.FRAME_NUM.value][0]
-        next_frame_num = feature_batch[FeatureNames.FRAME_NUM.value][1]
+        first_frame_num = frame_nums[0]
+        next_frame_num = frame_nums[1]
         are_consecutive = tf.assert_equal(
             first_frame_num, next_frame_num - tf.constant(1, dtype=tf.int64)
         )
+
         with tf.control_dependencies([are_consecutive]):
             # Compute the ground-truth Sinkhorn matrix.
-            tracklet_ids = feature_batch[FeatureNames.OBJECT_IDS.value][0]
-            detection_ids = feature_batch[FeatureNames.OBJECT_IDS.value][1]
+            tracklet_ids = object_ids[0]
+            detection_ids = object_ids[1]
             sinkhorn = construct_gt_sinkhorn_matrix(
                 detection_ids=detection_ids, tracklet_ids=tracklet_ids
             )
@@ -224,10 +250,10 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
             sinkhorn = tf.reshape(sinkhorn, (-1,))
 
             # Merge everything into input and target feature dictionaries.
-            tracklets = feature_batch[FeatureNames.DETECTIONS.value][0]
-            detections = feature_batch[FeatureNames.DETECTIONS.value][1]
-            tracklet_geometry = feature_batch[FeatureNames.GEOMETRY.value][0]
-            detection_geometry = feature_batch[FeatureNames.GEOMETRY.value][1]
+            tracklets = detections[0]
+            detections = detections[1]
+            tracklet_geometry = geometry[0]
+            detection_geometry = geometry[1]
 
             inputs = {
                 ModelInputs.DETECTIONS.value: detections,
@@ -289,7 +315,11 @@ def _ensure_ragged(
 
 
 def inputs_and_targets_from_dataset(
-    raw_dataset: tf.data.Dataset, *, config: ModelConfig, batch_size: int = 32
+    raw_dataset: tf.data.Dataset,
+    *,
+    config: ModelConfig,
+    batch_size: int = 32,
+    num_prefetch_batches: int = 5
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -299,6 +329,7 @@ def inputs_and_targets_from_dataset(
         raw_dataset: The raw dataset, containing serialized data.
         config: Model configuration we are loading data for.
         batch_size: The size of the batches that we generate.
+        num_prefetch_batches: Number of batches to prefetch.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -315,13 +346,45 @@ def inputs_and_targets_from_dataset(
         deserialized, config=config
     )
     # Break into pairs.
-    image_pairs = single_image_features.batch(2)
+    image_pairs = single_image_features.window(2, shift=1, drop_remainder=True)
     inputs_and_targets = _load_pair_features(image_pairs)
 
     # Construct batches.
-    batched = inputs_and_targets.batch(batch_size)
-    return _ensure_ragged(
+    batched = inputs_and_targets.apply(
+        tf.data.experimental.dense_to_ragged_batch(batch_size)
+    )
+    ragged = _ensure_ragged(
         batched,
         input_keys=[e.value for e in ModelInputs],
         target_keys=[e.value for e in ModelTargets],
     )
+
+    return ragged.prefetch(num_prefetch_batches)
+
+
+def inputs_and_targets_from_datasets(
+    raw_datasets: Iterable[tf.data.Dataset], *args: Any, **kwargs: Any
+) -> tf.data.Dataset:
+    """
+    Deserializes and interleaves data from multiple datasets, and coerces it
+    into the form used by the model.
+
+    Args:
+        raw_datasets: The raw datasets to draw from.
+        *args: Will be forwarded to `inputs_and_targets_from_dataset`.
+        **kwargs: Will be forwarded to `inputs_and_targets_from_dataset`.
+
+    Returns:
+        A dataset that produces input images and target bounding boxes.
+
+    """
+    # Parse all the data.
+    parsed_datasets = []
+    for raw_dataset in raw_datasets:
+        parsed_datasets.append(
+            inputs_and_targets_from_dataset(raw_dataset, *args, **kwargs)
+        )
+
+    # Interleave the results.
+    choices = tf.data.Dataset.range(len(parsed_datasets)).repeat()
+    return tf.data.experimental.choose_from_datasets(parsed_datasets, choices)

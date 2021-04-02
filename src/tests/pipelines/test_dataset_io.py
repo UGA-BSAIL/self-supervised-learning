@@ -13,6 +13,11 @@ from src.cotton_flower_mot.pipelines.schemas import ModelInputs, ModelTargets
 
 from .data import TESTING_DATASET_PATH
 
+_TEST_DATASET_SIZE = 4
+"""
+Number of elements that are in the test dataset.
+"""
+
 
 @pytest.mark.integration
 def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
@@ -46,6 +51,10 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
     for element in ModelTargets:
         assert element.value in targets
 
+    # We expect the batch size to be one fewer than the number of elements, due
+    # to windowing.
+    expected_batch_size = _TEST_DATASET_SIZE - 1
+
     # Check the shapes of things.
     detections_shape = (
         inputs[ModelInputs.DETECTIONS.value].bounding_shape().numpy()
@@ -54,7 +63,7 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
         inputs[ModelInputs.TRACKLETS.value].bounding_shape().numpy()
     )
     assert len(detections_shape) == len(tracklets_shape) == 5
-    assert detections_shape[0] == tracklets_shape[0] == 2
+    assert detections_shape[0] == tracklets_shape[0] == expected_batch_size
     assert np.all(detections_shape[2:] == (100, 100, 3))
     assert np.all(tracklets_shape[2:] == (100, 100, 3))
 
@@ -65,7 +74,11 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
         inputs[ModelInputs.TRACKLET_GEOMETRY.value].bounding_shape().numpy()
     )
     assert len(detection_geometry_shape) == len(tracklet_geometry_shape) == 3
-    assert detection_geometry_shape[0] == tracklet_geometry_shape[0] == 2
+    assert (
+        detection_geometry_shape[0]
+        == tracklet_geometry_shape[0]
+        == expected_batch_size
+    )
     assert detection_geometry_shape[2] == tracklet_geometry_shape[2] == 4
 
     # The number of nodes should be consistent.
@@ -76,6 +89,6 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
         targets[ModelTargets.SINKHORN.value].bounding_shape().numpy()
     )
     assert len(sinkhorn_shape) == 2
-    assert sinkhorn_shape[0] == 2
+    assert sinkhorn_shape[0] == expected_batch_size
     # Sinkhorn matrix should have an entry for each detection/tracklet pair.
     assert sinkhorn_shape[1] == detections_shape[1] * tracklets_shape[1]

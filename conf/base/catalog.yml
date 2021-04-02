@@ -6,18 +6,24 @@ annotations_pandas:
 
 # Training data, as TFRecords.
 tfrecord_train:
-  type: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/train.tfrecord
+  type: cotton_flower_mot.data_sets.MultiFileDataSet
+  dataset: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/train
+  extension: .tfrecord
   versioned: True
 
 # Testing data, as TFRecords.
 tfrecord_test:
-  type: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/test.tfrecord
+  type: cotton_flower_mot.data_sets.MultiFileDataSet
+  dataset: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/test
+  extension: .tfrecord
   versioned: True
 
 # Training data, as TFRecords.
 tfrecord_valid:
-  type: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/valid.tfrecord
+  type: cotton_flower_mot.data_sets.MultiFileDataSet
+  dataset: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/valid
+  extension: .tfrecord
   versioned: True

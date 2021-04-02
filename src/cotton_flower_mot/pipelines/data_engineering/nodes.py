@@ -3,7 +3,7 @@ Nodes for the `data_engineering` pipeline.
 """
 
 import random
-from typing import Any
+from typing import Any, Tuple
 
 import pandas as pd
 
@@ -69,20 +69,29 @@ def split_clips(
     """
     old_sequence_id = -1
     new_sequence_id = -1
+    old_frame_num = -1
     current_clip_length = 0
 
     new_sequence_ids = []
-    for sequence_id in annotations_mot[Otf.IMAGE_SEQUENCE_ID.value]:
+    for sequence_id, frame_num in zip(
+        annotations_mot[Otf.IMAGE_SEQUENCE_ID.value], annotations_mot["frame"]
+    ):
         if sequence_id != old_sequence_id:
             # This is a new video in the underlying data.
             current_clip_length = 0
+            old_frame_num = -1
             new_sequence_id += 1
         old_sequence_id = sequence_id
 
-        current_clip_length += 1
+        if frame_num != old_frame_num:
+            # Only count frames as opposed to annotations.
+            current_clip_length += 1
+            old_frame_num = frame_num
+
         if current_clip_length > max_clip_length:
             # We should split a new clip here.
             current_clip_length = 0
+            old_frame_num = -1
             new_sequence_id += 1
 
         new_sequence_ids.append(new_sequence_id)

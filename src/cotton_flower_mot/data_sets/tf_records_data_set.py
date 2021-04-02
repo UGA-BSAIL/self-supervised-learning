@@ -16,7 +16,9 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
     A custom `DataSet` for creating TFRecords files.
     """
 
-    def __init__(self, filepath: PurePosixPath, version: Optional[Version]):
+    def __init__(
+        self, filepath: PurePosixPath, version: Optional[Version] = None
+    ):
         """
         Args:
             filepath: The path to the output TFRecords file.
