@@ -3,7 +3,6 @@ Implements a model inspired by GCNNTrack.
 https://arxiv.org/pdf/2010.00067.pdf
 """
 
-
 from typing import Any, Callable, Tuple
 
 import spektral
@@ -18,6 +17,7 @@ from .graph_utils import (
     compute_bipartite_edge_features,
     gcn_filter,
     make_adjacency_matrix,
+    normalize_adjacency,
 )
 from .layers.dense import DenseBlock, TransitionLayer
 from .similarity_utils import compute_ious, cosine_similarity
@@ -350,7 +350,11 @@ def _update_adjacency_matrix() -> Callable[
     )
     # The MLP operation over all edges is actually implemented as a 1x1
     # convolution for convenience.
-    conv1_1 = _bn_relu_conv(1, 1, padding="same")
+    conv1_2 = _bn_relu_conv(1, 1, padding="same")
+    # Normalization operation for the matrix.
+    norm1_3 = layers.Lambda(
+        lambda x: normalize_adjacency(x), name="normalize_adjacency"
+    )
 
     def _apply_block(inputs: Tuple[tf.Tensor, tf.Tensor]) -> tf.Tensor:
         """
@@ -366,9 +370,9 @@ def _update_adjacency_matrix() -> Callable[
 
         """
         node_features, adjacency_matrix = inputs
-        adjacency = conv1_1(aug1_1((adjacency_matrix, node_features)))
+        adjacency = norm1_3(conv1_2(aug1_1((adjacency_matrix, node_features))))
         # Remove the final dimension, which should be one.
-        return tf.keras.activations.relu(adjacency[:, :, :, 0])
+        return adjacency[:, :, :, 0]
 
     return _apply_block
 
@@ -653,9 +657,9 @@ def extract_interaction_features(
 
     # Create the adjacency matrix and build the GCN.
     adjacency_matrix = layers.Lambda(
-        lambda f: make_adjacency_matrix(f), name="adjacency_matrix"
+        lambda f: normalize_adjacency(make_adjacency_matrix(f)),
+        name="adjacency_matrix",
     )(edge_features)
-    adjacency_matrix = tf.keras.activations.relu(adjacency_matrix)
     # Note that the order of concatenation is important here.
     combined_app_features = layers.Concatenate(axis=-2)(
         (tracklets_app_features, detection_app_features)

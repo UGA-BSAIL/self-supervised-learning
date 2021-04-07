@@ -338,3 +338,24 @@ def test_gcn_filter(faker: Faker, symmetric: bool) -> None:
     # Assert.
     # They should be equivalent.
     np.testing.assert_array_max_ulp(spektral_result, tensor_result, 3)
+
+
+def test_normalize_adjacency(faker: Faker) -> None:
+    """
+    Tests that `normalize_adjacency` works.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+
+    """
+    # Arrange.
+    # Create a fake adjacency matrix, which might have negative values.
+    adjacency = faker.tensor((10, 8, 8, 1))
+
+    # Act.
+    normalized = graph_utils.normalize_adjacency(adjacency).numpy()
+
+    # Assert.
+    # All values should be between 0 and 1.
+    assert normalized.max() <= 1.0
+    assert normalized.min() >= 0.0
