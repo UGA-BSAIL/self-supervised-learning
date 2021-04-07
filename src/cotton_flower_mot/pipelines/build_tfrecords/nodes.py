@@ -104,7 +104,7 @@ def _get_missing_columns(
 
 
 def _make_example(
-    *, image: np.ndarray, frame_annotations: pd.DataFrame
+    *, image: np.ndarray, frame_annotations: pd.DataFrame, frame_num: int
 ) -> tf.train.Example:
     """
     Creates a TF `Example` for a single frame.
@@ -112,19 +112,20 @@ def _make_example(
     Args:
         image: The compressed image data for the frame.
         frame_annotations: The annotations for the frame.
+        frame_num: The frame number.
 
     Returns:
         The example that it created.
 
     """
+    # Remove the frame number column since that info is provided manually.
+    frame_annotations = frame_annotations.drop(
+        columns=[Otf.IMAGE_FRAME_NUM.value]
+    )
+
     # Create the feature dictionary.
     features = {}
     for column_name, column_data in frame_annotations.items():
-        # Collapse the frame number column since all frame numbers should be the
-        # same.
-        if column_name == Otf.IMAGE_FRAME_NUM.value:
-            column_data = column_data.unique()
-
         features[column_name] = _FEATURES_TO_FACTORIES[column_name](
             column_data
         )
@@ -136,6 +137,10 @@ def _make_example(
     features[Otf.IMAGE_ENCODED.value] = _FEATURES_TO_FACTORIES[
         Otf.IMAGE_ENCODED.value
     ](image)
+    # Add the frame number.
+    features[Otf.IMAGE_FRAME_NUM.value] = _FEATURES_TO_FACTORIES[
+        Otf.IMAGE_FRAME_NUM.value
+    ]((frame_num,))
 
     return tf.train.Example(features=tf.train.Features(feature=features))
 
@@ -157,19 +162,29 @@ def _generate_clip_examples(
         are part of the same track.
 
     """
-    frame_nums = annotations[Otf.IMAGE_FRAME_NUM.value].unique().tolist()
-    for frame_num in frame_nums:
+    frame_nums = annotations[Otf.IMAGE_FRAME_NUM.value]
+    first_frame = frame_nums.min()
+    last_frame = frame_nums.max()
+
+    for frame_num in range(first_frame, last_frame + 1):
         logger.debug("Generating example for frame {}.", frame_num)
 
         # Get all the annotations for that frame.
         frame_annotations = annotations[
             annotations[Otf.IMAGE_FRAME_NUM.value] == frame_num
         ]
+        logger.debug(
+            "Have {} annotations for frame {}.",
+            len(frame_annotations),
+            frame_num,
+        )
         # Get the actual frame image.
         frame_image = video_frames.get_image(frame_num, compressed=True)
 
         yield _make_example(
-            image=frame_image, frame_annotations=frame_annotations
+            image=frame_image,
+            frame_annotations=frame_annotations,
+            frame_num=frame_num,
         )
 
 

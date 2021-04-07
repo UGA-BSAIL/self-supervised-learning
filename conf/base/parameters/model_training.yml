@@ -1,5 +1,41 @@
-# This is a boilerplate parameters config generated for pipeline 'model_training'
-# using Kedro 0.17.1.
-#
-# Documentation for this file format can be found in "Parameters"
-# Link: https://kedro.readthedocs.io/en/stable/04_kedro_project_setup/02_configuration.html#parameters
+# Shape of the input detection crops, in the form of height, width, channels.
+image_input_shape: [100, 100, 3]
+# Number of appearance features to generate.
+num_appearance_features: 256
+# Number of GCN output channels to use.
+num_gcn_channels: 256
+# Sinkhorn normalization Lambda value.
+sinkhorn_lambda: 10.0
+
+# Batch size to use for training.
+batch_size: 16
+
+# Learning phases to use for training the model.
+learning_phases:
+  # The initial learning rate to use for the phase.
+  - learning_rate:
+      # Initial learning rate value.
+      initial: 0.001
+      # Specify that we want to decay over time.
+      decay: true
+      # Number of steps to decay over.
+      # (1988 steps per epoch)
+      decay_steps: 3976
+      # Used to derive the number of iterations in the i-th period.
+      t_mul: 2.0
+      # Used to derive the initial learning rate of the i-th period.
+      m_mul: 1.0
+      # Minimum learning rate to hit.
+      min_learning_rate: 0.00001
+    # The momentum to use for the phase.
+    momentum: 0.9
+    # The loss weight for density maps.
+    density_map_loss_weight: 0.0
+    # The loss weight for count regression.
+    count_loss_weight: 0.0
+    # The loss weight for count categorization.
+    discrete_count_loss_weight: 1.0
+    # The loss weight for cross-scale consistency.
+    cross_scale_loss_weight: 0.5
+    # Number of epochs to train for in this phase.
+    num_epochs: 14

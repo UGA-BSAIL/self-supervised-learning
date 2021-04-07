@@ -1,38 +1,64 @@
-# Copyright 2021 QuantumBlack Visual Analytics Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
-# NONINFRINGEMENT. IN NO EVENT WILL THE LICENSOR OR OTHER CONTRIBUTORS
-# BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
-# ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF, OR IN
-# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-#
-# The QuantumBlack Visual Analytics Limited ("QuantumBlack") name and logo
-# (either separately or in combination, "QuantumBlack Trademarks") are
-# trademarks of QuantumBlack. The License does not grant you any right or
-# license to the QuantumBlack Trademarks. You may not use the QuantumBlack
-# Trademarks or any confusingly similar mark as a trademark for your product,
-# or use the QuantumBlack Trademarks in any other manner that might cause
-# confusion in the marketplace, including but not limited to in advertising,
-# on websites, or on software.
-#
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """
-This is a boilerplate pipeline 'model_training'
-generated using Kedro 0.17.1
+Pipeline definition for model training.
 """
 
 from kedro.pipeline import Pipeline, node
 
+from ..dataset_io import inputs_and_targets_from_datasets
+from .nodes import create_model, make_model_config, train_model
+
 
 def create_pipeline(**kwargs):
-    return Pipeline([])
+    return Pipeline(
+        [
+            node(
+                make_model_config,
+                dict(
+                    image_input_shape="params:image_input_shape",
+                    num_appearance_features="params:num_appearance_features",
+                    num_gcn_channels="params:num_gcn_channels",
+                    sinkhorn_lambda="params:sinkhorn_lambda",
+                ),
+                "model_config",
+            ),
+            # Load the datasets.
+            node(
+                inputs_and_targets_from_datasets,
+                dict(
+                    raw_datasets="tfrecord_train",
+                    config="model_config",
+                    batch_size="params:batch_size",
+                ),
+                "training_data",
+            ),
+            node(
+                inputs_and_targets_from_datasets,
+                dict(
+                    raw_datasets="tfrecord_test",
+                    config="model_config",
+                    batch_size="params:batch_size",
+                ),
+                "testing_data",
+            ),
+            node(
+                inputs_and_targets_from_datasets,
+                dict(
+                    raw_datasets="tfrecord_valid",
+                    config="model_config",
+                    batch_size="params:batch_size",
+                ),
+                "validation_data",
+            ),
+            node(create_model, "model_config", "initial_model"),
+            node(
+                train_model,
+                dict(
+                    model="initial_model",
+                    training_data="training_data",
+                    testing_data="testing_data",
+                    learning_phases="params:learning_phases",
+                ),
+                "trained_model",
+            ),
+        ]
+    )

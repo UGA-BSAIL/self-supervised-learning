@@ -1,31 +1,137 @@
-# Copyright 2021 QuantumBlack Visual Analytics Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
-# NONINFRINGEMENT. IN NO EVENT WILL THE LICENSOR OR OTHER CONTRIBUTORS
-# BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
-# ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF, OR IN
-# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-#
-# The QuantumBlack Visual Analytics Limited ("QuantumBlack") name and logo
-# (either separately or in combination, "QuantumBlack Trademarks") are
-# trademarks of QuantumBlack. The License does not grant you any right or
-# license to the QuantumBlack Trademarks. You may not use the QuantumBlack
-# Trademarks or any confusingly similar mark as a trademark for your product,
-# or use the QuantumBlack Trademarks in any other manner that might cause
-# confusion in the marketplace, including but not limited to in advertising,
-# on websites, or on software.
-#
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """
-This is a boilerplate pipeline 'model_training'
-generated using Kedro 0.17.1
+Nodes for the model training pipeline.
 """
+
+
+from typing import Any, Dict, List, Union
+
+import tensorflow as tf
+import tensorflow.keras.optimizers.schedules as schedules
+from loguru import logger
+
+from .gcnn_model import ModelConfig, build_model
+from .losses import make_losses
+
+
+def _make_learning_rate(
+    config: Dict[str, Any]
+) -> Union[float, schedules.LearningRateSchedule]:
+    """
+    Creates the learning rate to use for optimization, based on the user
+    configuration.
+
+    Args:
+        config: The configuration for the learning rate.
+
+    Returns:
+        Either a float for a fixed learning rate, or a `LearningRateSchedule`.
+
+    """
+    initial_rate = config["initial"]
+    if not config.get("decay", False):
+        # No decay is configured.
+        logger.debug("Using fixed learning rate of {}.", initial_rate)
+        return initial_rate
+
+    logger.debug("Using decaying learning rate.")
+    return tf.keras.experimental.CosineDecayRestarts(
+        initial_rate,
+        config["decay_steps"],
+        t_mul=config["t_mul"],
+        m_mul=config["m_mul"],
+        alpha=config["min_learning_rate"],
+    )
+
+
+def _make_metrics() -> Dict[str, List[tf.keras.metrics.Metric]]:
+    """
+    Creates the metrics to use for the model.
+
+    Returns:
+        The metrics that it created.
+
+    """
+    return {}
+
+
+def make_model_config(**kwargs: Any) -> ModelConfig:
+    """
+    Creates a configuration to use for the model.
+
+    Args:
+        **kwargs: Will be forwarded to the `ModelConfig` constructor.
+
+    Returns:
+        The `ModelConfig` that it created.
+
+    """
+    logger.debug("Creating model configuration: {}", kwargs)
+    return ModelConfig(**kwargs)
+
+
+def create_model(config: ModelConfig) -> tf.keras.Model:
+    """
+    Builds the model to use.
+
+    Args:
+        config: The model configuration.
+
+    Returns:
+        The model that it created.
+
+    """
+    model = build_model(config)
+    logger.info("Model has {} parameters.", model.count_params())
+
+    return model
+
+
+def train_model(
+    model: tf.keras.Model,
+    *,
+    training_data: tf.data.Dataset,
+    testing_data: tf.data.Dataset,
+    learning_phases: List[Dict[str, Any]],
+    callbacks: List[tf.keras.callbacks.Callback] = [],
+    validation_frequency: int = 1,
+) -> tf.keras.Model:
+    """
+    Trains a model.
+
+    Args:
+        model: The model to train.
+        training_data: The `Dataset` containing pre-processed training data.
+        testing_data: The `Dataset` containing pre-processed testing data.
+        learning_phases: List of hyperparameter configurations for each training
+            stage, in order.
+        callbacks: The callbacks to use when training.
+        validation_frequency: Number of training epochs after which to run
+            validation.
+
+    Returns:
+        The trained model.
+
+    """
+    for phase in learning_phases:
+        logger.info("Starting new training phase.")
+        logger.debug("Using phase parameters: {}", phase)
+
+        optimizer = tf.keras.optimizers.SGD(
+            learning_rate=_make_learning_rate(phase["learning_rate"]),
+            momentum=phase["momentum"],
+            nesterov=True,
+        )
+        model.compile(
+            optimizer=optimizer,
+            loss=make_losses(),
+            metrics=_make_metrics(),
+        )
+        model.fit(
+            training_data,
+            validation_data=testing_data,
+            epochs=phase["num_epochs"],
+            callbacks=callbacks,
+            validation_freq=validation_frequency,
+        )
+
+    return model

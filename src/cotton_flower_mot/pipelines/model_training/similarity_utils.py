@@ -7,6 +7,11 @@ from typing import Tuple
 
 import tensorflow as tf
 
+_EPSILON = tf.constant(1.0e-6)
+"""
+Small value to use to avoid division by zero.
+"""
+
 
 def compute_ious(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
     """
@@ -63,7 +68,7 @@ def compute_ious(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
     # Figure out the area.
     intersection_area = tf.reduce_prod(intersection, axis=1)
     union_area = tf.reduce_prod(union, axis=1)
-    return intersection_area / union_area
+    return intersection_area / (union_area + _EPSILON)
 
 
 def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
@@ -85,4 +90,4 @@ def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
     feature1_mag = tf.sqrt(tf.reduce_sum(tf.square(features1), axis=-1))
     feature2_mag = tf.sqrt(tf.reduce_sum(tf.square(features2), axis=-1))
 
-    return feature_dot / (feature1_mag * feature2_mag)
+    return feature_dot / (feature1_mag * feature2_mag + _EPSILON)

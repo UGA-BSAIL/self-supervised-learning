@@ -12,6 +12,7 @@ from loguru import logger
 from pydantic.dataclasses import dataclass
 from tensorflow.keras import layers
 
+from ..schemas import ModelInputs, ModelTargets
 from .graph_utils import (
     augment_adjacency_matrix,
     compute_bipartite_edge_features,
@@ -324,7 +325,7 @@ def _build_affinity_mlp(
 
     # Apply the MLP. 1x1 convolution is an efficient way to apply the same MLP
     # to every detection/tracklet pair.
-    conv1_1 = layers.Conv2D(1, 1)(similarity_input)
+    conv1_1 = layers.Conv2D(1, 1, name="affinity_conv")(similarity_input)
 
     # Remove the extraneous 1 dimension.
     return conv1_1[:, :, :, 0]
@@ -367,7 +368,7 @@ def _update_adjacency_matrix() -> Callable[
         node_features, adjacency_matrix = inputs
         adjacency = conv1_1(aug1_1((adjacency_matrix, node_features)))
         # Remove the final dimension, which should be one.
-        return adjacency[:, :, :, 0]
+        return tf.keras.activations.relu(adjacency[:, :, :, 0])
 
     return _apply_block
 
@@ -518,7 +519,8 @@ def _solve_association(
 
         # Normalize it.
         transport, _ = solve_optimal_transport(
-            affinity_expanded,
+            # Cost matrix is -affinity.
+            -affinity_expanded,
             lamb=config.sinkhorn_lambda,
             row_sums=row_sums,
             column_sums=column_sums,
@@ -571,8 +573,9 @@ def extract_appearance_features(
     """
     # Convert detections and tracklets to a normal batch for appearance
     # feature extraction.
-    detections_flat = detections.merge_dims(0, 1)
-    tracklets_flat = tracklets.merge_dims(0, 1)
+    merge_dims = layers.Lambda(lambda rt: rt.merge_dims(0, 1))
+    detections_flat = merge_dims(detections)
+    tracklets_flat = merge_dims(tracklets)
 
     # Extract appearance features.
     appearance_feature_extractor = _build_appearance_model(config=config)
@@ -580,12 +583,13 @@ def extract_appearance_features(
     tracklets_features_flat = appearance_feature_extractor(tracklets_flat)
 
     # Add the flattened dimensions back.
-    detections_features_ragged = tf.RaggedTensor.from_row_lengths(
-        detections_features_flat, detections.row_lengths()
+    to_ragged = layers.Lambda(
+        lambda t: tf.RaggedTensor.from_row_lengths(t[0], t[1].row_lengths())
     )
-    tracklets_features_ragged = tf.RaggedTensor.from_row_lengths(
-        tracklets_features_flat, tracklets.row_lengths()
+    detections_features_ragged = to_ragged(
+        (detections_features_flat, detections)
     )
+    tracklets_features_ragged = to_ragged((tracklets_features_flat, tracklets))
     return detections_features_ragged, tracklets_features_ragged
 
 
@@ -635,10 +639,11 @@ def extract_interaction_features(
 
     # For the rest of the pipeline, we need a dense representation of the
     # features.
-    detection_app_features = detection_app_features.to_tensor()
-    tracklets_app_features = tracklets_app_features.to_tensor()
-    detections_geom_features = detections_geometry.to_tensor()
-    tracklets_geom_features = tracklets_geometry.to_tensor()
+    to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
+    detection_app_features = to_tensor(detection_app_features)
+    tracklets_app_features = to_tensor(tracklets_app_features)
+    detections_geom_features = to_tensor(detections_geometry)
+    tracklets_geom_features = to_tensor(tracklets_geometry)
 
     # Create the edge feature extractor.
     edge_features = _build_edge_mlp(
@@ -650,6 +655,7 @@ def extract_interaction_features(
     adjacency_matrix = layers.Lambda(
         lambda f: make_adjacency_matrix(f), name="adjacency_matrix"
     )(edge_features)
+    adjacency_matrix = tf.keras.activations.relu(adjacency_matrix)
     # Note that the order of concatenation is important here.
     combined_app_features = layers.Concatenate(axis=-2)(
         (tracklets_app_features, detection_app_features)
@@ -715,8 +721,9 @@ def compute_association(
 
     # Compute affinity scores. For this, we need a dense representation of
     # the geometric features.
-    detections_geom_features = detections_geometry.to_tensor()
-    tracklets_geom_features = tracklets_geometry.to_tensor()
+    to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
+    detections_geom_features = to_tensor(detections_geometry)
+    tracklets_geom_features = to_tensor(tracklets_geometry)
     affinity_scores = _build_affinity_mlp(
         detection_geom_features=detections_geom_features,
         tracklet_geom_features=tracklets_geom_features,
@@ -730,4 +737,70 @@ def compute_association(
         num_detections=detections.row_lengths(),
         num_tracklets=tracklets.row_lengths(),
         config=config,
+    )
+
+
+def _make_image_input(config: ModelConfig, *, name: str) -> layers.Input:
+    """
+    Creates an input for detection or tracklet images.
+
+    Args:
+        config: The model configuration to use.
+        name: The name to use for the input.
+
+    Returns:
+        The input that it created.
+
+    """
+    input_shape = (None,) + config.image_input_shape
+    return layers.Input(input_shape, ragged=True, name=name, dtype="uint8")
+
+
+def build_model(config: ModelConfig) -> tf.keras.Model:
+    """
+    Builds the complete Keras model.
+
+    Args:
+        config: The model configuration.
+
+    Returns:
+        The model that it created.
+
+    """
+    # Create the inputs.
+    tracklet_input = _make_image_input(
+        config, name=ModelInputs.TRACKLETS.value
+    )
+    detection_input = _make_image_input(
+        config, name=ModelInputs.DETECTIONS.value
+    )
+
+    geometry_input_shape = (None, 4)
+    detection_geometry_input = layers.Input(
+        geometry_input_shape,
+        ragged=True,
+        name=ModelInputs.DETECTION_GEOMETRY.value,
+    )
+    tracklet_geometry_input = layers.Input(
+        geometry_input_shape,
+        ragged=True,
+        name=ModelInputs.TRACKLET_GEOMETRY.value,
+    )
+
+    # Build the actual model.
+    sinkhorn_matrices = compute_association(
+        detections=detection_input,
+        tracklets=tracklet_input,
+        detections_geometry=detection_geometry_input,
+        tracklets_geometry=tracklet_geometry_input,
+        config=config,
+    )
+    return tf.keras.Model(
+        inputs=[
+            detection_input,
+            tracklet_input,
+            detection_geometry_input,
+            tracklet_geometry_input,
+        ],
+        outputs={ModelTargets.SINKHORN.value: sinkhorn_matrices},
     )

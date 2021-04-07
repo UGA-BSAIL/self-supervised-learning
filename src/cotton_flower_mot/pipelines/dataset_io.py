@@ -30,7 +30,6 @@ _FEATURE_DESCRIPTION = {
 Descriptions of the features found in the dataset containing flower annotations.
 """
 
-
 Feature = Dict[str, tf.Tensor]
 """
 Feature dictionary that contains only normal tensors.
@@ -96,17 +95,27 @@ def _get_geometric_features(bbox_coords: tf.Tensor) -> tf.Tensor:
         bounding box in the form [center_x, center_y, width, height].
 
     """
-    x_min = bbox_coords[1]
-    x_max = bbox_coords[3]
-    y_min = bbox_coords[0]
-    y_max = bbox_coords[2]
+    bbox_coords = tf.ensure_shape(bbox_coords, (None, 4))
 
-    width_x = x_max - x_min
-    width_y = y_max - y_min
-    center_x = x_min + width_x / tf.constant(2.0)
-    center_y = y_min + width_y / tf.constant(2.0)
+    def _extract_features() -> tf.Tensor:
+        x_min = bbox_coords[:, 1]
+        x_max = bbox_coords[:, 3]
+        y_min = bbox_coords[:, 0]
+        y_max = bbox_coords[:, 2]
 
-    return tf.stack([center_x, center_y, width_x, width_y], axis=1)
+        width_x = x_max - x_min
+        width_y = y_max - y_min
+        center_x = x_min + width_x / tf.constant(2.0)
+        center_y = y_min + width_y / tf.constant(2.0)
+
+        return tf.stack([center_x, center_y, width_x, width_y], axis=1)
+
+    # Handle the case where we have no detections.
+    return tf.cond(
+        tf.shape(bbox_coords)[0] > 0,
+        _extract_features,
+        lambda: tf.zeros((0, 4), dtype=tf.float32),
+    )
 
 
 def _extract_detection_images(
@@ -128,7 +137,9 @@ def _extract_detection_images(
         Will have shape `[num_detections, d_height, d_width, num_channels]`.
 
     """
-    # Convert from pixel to normalize coordinates.
+    bbox_coords = tf.ensure_shape(bbox_coords, (None, 4))
+
+    # Convert from pixel to normalized coordinates.
     image_height_width = tf.shape(image)[:2]
     image_height_width = tf.cast(image_height_width, tf.float32)
     image_height_width = tf.tile(image_height_width, (2,))
@@ -143,6 +154,8 @@ def _extract_detection_images(
     extracted = tf.image.crop_and_resize(
         image, bbox_coords, box_indices, crop_size=detection_size
     )
+    # Make sure the result has the expected shape.
+    extracted = tf.ensure_shape(extracted, (None,) + config.image_input_shape)
 
     # Convert back to uint8s.
     return tf.cast(extracted, tf.uint8)
@@ -196,7 +209,9 @@ def _load_single_image_features(
     return features.map(_process_image, num_parallel_calls=_NUM_THREADS)
 
 
-def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
+def _load_pair_features(
+    features: tf.data.Dataset, *, config: ModelConfig
+) -> tf.data.Dataset:
     """
     Loads the features that need to be extracted from a consecutive image
     pair.
@@ -204,6 +219,7 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     Args:
         features: The single-image features for a batch of two consecutive
             frames.
+        config: The model configuration to use.
 
     Returns:
         A dataset with elements that contain a dictionary of input features
@@ -236,7 +252,9 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         first_frame_num = frame_nums[0]
         next_frame_num = frame_nums[1]
         are_consecutive = tf.assert_equal(
-            first_frame_num, next_frame_num - tf.constant(1, dtype=tf.int64)
+            first_frame_num,
+            next_frame_num - tf.constant(1, dtype=tf.int64),
+            message="Pair frame numbers are not consecutive.",
         )
 
         with tf.control_dependencies([are_consecutive]):
@@ -249,12 +267,12 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
             # The sinkhorn matrix produced by the model is flattened.
             sinkhorn = tf.reshape(sinkhorn, (-1,))
 
-            # Merge everything into input and target feature dictionaries.
             tracklets = detections[0]
             detections = detections[1]
             tracklet_geometry = geometry[0]
             detection_geometry = geometry[1]
 
+            # Merge everything into input and target feature dictionaries.
             inputs = {
                 ModelInputs.DETECTIONS.value: detections,
                 ModelInputs.TRACKLETS.value: tracklets,
@@ -268,11 +286,43 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     return features.map(_process_pair, num_parallel_calls=_NUM_THREADS)
 
 
+def _filter_empty(features: tf.data.Dataset) -> tf.data.Dataset:
+    """
+    Filters out examples that contain no detections at all.
+
+    Args:
+        features: The dataset containing input and target features.
+
+    Returns:
+        The same dataset, but with empty examples removed.
+
+    """
+
+    def _dense_shape(tensor: Union[tf.Tensor, tf.RaggedTensor]) -> tf.Tensor:
+        if isinstance(tensor, tf.Tensor):
+            return tf.shape(tensor)
+        else:
+            return tensor.bounding_shape()
+
+    def _is_not_empty(inputs: MaybeRaggedFeature, _) -> tf.Tensor:
+        # Check both detections and tracklets. We don't want to eliminate
+        # examples where only one is empty.
+        detections = inputs[ModelInputs.DETECTIONS.value]
+        tracklets = inputs[ModelInputs.TRACKLETS.value]
+
+        # Get the shape.
+        detections_shape = _dense_shape(detections)
+        tracklets_shape = _dense_shape(tracklets)
+
+        return tf.logical_or(detections_shape[0] > 0, tracklets_shape[0] > 0)
+
+    return features.filter(_is_not_empty)
+
+
 def _ensure_ragged(
     features: tf.data.Dataset,
-    *,
-    input_keys: Iterable[str],
-    target_keys: Iterable[str]
+    input_keys: Iterable[str] = (),
+    target_keys: Iterable[str] = (),
 ) -> tf.data.Dataset:
     """
     `Dataset.map()` does not guarantee that the output will be a `RaggedTensor`.
@@ -314,12 +364,10 @@ def _ensure_ragged(
     )
 
 
-def inputs_and_targets_from_dataset(
+def _inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
     config: ModelConfig,
-    batch_size: int = 32,
-    num_prefetch_batches: int = 5
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -328,8 +376,6 @@ def inputs_and_targets_from_dataset(
     Args:
         raw_dataset: The raw dataset, containing serialized data.
         config: Model configuration we are loading data for.
-        batch_size: The size of the batches that we generate.
-        num_prefetch_batches: Number of batches to prefetch.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -347,10 +393,32 @@ def inputs_and_targets_from_dataset(
     )
     # Break into pairs.
     image_pairs = single_image_features.window(2, shift=1, drop_remainder=True)
-    inputs_and_targets = _load_pair_features(image_pairs)
+    pair_features = _load_pair_features(image_pairs, config=config)
 
+    # Remove empty examples.
+    return _filter_empty(pair_features)
+
+
+def _batch_and_prefetch(
+    dataset: tf.data.Dataset,
+    *,
+    batch_size: int = 32,
+    num_prefetch_batches: int = 5,
+) -> tf.data.Dataset:
+    """
+    Batches and prefetches data from a dataset.
+
+    Args:
+        dataset: The dataset to process.
+        batch_size: The batch size to use.
+        num_prefetch_batches: The number of batches to prefetch.
+
+    Returns:
+        The batched dataset.
+
+    """
     # Construct batches.
-    batched = inputs_and_targets.apply(
+    batched = dataset.apply(
         tf.data.experimental.dense_to_ragged_batch(batch_size)
     )
     ragged = _ensure_ragged(
@@ -362,8 +430,33 @@ def inputs_and_targets_from_dataset(
     return ragged.prefetch(num_prefetch_batches)
 
 
+def inputs_and_targets_from_dataset(
+    raw_dataset: tf.data.Dataset, *, config: ModelConfig, **kwargs: Any
+) -> tf.data.Dataset:
+    """
+    Deserializes raw data from a `Dataset`, and coerces it into the form used by
+    the model, with batching and pre-fetching.
+
+    Args:
+        raw_dataset: The raw dataset, containing serialized data.
+        config: Model configuration we are loading data for.
+        kwargs: Will be forwarded to `_batch_and_prefetch`.
+
+    Returns:
+        A dataset that produces input images and target bounding boxes.
+
+    """
+    inputs_and_targets = _inputs_and_targets_from_dataset(
+        raw_dataset, config=config
+    )
+    return _batch_and_prefetch(inputs_and_targets, **kwargs)
+
+
 def inputs_and_targets_from_datasets(
-    raw_datasets: Iterable[tf.data.Dataset], *args: Any, **kwargs: Any
+    raw_datasets: Iterable[tf.data.Dataset],
+    *,
+    config: ModelConfig,
+    **kwargs: Any,
 ) -> tf.data.Dataset:
     """
     Deserializes and interleaves data from multiple datasets, and coerces it
@@ -371,8 +464,8 @@ def inputs_and_targets_from_datasets(
 
     Args:
         raw_datasets: The raw datasets to draw from.
-        *args: Will be forwarded to `inputs_and_targets_from_dataset`.
-        **kwargs: Will be forwarded to `inputs_and_targets_from_dataset`.
+        config: The model configuration to use.
+        **kwargs: Will be forwarded to `_batch_and_prefetch`.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -382,9 +475,13 @@ def inputs_and_targets_from_datasets(
     parsed_datasets = []
     for raw_dataset in raw_datasets:
         parsed_datasets.append(
-            inputs_and_targets_from_dataset(raw_dataset, *args, **kwargs)
+            _inputs_and_targets_from_dataset(raw_dataset, config=config)
         )
 
     # Interleave the results.
     choices = tf.data.Dataset.range(len(parsed_datasets)).repeat()
-    return tf.data.experimental.choose_from_datasets(parsed_datasets, choices)
+    interleaved = tf.data.experimental.choose_from_datasets(
+        parsed_datasets, choices
+    )
+
+    return _batch_and_prefetch(interleaved, **kwargs)

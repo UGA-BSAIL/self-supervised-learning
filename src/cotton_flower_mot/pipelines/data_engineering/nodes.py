@@ -79,19 +79,19 @@ def split_clips(
         if sequence_id != old_sequence_id:
             # This is a new video in the underlying data.
             current_clip_length = 0
-            old_frame_num = -1
             new_sequence_id += 1
         old_sequence_id = sequence_id
 
         if frame_num != old_frame_num:
             # Only count frames as opposed to annotations.
-            current_clip_length += 1
+            # The subtraction is because some frames might have no annotations
+            # and are thus skipped.
+            current_clip_length += frame_num - old_frame_num
             old_frame_num = frame_num
 
-        if current_clip_length > max_clip_length:
+        if current_clip_length >= max_clip_length:
             # We should split a new clip here.
             current_clip_length = 0
-            old_frame_num = -1
             new_sequence_id += 1
 
         new_sequence_ids.append(new_sequence_id)
