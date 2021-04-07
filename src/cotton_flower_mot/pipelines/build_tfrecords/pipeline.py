@@ -24,14 +24,6 @@ def create_pipeline(**kwargs):
                 generate_examples,
                 dict(
                     video_frames="cotton_videos",
-                    annotations="annotations_tf_train",
-                ),
-                "tfrecord_train",
-            ),
-            node(
-                generate_examples,
-                dict(
-                    video_frames="cotton_videos",
                     annotations="annotations_tf_test",
                 ),
                 "tfrecord_test",
@@ -43,6 +35,14 @@ def create_pipeline(**kwargs):
                     annotations="annotations_tf_valid",
                 ),
                 "tfrecord_valid",
+            ),
+            node(
+                generate_examples,
+                dict(
+                    video_frames="cotton_videos",
+                    annotations="annotations_tf_train",
+                ),
+                "tfrecord_train",
             ),
         ]
     )

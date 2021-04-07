@@ -9,7 +9,8 @@ import tensorflow as tf
 import tensorflow.keras.optimizers.schedules as schedules
 from loguru import logger
 
-from .gcnn_model import ModelConfig, build_model
+from ..config import ModelConfig
+from .gcnn_model import build_model
 from .losses import make_losses
 
 

@@ -4,10 +4,10 @@ from typing import Any, Dict, Iterable, Tuple, Union
 
 import tensorflow as tf
 
-from .model_training.gcnn_model import ModelConfig
-from .model_training.sinkhorn import construct_gt_sinkhorn_matrix
+from .config import ModelConfig
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
+from .sinkhorn import construct_gt_sinkhorn_matrix
 
 _FEATURE_DESCRIPTION = {
     Otf.IMAGE_HEIGHT.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),

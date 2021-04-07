@@ -8,10 +8,11 @@ from typing import Any, Callable, Tuple
 import spektral
 import tensorflow as tf
 from loguru import logger
-from pydantic.dataclasses import dataclass
 from tensorflow.keras import layers
 
+from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
+from ..sinkhorn import solve_optimal_transport
 from .graph_utils import (
     augment_adjacency_matrix,
     compute_bipartite_edge_features,
@@ -21,32 +22,6 @@ from .graph_utils import (
 )
 from .layers.dense import DenseBlock, TransitionLayer
 from .similarity_utils import compute_ious, cosine_similarity
-from .sinkhorn import solve_optimal_transport
-
-
-@dataclass(frozen=True)
-class ModelConfig:
-    """
-    Encapsulates configuration for the model.
-
-    Attributes:
-        image_input_shape: The shape of the detections and tracklets being
-            input to the appearance feature extractor.
-        num_appearance_features: The number of appearance features to extract
-            from each image.
-
-        num_gcn_channels: Number of output channels to use for the GCN blocks.
-
-        sinkhorn_lambda: The lambda parameter to use for Sinkhorn normalization.
-
-    """
-
-    image_input_shape: Tuple[int, int, int]
-    num_appearance_features: int
-
-    num_gcn_channels: int
-
-    sinkhorn_lambda: float
 
 
 def _bn_relu_conv(

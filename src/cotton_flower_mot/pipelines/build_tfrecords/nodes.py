@@ -118,6 +118,9 @@ def _make_example(
         The example that it created.
 
     """
+    # Shuffle the order of the rows to add some variation to Sinkhorn matrices.
+    frame_annotations = frame_annotations.sample(frac=1.0)
+
     # Remove the frame number column since that info is provided manually.
     frame_annotations = frame_annotations.drop(
         columns=[Otf.IMAGE_FRAME_NUM.value]
