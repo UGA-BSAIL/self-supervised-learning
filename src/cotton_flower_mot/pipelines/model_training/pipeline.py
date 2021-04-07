@@ -57,6 +57,7 @@ def create_pipeline(**kwargs):
                     training_data="training_data",
                     testing_data="testing_data",
                     learning_phases="params:learning_phases",
+                    positive_sample_weight="params:positive_sample_weight",
                 ),
                 "trained_model",
             ),

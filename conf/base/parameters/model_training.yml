@@ -6,6 +6,8 @@ num_appearance_features: 256
 num_gcn_channels: 256
 # Sinkhorn normalization Lambda value.
 sinkhorn_lambda: 10.0
+# How much to weight positive samples in the loss.
+positive_sample_weight: 3.0
 
 # Batch size to use for training.
 batch_size: 16

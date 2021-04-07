@@ -61,12 +61,21 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
         return -tf.reduce_sum(weighted_losses) / num_samples
 
 
-def make_losses() -> Dict[str, tf.keras.losses.Loss]:
+def make_losses(
+    positive_sample_weight: float = 1.0,
+) -> Dict[str, tf.keras.losses.Loss]:
     """
     Creates the losses to use for the model.
+
+    Args:
+        positive_sample_weight: How much to weight positive samples in the loss.
 
     Returns:
         The losses that it created.
 
     """
-    return {ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy()}
+    return {
+        ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(
+            positive_weight=positive_sample_weight
+        )
+    }
