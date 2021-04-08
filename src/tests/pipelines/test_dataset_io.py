@@ -85,9 +85,7 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
     assert detections_shape[1] == detection_geometry_shape[1]
     assert tracklets_shape[1] == tracklet_geometry_shape[1]
 
-    sinkhorn_shape = (
-        targets[ModelTargets.SINKHORN.value].bounding_shape().numpy()
-    )
+    sinkhorn_shape = tf.shape(targets[ModelTargets.SINKHORN.value]).numpy()
     assert len(sinkhorn_shape) == 2
     assert sinkhorn_shape[0] == expected_batch_size
     # Sinkhorn matrix should have an entry for each detection/tracklet pair.

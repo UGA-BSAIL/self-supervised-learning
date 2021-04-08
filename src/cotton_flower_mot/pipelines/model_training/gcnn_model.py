@@ -482,6 +482,8 @@ def _solve_association(
         element: Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
     ) -> tf.Tensor:
         affinity_matrix, _num_detections, _num_tracklets = element
+        affinity_flat_length = tf.math.reduce_prod(tf.shape(affinity_matrix))
+        affinity_flat_length = tf.cast(affinity_flat_length, tf.int64)
 
         # Remove the padding.
         affinity_un_padded = affinity_matrix[:_num_tracklets, :_num_detections]
@@ -508,21 +510,28 @@ def _solve_association(
         # Remove births/deaths row/column.
         transport = transport[:, :-1, :-1]
         # Flatten and remove fake batch dimension.
-        return tf.reshape(transport, (-1,))
+        transport_flat = tf.reshape(transport, (-1,))
+        # Re-pad so the outputs all have the same size.
+        padding = tf.stack(
+            (0, affinity_flat_length - _num_tracklets * _num_detections)
+        )
+        return tf.pad(transport_flat, tf.expand_dims(padding, 0))
 
     # Unfortunately, we can't have padding for the affinity scores, because
     # it affects the optimization. Therefore, this process has to be done
     # with map_fn instead of vectorized.
-    return layers.Lambda(
+    normalized_dense = layers.Lambda(
         lambda f: tf.map_fn(
             _normalize,
             f,
-            fn_output_signature=tf.RaggedTensorSpec(
-                shape=[None], dtype=tf.float32
-            ),
+            fn_output_signature=tf.TensorSpec(shape=[None], dtype=tf.float32),
         ),
         name="sinkhorn",
     )((affinity_scores, num_detections, num_tracklets))
+
+    # Convert to a ragged tensor.
+    row_lengths = num_detections * num_tracklets
+    return tf.RaggedTensor.from_tensor(normalized_dense, lengths=row_lengths)
 
 
 def extract_appearance_features(

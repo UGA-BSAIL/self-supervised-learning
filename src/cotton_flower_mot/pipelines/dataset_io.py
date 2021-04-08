@@ -364,6 +364,51 @@ def _ensure_ragged(
     )
 
 
+def _ensure_not_ragged(
+    features: tf.data.Dataset,
+    input_keys: Iterable[str] = (),
+    target_keys: Iterable[str] = (),
+) -> tf.data.Dataset:
+    """
+    `Dataset.map()` does not guarantee that the output will be a `RaggedTensor`.
+    Some code can't handle `RaggedTensors`, so we convert to normal dense
+    Tensors.
+
+    Args:
+        features: Dataset containing input and target feature dictionaries.
+        input_keys: The keys in the input that we want to make dense.
+        target_keys: The keys in the targets that we want to make dense.
+
+    Returns:
+        Dataset with the same features, but ensuring that the specified ones
+        are ragged.
+
+    """
+
+    def _ensure_element_not_ragged(
+        inputs: MaybeRaggedFeature, targets: MaybeRaggedFeature
+    ) -> Tuple[MaybeRaggedFeature, MaybeRaggedFeature]:
+        def _validate_feature(
+            feature: Union[tf.Tensor, tf.RaggedTensor]
+        ) -> tf.Tensor:
+            if isinstance(feature, tf.Tensor):
+                # Already not ragged.
+                return feature
+            # Otherwise, make it ragged.
+            return feature.to_tensor()
+
+        for key in input_keys:
+            inputs[key] = _validate_feature(inputs[key])
+        for key in target_keys:
+            targets[key] = _validate_feature(targets[key])
+
+        return inputs, targets
+
+    return features.map(
+        _ensure_element_not_ragged, num_parallel_calls=_NUM_THREADS
+    )
+
+
 def _inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
@@ -424,7 +469,10 @@ def _batch_and_prefetch(
     ragged = _ensure_ragged(
         batched,
         input_keys=[e.value for e in ModelInputs],
-        target_keys=[e.value for e in ModelTargets],
+        target_keys=[],
+    )
+    ragged = _ensure_not_ragged(
+        ragged, input_keys=[], target_keys=[ModelTargets.SINKHORN.value]
     )
 
     return ragged.prefetch(num_prefetch_batches)

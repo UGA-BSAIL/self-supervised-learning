@@ -3,7 +3,7 @@ Defines custom losses.
 """
 
 
-from typing import Any, Dict, Union
+from typing import Any, Dict, Tuple, Union
 
 import tensorflow as tf
 
@@ -47,7 +47,39 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
         self._positive_weight = tf.constant(positive_weight, dtype=tf.float32)
         self._negative_weight = tf.constant(negative_weight, dtype=tf.float32)
 
+    @staticmethod
+    def _correct_ragged_mismatch(
+        y_true: MaybeRagged, y_pred: MaybeRagged
+    ) -> Tuple[MaybeRagged, MaybeRagged]:
+        """
+        Workaround for a bug in TF 2.4 where we can't input `y_true` as a
+        ragged tensor. However, `y_pred` can still be ragged, so in this
+        situation, we convert `y_true` to a ragged tensor based on the row
+        lengths from `y_pred`.
+
+        Args:
+            y_true: The ground-truth labels.
+            y_pred: The predicted labels.
+
+        Returns:
+            The same true and predicted labels. In the case where `y_pred` is
+            ragged and `y_true` is not, `y_true` will be made ragged. Otherwise,
+            both will be returned unchanged.
+
+
+        """
+        if isinstance(y_pred, tf.RaggedTensor) and isinstance(
+            y_true, tf.Tensor
+        ):
+            y_true = tf.RaggedTensor.from_tensor(
+                y_true, lengths=y_pred.row_lengths()
+            )
+
+        return y_true, y_pred
+
     def call(self, y_true: MaybeRagged, y_pred: MaybeRagged) -> tf.Tensor:
+        y_true, y_pred = self._correct_ragged_mismatch(y_true, y_pred)
+
         positive_samples = y_true * tf.math.log(y_pred + self._EPSILON)
         negative_samples = (1.0 - y_true) * tf.math.log(
             1.0 - y_pred + self._EPSILON
