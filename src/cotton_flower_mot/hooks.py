@@ -29,7 +29,7 @@
 """Project hooks."""
 from typing import Any, Dict, Iterable, Optional
 
-from kedro.config import ConfigLoader
+from kedro.config import ConfigLoader, TemplatedConfigLoader
 from kedro.framework.hooks import hook_impl
 from kedro.io import DataCatalog
 from kedro.pipeline import Pipeline
@@ -69,7 +69,11 @@ class ProjectHooks:
         env: str,
         extra_params: Dict[str, Any],
     ) -> ConfigLoader:
-        return ConfigLoader(conf_paths)
+        return TemplatedConfigLoader(
+            conf_paths,
+            # Read the dictionary of global variables from the project config.
+            globals_pattern="*globals.yml",
+        )
 
     @hook_impl
     def register_catalog(

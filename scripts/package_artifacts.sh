@@ -18,11 +18,10 @@ function package_artifacts() {
   mkdir artifacts
 
   # Grab the job output.
-  zip artifacts/output.zip cotton_count_model_train."${JOB_ID}".*
+  zip artifacts/output.zip cotton_mot_model_train."${JOB_ID}".*
 
   # Grab the models and reports
   zip -r artifacts/models.zip "${job_dir}/output_data/06_models/"
-  zip -r artifacts/reports.zip "${job_dir}/output_data/08_reporting/"
 
   # Grab the logs.
   zip -r artifacts/logs.zip "${job_dir}/logs/"
@@ -32,7 +31,7 @@ function clean_artifacts() {
   # Remove old job data.
   rm -rf "${job_dir}"
   # Remove old job output.
-  rm cotton_count_model_train."${JOB_ID}".*
+  rm cotton_mot_model_train."${JOB_ID}".*
 }
 
 package_artifacts
