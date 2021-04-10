@@ -190,7 +190,7 @@ def test_compute_association_smoke(faker: Faker) -> None:
     detection_geometry_input = tf.keras.Input(geom_input_shape, ragged=True)
     tracklet_geometry_input = tf.keras.Input(geom_input_shape, ragged=True)
 
-    sinkhorn_matrices = gcnn_model.compute_association(
+    sinkhorn, assigment = gcnn_model.compute_association(
         detections=detection_input,
         tracklets=tracklet_input,
         detections_geometry=detection_geometry_input,
@@ -206,23 +206,27 @@ def test_compute_association_smoke(faker: Faker) -> None:
             detection_geometry_input,
             tracklet_geometry_input,
         ],
-        outputs=[sinkhorn_matrices],
+        outputs=[sinkhorn, assigment],
     )
 
     # Apply the model to the inputs we generated.
-    got_associations = model.predict(
+    got_sinkhorn, got_assignment = model.predict(
         (detections, tracklets, detections_geometry, tracklets_geometry)
     )
 
     # Assert.
     # Make sure our results are the right shape.
-    association_shape = got_associations.bounding_shape()
-    assert len(association_shape) == 2
+    sinkhorn_shape = got_sinkhorn.bounding_shape()
+    assignment_shape = got_assignment.bounding_shape()
+    assert len(sinkhorn_shape) == len(assignment_shape) == 2
 
-    # Make sure the Sinkhorn matrices are the expected size.
+    # Make sure the association matrices are the expected size.
     row_sizes = tracklets.row_lengths().numpy()
     col_sizes = detections.row_lengths().numpy()
     expected_lengths = row_sizes * col_sizes
     np.testing.assert_array_equal(
-        got_associations.row_lengths().numpy(), expected_lengths
+        got_sinkhorn.row_lengths().numpy(), expected_lengths
+    )
+    np.testing.assert_array_equal(
+        got_assignment.row_lengths().numpy(), expected_lengths
     )

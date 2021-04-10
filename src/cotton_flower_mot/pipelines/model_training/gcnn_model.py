@@ -3,6 +3,7 @@ Implements a model inspired by GCNNTrack.
 https://arxiv.org/pdf/2010.00067.pdf
 """
 
+from functools import partial
 from typing import Any, Callable, Tuple
 
 import spektral
@@ -10,9 +11,9 @@ import tensorflow as tf
 from loguru import logger
 from tensorflow.keras import layers
 
+from ..assignment import do_hard_assignment, solve_optimal_transport
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
-from ..sinkhorn import solve_optimal_transport
 from .graph_utils import (
     augment_adjacency_matrix,
     compute_bipartite_edge_features,
@@ -457,7 +458,7 @@ def _solve_association(
     num_detections: tf.Tensor,
     num_tracklets: tf.Tensor,
     config: ModelConfig,
-) -> tf.RaggedTensor:
+) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
     """
     Solves the association problem using Sinkhorn normalization.
 
@@ -472,18 +473,30 @@ def _solve_association(
         config: The model configuration to use.
 
     Returns:
-        The normalized optimal transport matrix. This will be a `RaggedTensor`
-        where the second dimension is ragged, so it will have the shape
+        The normalized optimal transport matrix, and the corresponding hard
+        assignment matrix. These will be`RaggedTensor`s where the second
+        dimension is ragged, so it will have the shape
         `[batch_size, n_tracklets * n_detections]`.
 
     """
 
     def _normalize(
         element: Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
-    ) -> tf.Tensor:
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
         affinity_matrix, _num_detections, _num_tracklets = element
         affinity_flat_length = tf.math.reduce_prod(tf.shape(affinity_matrix))
         affinity_flat_length = tf.cast(affinity_flat_length, tf.int64)
+
+        def _trim_and_flatten(association: tf.Tensor) -> tf.Tensor:
+            # Remove births/deaths row/column.
+            association = association[:-1, :-1]
+            # Flatten.
+            transport_flat = tf.reshape(association, (-1,))
+            # Re-pad so the outputs all have the same size.
+            padding = tf.stack(
+                (0, affinity_flat_length - _num_tracklets * _num_detections)
+            )
+            return tf.pad(transport_flat, tf.expand_dims(padding, 0))
 
         # Remove the padding.
         affinity_un_padded = affinity_matrix[:_num_tracklets, :_num_detections]
@@ -506,32 +519,31 @@ def _solve_association(
             row_sums=row_sums,
             column_sums=column_sums,
         )
+        # Remove extraneous batch dimension.
+        transport = transport[0]
+        assignment = do_hard_assignment(transport)
 
-        # Remove births/deaths row/column.
-        transport = transport[:, :-1, :-1]
-        # Flatten and remove fake batch dimension.
-        transport_flat = tf.reshape(transport, (-1,))
-        # Re-pad so the outputs all have the same size.
-        padding = tf.stack(
-            (0, affinity_flat_length - _num_tracklets * _num_detections)
-        )
-        return tf.pad(transport_flat, tf.expand_dims(padding, 0))
+        return _trim_and_flatten(transport), _trim_and_flatten(assignment)
 
     # Unfortunately, we can't have padding for the affinity scores, because
     # it affects the optimization. Therefore, this process has to be done
     # with map_fn instead of vectorized.
-    normalized_dense = layers.Lambda(
+    sinkhorn_dense, assignment_dense = layers.Lambda(
         lambda f: tf.map_fn(
             _normalize,
             f,
-            fn_output_signature=tf.TensorSpec(shape=[None], dtype=tf.float32),
+            fn_output_signature=(
+                tf.TensorSpec(shape=[None], dtype=tf.float32),
+                tf.TensorSpec(shape=[None], dtype=tf.bool),
+            ),
         ),
         name="sinkhorn",
     )((affinity_scores, num_detections, num_tracklets))
 
     # Convert to a ragged tensor.
     row_lengths = num_detections * num_tracklets
-    return tf.RaggedTensor.from_tensor(normalized_dense, lengths=row_lengths)
+    to_ragged = partial(tf.RaggedTensor.from_tensor, lengths=row_lengths)
+    return to_ragged(sinkhorn_dense), to_ragged(assignment_dense)
 
 
 def extract_appearance_features(
@@ -668,7 +680,7 @@ def compute_association(
     detections_geometry: tf.RaggedTensor,
     tracklets_geometry: tf.RaggedTensor,
     config: ModelConfig,
-) -> tf.RaggedTensor:
+) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
     """
     Builds a model that computes associations between tracklets and detections.
 
@@ -690,9 +702,12 @@ def compute_association(
         config: The model configuration.
 
     Returns:
-        The association Sinkhorn matrices. Will have shape
+        The association and assignment matrices. Will have shape
         `[batch_size, n_tracklets * n_detections]`, where the inner
-        dimension is ragged and represents the flattened Sinkhorn matrix.
+        dimension is ragged and represents the flattened matrix. The association
+        matrix is simply the Sinkhorn-normalized associations, whereas the
+        assignment matrix is the hard assignments calculated with the
+        Hungarian algorithm.
 
     """
     # Extract interaction features.
@@ -776,7 +791,7 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
     )
 
     # Build the actual model.
-    sinkhorn_matrices = compute_association(
+    sinkhorn, assignment = compute_association(
         detections=detection_input,
         tracklets=tracklet_input,
         detections_geometry=detection_geometry_input,
@@ -790,5 +805,8 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
             detection_geometry_input,
             tracklet_geometry_input,
         ],
-        outputs={ModelTargets.SINKHORN.value: sinkhorn_matrices},
+        outputs={
+            ModelTargets.SINKHORN.value: sinkhorn,
+            ModelTargets.ASSIGNMENT.value: assignment,
+        },
     )

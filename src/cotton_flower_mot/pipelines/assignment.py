@@ -2,9 +2,11 @@
 Implementation of the Sinkhorn-Kopp algorithm in TensorFlow.
 """
 
+from functools import partial
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
+from scipy import optimize
 
 
 def _maybe_float_to_tensor(maybe_float: Union[float, tf.Tensor]) -> tf.Tensor:
@@ -171,3 +173,44 @@ def construct_gt_sinkhorn_matrix(
 
     # Convert booleans to floats.
     return tf.cast(sinkhorn_matrix, tf.float32)
+
+
+def do_hard_assignment(
+    sinkhorn: tf.Tensor, threshold: float = 0.5
+) -> tf.Tensor:
+    """
+    Converts the "soft" Sinkhorn assignment matrix into a hard one by using
+    thresholding and the Hungarian algorithm.
+
+    Args:
+        sinkhorn: The sinkhorn matrix. Should have shape
+            `[n_tracklets, n_detections]`.
+        threshold: The threshold value to use. Anything above this will be
+            treated as a one.
+
+    Returns:
+        The hard assignment matrix.
+
+    """
+    # Binarize the Sinkhorn matrix.
+    threshold = tf.constant(threshold, dtype=tf.float32)
+    binarized = tf.where(
+        sinkhorn >= threshold, tf.ones_like(sinkhorn), tf.zeros_like(sinkhorn)
+    )
+
+    # Apply Hungarian matching.
+    maximize_affinity = partial(optimize.linear_sum_assignment, maximize=True)
+    row_indices, col_indices = tf.numpy_function(
+        maximize_affinity, [binarized], (tf.int64, tf.int64), name="hungarian"
+    )
+
+    # Create the assignment matrix.
+    sparse_indices = tf.stack((row_indices, col_indices), axis=1)
+    num_assignments = tf.shape(row_indices)[0]
+    values = tf.ones((num_assignments,), dtype=tf.bool)
+    dense_shape = tf.cast(tf.shape(sinkhorn), tf.int64)
+
+    sparse_assignment = tf.sparse.SparseTensor(
+        sparse_indices, values, dense_shape
+    )
+    return tf.sparse.to_dense(sparse_assignment)

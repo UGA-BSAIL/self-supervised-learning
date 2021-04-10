@@ -12,6 +12,7 @@ from loguru import logger
 from ..config import ModelConfig
 from .gcnn_model import build_model
 from .losses import make_losses
+from .metrics import make_metrics
 
 
 def _make_learning_rate(
@@ -42,17 +43,6 @@ def _make_learning_rate(
         m_mul=config["m_mul"],
         alpha=config["min_learning_rate"],
     )
-
-
-def _make_metrics() -> Dict[str, List[tf.keras.metrics.Metric]]:
-    """
-    Creates the metrics to use for the model.
-
-    Returns:
-        The metrics that it created.
-
-    """
-    return {}
 
 
 def make_model_config(**kwargs: Any) -> ModelConfig:
@@ -128,8 +118,8 @@ def train_model(
         )
         model.compile(
             optimizer=optimizer,
-            loss=make_losses(),
-            metrics=_make_metrics(),
+            loss=make_losses(positive_sample_weight=positive_sample_weight),
+            metrics=make_metrics(),
         )
         model.fit(
             training_data,

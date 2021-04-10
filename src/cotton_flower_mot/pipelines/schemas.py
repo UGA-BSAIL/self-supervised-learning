@@ -151,3 +151,7 @@ class ModelTargets(enum.Enum):
     """
     The ground-truth Sinkhorn matrix.
     """
+    ASSIGNMENT = "assignment"
+    """
+    The hard assignment matrix.
+    """

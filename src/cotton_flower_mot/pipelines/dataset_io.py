@@ -4,10 +4,10 @@ from typing import Any, Dict, Iterable, Tuple, Union
 
 import tensorflow as tf
 
+from .assignment import construct_gt_sinkhorn_matrix
 from .config import ModelConfig
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
-from .sinkhorn import construct_gt_sinkhorn_matrix
 
 _FEATURE_DESCRIPTION = {
     Otf.IMAGE_HEIGHT.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),
@@ -209,9 +209,7 @@ def _load_single_image_features(
     return features.map(_process_image, num_parallel_calls=_NUM_THREADS)
 
 
-def _load_pair_features(
-    features: tf.data.Dataset, *, config: ModelConfig
-) -> tf.data.Dataset:
+def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     """
     Loads the features that need to be extracted from a consecutive image
     pair.
@@ -219,7 +217,6 @@ def _load_pair_features(
     Args:
         features: The single-image features for a batch of two consecutive
             frames.
-        config: The model configuration to use.
 
     Returns:
         A dataset with elements that contain a dictionary of input features
@@ -229,7 +226,7 @@ def _load_pair_features(
 
     def _process_pair(
         pair_features: Dict[str, tf.data.Dataset],
-    ) -> Tuple[Dict[str, tf.Tensor]]:
+    ) -> Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
         # Windowing combines features into sub-datasets with two elements. To
         # access them, we will batch them into a single element and then
         # extract them.
@@ -266,6 +263,9 @@ def _load_pair_features(
             )
             # The sinkhorn matrix produced by the model is flattened.
             sinkhorn = tf.reshape(sinkhorn, (-1,))
+            # Assignment target is the same as the sinkhorn matrix, just not a
+            # float.
+            assignment = tf.cast(sinkhorn, tf.bool)
 
             tracklets = detections[0]
             detections = detections[1]
@@ -279,7 +279,10 @@ def _load_pair_features(
                 ModelInputs.DETECTION_GEOMETRY.value: detection_geometry,
                 ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry,
             }
-            targets = {ModelTargets.SINKHORN.value: sinkhorn}
+            targets = {
+                ModelTargets.SINKHORN.value: sinkhorn,
+                ModelTargets.ASSIGNMENT.value: assignment,
+            }
 
             return inputs, targets
 
@@ -438,7 +441,7 @@ def _inputs_and_targets_from_dataset(
     )
     # Break into pairs.
     image_pairs = single_image_features.window(2, shift=1, drop_remainder=True)
-    pair_features = _load_pair_features(image_pairs, config=config)
+    pair_features = _load_pair_features(image_pairs)
 
     # Remove empty examples.
     return _filter_empty(pair_features)
@@ -472,7 +475,12 @@ def _batch_and_prefetch(
         target_keys=[],
     )
     ragged = _ensure_not_ragged(
-        ragged, input_keys=[], target_keys=[ModelTargets.SINKHORN.value]
+        ragged,
+        input_keys=[],
+        target_keys=[
+            ModelTargets.SINKHORN.value,
+            ModelTargets.ASSIGNMENT.value,
+        ],
     )
 
     return ragged.prefetch(num_prefetch_batches)
