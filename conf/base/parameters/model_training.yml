@@ -35,7 +35,7 @@ learning_phases:
       decay: true
       # Number of steps to decay over.
       # (210 steps per epoch)
-      decay_steps: 420
+      decay_steps: 630
       # Used to derive the number of iterations in the i-th period.
       t_mul: 2.0
       # Used to derive the initial learning rate of the i-th period.
@@ -45,4 +45,4 @@ learning_phases:
     # The momentum to use for the phase.
     momentum: 0.9
     # Number of epochs to train for in this phase.
-    num_epochs: 30
+    num_epochs: 45
