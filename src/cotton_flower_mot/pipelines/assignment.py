@@ -8,6 +8,11 @@ from typing import Optional, Tuple, Union
 import tensorflow as tf
 from scipy import optimize
 
+_EPSILON = tf.constant(0.0001)
+"""
+Small value to use to avoid dividing by zero.
+"""
+
 
 def _maybe_float_to_tensor(maybe_float: Union[float, tf.Tensor]) -> tf.Tensor:
     """
@@ -120,11 +125,14 @@ def solve_optimal_transport(
 
             """
             next_row_sum = tf.reduce_sum(_transport, axis=2, keepdims=True)
+            # Avoid zero division.
+            next_row_sum = tf.maximum(next_row_sum, _EPSILON)
             next_transport = _transport * (row_sums / next_row_sum)
 
             next_column_sum = tf.reduce_sum(
                 next_transport, axis=1, keepdims=True
             )
+            next_column_sum = tf.maximum(next_column_sum, _EPSILON)
             # This broadcast is needed so that Tensorflow can statically
             # verify that the shape of the Sinkhorn matrix doesn't change
             # between iterations.
