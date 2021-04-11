@@ -5,7 +5,7 @@ Pipeline definition for model training.
 from kedro.pipeline import Pipeline, node
 
 from ..dataset_io import inputs_and_targets_from_datasets
-from .nodes import create_model, make_model_config, train_model
+from .nodes import create_model, make_callbacks, make_model_config, train_model
 
 
 def create_pipeline(**kwargs):
@@ -51,6 +51,15 @@ def create_pipeline(**kwargs):
             ),
             node(create_model, "model_config", "initial_model"),
             node(
+                make_callbacks,
+                dict(
+                    tensorboard_output_dir="params:tensorboard_output_dir",
+                    histogram_period="params:histogram_period",
+                    update_period="params:update_period",
+                ),
+                "callbacks",
+            ),
+            node(
                 train_model,
                 dict(
                     model="initial_model",
@@ -58,6 +67,7 @@ def create_pipeline(**kwargs):
                     testing_data="testing_data",
                     learning_phases="params:learning_phases",
                     positive_sample_weight="params:positive_sample_weight",
+                    callbacks="callbacks",
                 ),
                 "trained_model",
             ),

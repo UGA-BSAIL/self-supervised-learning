@@ -3,6 +3,8 @@ Nodes for the model training pipeline.
 """
 
 
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Union
 
 import tensorflow as tf
@@ -77,6 +79,37 @@ def create_model(config: ModelConfig) -> tf.keras.Model:
     return model
 
 
+def make_callbacks(
+    *, tensorboard_output_dir: str, histogram_period: int, update_period: int
+) -> List[tf.keras.callbacks.Callback]:
+    """
+    Creates callbacks to use when training the model.
+
+    Args:
+        tensorboard_output_dir: The directory to use for storing Tensorboard
+            logs.
+        histogram_period: Period at which to generate histograms for
+            Tensorboard output, in epochs.
+        update_period: Period in batches at which to log metrics.
+
+    Returns:
+        The list of callbacks.
+
+    """
+    # Create a callback for storing Tensorboard logs.
+    log_dir = Path(tensorboard_output_dir) / datetime.now().isoformat()
+    logger.debug("Writing Tensorboard logs to {}.", log_dir)
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir=log_dir,
+        histogram_freq=histogram_period,
+        update_freq=update_period,
+    )
+
+    nan_termination = tf.keras.callbacks.TerminateOnNaN()
+
+    return [tensorboard_callback, nan_termination]
+
+
 def train_model(
     model: tf.keras.Model,
     *,
@@ -85,7 +118,7 @@ def train_model(
     learning_phases: List[Dict[str, Any]],
     callbacks: List[tf.keras.callbacks.Callback] = [],
     validation_frequency: int = 1,
-    positive_sample_weight: float = 1.0
+    positive_sample_weight: float = 1.0,
 ) -> tf.keras.Model:
     """
     Trains a model.
