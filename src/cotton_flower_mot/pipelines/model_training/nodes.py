@@ -16,9 +16,6 @@ from .gcnn_model import build_model
 from .losses import make_losses
 from .metrics import make_metrics
 
-# Enable checking for NaN and Inf values.
-tf.debugging.enable_check_numerics()
-
 
 def _make_learning_rate(
     config: Dict[str, Any]
@@ -48,6 +45,21 @@ def _make_learning_rate(
         m_mul=config["m_mul"],
         alpha=config["min_learning_rate"],
     )
+
+
+def set_check_numerics(enable: bool) -> None:
+    """
+    Sets whether to enable checking for NaNs and infinities.
+
+    Args:
+        enable: If true, will enable the checks.
+
+    """
+    if enable:
+        logger.info("Enabling numeric checks. Training might be slow.")
+        tf.debugging.enable_check_numerics()
+    else:
+        tf.debugging.disable_check_numerics()
 
 
 def make_model_config(**kwargs: Any) -> ModelConfig:

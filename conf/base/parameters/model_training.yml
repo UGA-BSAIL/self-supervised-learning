@@ -20,6 +20,11 @@ histogram_period: 2
 # Period at which to write metrics, in batches.
 update_period: 100
 
+# Whether to enable debugging checks for NaN and infinity. This
+# is very useful when trying to debug numerical issues, but it
+# slows down training a lot.
+enable_numeric_checks: false
+
 # Learning phases to use for training the model.
 learning_phases:
   # The initial learning rate to use for the phase.

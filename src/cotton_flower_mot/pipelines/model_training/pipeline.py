@@ -5,7 +5,13 @@ Pipeline definition for model training.
 from kedro.pipeline import Pipeline, node
 
 from ..dataset_io import inputs_and_targets_from_datasets
-from .nodes import create_model, make_callbacks, make_model_config, train_model
+from .nodes import (
+    create_model,
+    make_callbacks,
+    make_model_config,
+    set_check_numerics,
+    train_model,
+)
 
 
 def create_pipeline(**kwargs):
@@ -49,6 +55,7 @@ def create_pipeline(**kwargs):
                 ),
                 "validation_data",
             ),
+            node(set_check_numerics, "params:enable_numeric_checks", None),
             node(create_model, "model_config", "initial_model"),
             node(
                 make_callbacks,
