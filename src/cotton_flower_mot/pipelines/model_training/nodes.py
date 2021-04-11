@@ -16,6 +16,9 @@ from .gcnn_model import build_model
 from .losses import make_losses
 from .metrics import make_metrics
 
+# Enable checking for NaN and Inf values.
+tf.debugging.enable_check_numerics()
+
 
 def _make_learning_rate(
     config: Dict[str, Any]
