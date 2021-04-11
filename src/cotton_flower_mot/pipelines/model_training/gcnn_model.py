@@ -101,16 +101,16 @@ def _build_appearance_feature_extractor(
     pool1 = layers.MaxPool2D()(conv1_2)
 
     # Dense blocks.
-    dense1 = DenseBlock(3, growth_rate=4)(pool1)
+    dense1 = DenseBlock(5, growth_rate=6)(pool1)
     transition1 = TransitionLayer()(dense1)
 
-    dense2 = DenseBlock(6, growth_rate=4)(transition1)
+    dense2 = DenseBlock(9, growth_rate=6)(transition1)
     transition2 = TransitionLayer()(dense2)
 
-    dense3 = DenseBlock(12, growth_rate=4)(transition2)
+    dense3 = DenseBlock(18, growth_rate=6)(transition2)
     transition3 = TransitionLayer()(dense3)
 
-    dense4 = DenseBlock(8, growth_rate=4)(transition3)
+    dense4 = DenseBlock(12, growth_rate=6)(transition3)
 
     # Fully-connected layer to generate feature vector.
     flat5 = layers.Flatten()(dense4)
@@ -374,6 +374,7 @@ def _gcn_block(
     # Compute the next node features.
     laplacian1_1 = layers.Lambda(gcn_filter)
     gcn1_1 = spektral.layers.GCNConv(*args, **kwargs)
+    norm1_1 = layers.BatchNormalization()
 
     # Compute the next edge features.
     edges1_1 = _update_adjacency_matrix()
@@ -394,7 +395,9 @@ def _gcn_block(
 
         """
         node_features, adjacency_matrix = inputs
-        new_nodes = gcn1_1((node_features, laplacian1_1(adjacency_matrix)))
+        new_nodes = norm1_1(
+            gcn1_1((node_features, laplacian1_1(adjacency_matrix)))
+        )
         return new_nodes, edges1_1((new_nodes, adjacency_matrix))
 
     return _apply_block
