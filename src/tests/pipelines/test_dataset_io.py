@@ -90,3 +90,8 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
     assert sinkhorn_shape[0] == expected_batch_size
     # Sinkhorn matrix should have an entry for each detection/tracklet pair.
     assert sinkhorn_shape[1] == detections_shape[1] * tracklets_shape[1]
+
+    # Hard assignment matrix should be equivalent to the Sinkhorn matrix.
+    sinkhorn = targets[ModelTargets.SINKHORN.value].numpy()
+    assignment = targets[ModelTargets.ASSIGNMENT.value].numpy()
+    np.testing.assert_array_equal(sinkhorn.astype(np.bool), assignment)
