@@ -35,7 +35,13 @@ from kedro.io import DataCatalog
 from kedro.pipeline import Pipeline
 from kedro.versioning import Journal
 
-from .pipelines import build_tfrecords, data_engineering, eda, model_training
+from .pipelines import (
+    build_tfrecords,
+    data_engineering,
+    eda,
+    model_evaluation,
+    model_training,
+)
 
 
 class ProjectHooks:
@@ -51,6 +57,7 @@ class ProjectHooks:
         tfrecord_pipeline = build_tfrecords.create_pipeline()
         eda_pipeline = eda.create_pipeline()
         training_pipeline = model_training.create_pipeline()
+        evaluation_pipeline = model_evaluation.create_pipeline()
 
         return {
             "__default__": data_pipeline
@@ -60,6 +67,7 @@ class ProjectHooks:
             "build_tfrecords": data_pipeline + tfrecord_pipeline,
             "eda": eda_pipeline,
             "model_training": training_pipeline,
+            "model_evaluation": evaluation_pipeline,
         }
 
     @hook_impl
