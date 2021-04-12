@@ -29,7 +29,9 @@ def id_switches(
     """
     switched = tf.math.logical_xor(true_assignment, pred_assignment)
     switched = tf.cast(switched, tf.int32)
-    return tf.reduce_sum(switched, axis=1)
+    # Division by 2 is because every time the assignment changes, it results
+    # in one incorrect True value and one incorrect False value.
+    return tf.reduce_sum(switched, axis=1) // 2
 
 
 class IdSwitches(tf.keras.metrics.Metric):
