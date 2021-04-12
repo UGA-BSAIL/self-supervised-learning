@@ -101,20 +101,28 @@ def _build_appearance_feature_extractor(
     pool1 = layers.MaxPool2D()(conv1_2)
 
     # Dense blocks.
-    dense1 = DenseBlock(8, growth_rate=8)(pool1)
+    dense1 = DenseBlock(16, growth_rate=8)(pool1)
     transition1 = TransitionLayer()(dense1)
 
-    dense2 = DenseBlock(12, growth_rate=8)(transition1)
+    dense2 = DenseBlock(24, growth_rate=8)(transition1)
     transition2 = TransitionLayer()(dense2)
 
-    dense3 = DenseBlock(24, growth_rate=8)(transition2)
+    dense3 = DenseBlock(32, growth_rate=8)(transition2)
     transition3 = TransitionLayer()(dense3)
 
-    dense4 = DenseBlock(16, growth_rate=8)(transition3)
+    dense4 = DenseBlock(24, growth_rate=8)(transition3)
+
+    # Generate feature vector.
+    conv5_1 = _bn_relu_conv(config.num_appearance_features, 1, padding="same")(
+        dense4
+    )
+    conv5_2 = _bn_relu_conv(config.num_appearance_features, 1, padding="same")(
+        conv5_1
+    )
+    pool5_1 = layers.GlobalAvgPool2D()(conv5_2)
 
     # Fully-connected layer to generate feature vector.
-    flat5 = layers.Flatten()(dense4)
-    return _bn_relu_dense(config.num_appearance_features)(flat5)
+    return pool5_1
 
 
 def _build_appearance_model(*, config: ModelConfig) -> tf.keras.Model:
