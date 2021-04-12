@@ -101,16 +101,16 @@ def _build_appearance_feature_extractor(
     pool1 = layers.MaxPool2D()(conv1_2)
 
     # Dense blocks.
-    dense1 = DenseBlock(5, growth_rate=6)(pool1)
+    dense1 = DenseBlock(8, growth_rate=8)(pool1)
     transition1 = TransitionLayer()(dense1)
 
-    dense2 = DenseBlock(9, growth_rate=6)(transition1)
+    dense2 = DenseBlock(12, growth_rate=8)(transition1)
     transition2 = TransitionLayer()(dense2)
 
-    dense3 = DenseBlock(18, growth_rate=6)(transition2)
+    dense3 = DenseBlock(24, growth_rate=8)(transition2)
     transition3 = TransitionLayer()(dense3)
 
-    dense4 = DenseBlock(12, growth_rate=6)(transition3)
+    dense4 = DenseBlock(16, growth_rate=8)(transition3)
 
     # Fully-connected layer to generate feature vector.
     flat5 = layers.Flatten()(dense4)
