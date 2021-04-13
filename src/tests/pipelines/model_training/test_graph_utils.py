@@ -342,7 +342,7 @@ def test_gcn_filter(faker: Faker, symmetric: bool) -> None:
 
 def test_normalize_adjacency(faker: Faker) -> None:
     """
-    Tests that `normalize_adjacency` works.
+    Tests that `bound_adjacency` works.
 
     Args:
         faker: The fixture to use for generating fake data.
@@ -353,7 +353,7 @@ def test_normalize_adjacency(faker: Faker) -> None:
     adjacency = faker.tensor((10, 8, 8, 1))
 
     # Act.
-    normalized = graph_utils.normalize_adjacency(adjacency).numpy()
+    normalized = graph_utils.bound_adjacency(adjacency).numpy()
 
     # Assert.
     # All values should be between 0 and 1.

@@ -3,7 +3,6 @@ Implements a model inspired by GCNNTrack.
 https://arxiv.org/pdf/2010.00067.pdf
 """
 
-from functools import partial
 from typing import Any, Callable, Tuple
 
 import spektral
@@ -11,15 +10,14 @@ import tensorflow as tf
 from loguru import logger
 from tensorflow.keras import layers
 
-from ..assignment import do_hard_assignment, solve_optimal_transport
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
 from .graph_utils import (
     augment_adjacency_matrix,
+    bound_adjacency,
     compute_bipartite_edge_features,
     gcn_filter,
     make_adjacency_matrix,
-    normalize_adjacency,
 )
 from .layers.association import AssociationLayer
 from .layers.dense import DenseBlock, TransitionLayer
@@ -338,7 +336,7 @@ def _update_adjacency_matrix() -> Callable[
     conv1_2 = _bn_relu_conv(1, 1, padding="same")
     # Normalization operation for the matrix.
     norm1_3 = layers.Lambda(
-        lambda x: normalize_adjacency(x), name="normalize_adjacency"
+        lambda x: bound_adjacency(x), name="normalize_adjacency"
     )
 
     def _apply_block(inputs: Tuple[tf.Tensor, tf.Tensor]) -> tf.Tensor:
@@ -551,7 +549,7 @@ def extract_interaction_features(
 
     # Create the adjacency matrix and build the GCN.
     adjacency_matrix = layers.Lambda(
-        lambda f: normalize_adjacency(make_adjacency_matrix(f)),
+        lambda f: bound_adjacency(make_adjacency_matrix(f)),
         name="adjacency_matrix",
     )(edge_features)
     # Note that the order of concatenation is important here.

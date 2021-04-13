@@ -244,10 +244,9 @@ def gcn_filter(adjacency: tf.Tensor, symmetric: bool = True) -> tf.Tensor:
     return normalized_adjacency(adjacency_hat, symmetric=symmetric)
 
 
-def normalize_adjacency(adjacency_matrix: tf.Tensor) -> tf.Tensor:
+def bound_adjacency(adjacency_matrix: tf.Tensor) -> tf.Tensor:
     """
-    Normalizes an adjacency matrix to have values between 0 and 1, which
-    is what makes sense mathematically.
+    Limit an adjacency matrix to have values between 0 and inf.
 
     Args:
         adjacency_matrix: The raw adjacency matrix, of shape
@@ -258,14 +257,4 @@ def normalize_adjacency(adjacency_matrix: tf.Tensor) -> tf.Tensor:
         normalized.
 
     """
-    min_value = tf.reduce_min(adjacency_matrix, axis=(1, 2, 3))
-    max_value = tf.reduce_max(adjacency_matrix, axis=(1, 2, 3))
-    adjacency_range = max_value - min_value
-
-    # Broadcast to the correct shape.
-    min_value = tf.reshape(min_value, (-1, 1, 1, 1))
-    adjacency_range = tf.reshape(adjacency_range, (-1, 1, 1, 1))
-
-    return (adjacency_matrix - min_value) / tf.maximum(
-        adjacency_range, _EPSILON
-    )
+    return tf.maximum(adjacency_matrix, 0.0)
