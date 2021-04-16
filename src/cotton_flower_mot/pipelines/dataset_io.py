@@ -316,8 +316,8 @@ def _filter_empty(features: tf.data.Dataset) -> tf.data.Dataset:
             return tensor.bounding_shape()
 
     def _is_not_empty(inputs: MaybeRaggedFeature, _) -> tf.Tensor:
-        # Check both detections and tracklets. We don't want to eliminate
-        # examples where only one is empty.
+        # Check both detections and tracklets, and eliminate examples where
+        # either is empty.
         detections = inputs[ModelInputs.DETECTIONS.value]
         tracklets = inputs[ModelInputs.TRACKLETS.value]
 
@@ -325,7 +325,7 @@ def _filter_empty(features: tf.data.Dataset) -> tf.data.Dataset:
         detections_shape = _dense_shape(detections)
         tracklets_shape = _dense_shape(tracklets)
 
-        return tf.logical_or(detections_shape[0] > 0, tracklets_shape[0] > 0)
+        return tf.logical_and(detections_shape[0] > 0, tracklets_shape[0] > 0)
 
     return features.filter(_is_not_empty)
 

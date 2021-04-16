@@ -13,7 +13,7 @@ from src.cotton_flower_mot.pipelines.schemas import ModelInputs, ModelTargets
 
 from .data import TESTING_DATASET_PATH
 
-_TEST_DATASET_SIZE = 4
+_TEST_DATASET_SIZE = 10
 """
 Number of elements that are in the test dataset.
 """
@@ -87,7 +87,7 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
 
     # It should have specified the sequence ID.
     sequence_id_shape = tf.shape(inputs[ModelInputs.SEQUENCE_ID.value]).numpy()
-    np.testing.assert_array_equal(sequence_id_shape, (expected_batch_size,))
+    np.testing.assert_array_equal(sequence_id_shape, (expected_batch_size, 2))
 
     sinkhorn_shape = tf.shape(targets[ModelTargets.SINKHORN.value]).numpy()
     assert len(sinkhorn_shape) == 2
