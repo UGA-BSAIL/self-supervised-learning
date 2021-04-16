@@ -74,6 +74,39 @@ def random_splits(
     return concat(train_clips), concat(test_clips), concat(validation_clips)
 
 
+def split_specific(
+    annotations: pd.DataFrame,
+    *,
+    test_clips: Iterable[int],
+    valid_clips: Iterable[int]
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Split out specific training, testing, and validation clips.
+
+    Args:
+        annotations: The complete annotations.
+        test_clips: The specific sequence IDs to use for testing.
+        valid_clips: The specific sequence IDs to use for validation.
+
+    Returns:
+        The individual train, test, and validation datasets.
+
+    """
+    # Set the index to the sequence ID to speed up filtering operations.
+    annotations.set_index(
+        Otf.IMAGE_SEQUENCE_ID.value, inplace=True, drop=False
+    )
+
+    testing_split = annotations.iloc[annotations.index.isin(test_clips)]
+    validation_split = annotations.iloc[annotations.index.isin(valid_clips)]
+    train_split = annotations.iloc[
+        ~annotations.index.isin(valid_clips)
+        & ~annotations.index.isin(test_clips)
+    ]
+
+    return train_split, testing_split, validation_split
+
+
 def _get_missing_columns(
     frame_annotations: pd.DataFrame,
 ) -> Dict[str, tf.train.Feature]:
@@ -104,7 +137,11 @@ def _get_missing_columns(
 
 
 def _make_example(
-    *, image: np.ndarray, frame_annotations: pd.DataFrame, frame_num: int
+    *,
+    image: np.ndarray,
+    frame_annotations: pd.DataFrame,
+    frame_num: int,
+    sequence_id: int
 ) -> tf.train.Example:
     """
     Creates a TF `Example` for a single frame.
@@ -113,6 +150,7 @@ def _make_example(
         image: The compressed image data for the frame.
         frame_annotations: The annotations for the frame.
         frame_num: The frame number.
+        sequence_id: The sequence ID.
 
     Returns:
         The example that it created.
@@ -121,9 +159,10 @@ def _make_example(
     # Shuffle the order of the rows to add some variation to Sinkhorn matrices.
     frame_annotations = frame_annotations.sample(frac=1.0)
 
-    # Remove the frame number column since that info is provided manually.
+    # Remove the frame number and sequence ID columns since that info is
+    # provided manually.
     frame_annotations = frame_annotations.drop(
-        columns=[Otf.IMAGE_FRAME_NUM.value]
+        columns=[Otf.IMAGE_FRAME_NUM.value, Otf.IMAGE_SEQUENCE_ID.value]
     )
 
     # Create the feature dictionary.
@@ -140,10 +179,13 @@ def _make_example(
     features[Otf.IMAGE_ENCODED.value] = _FEATURES_TO_FACTORIES[
         Otf.IMAGE_ENCODED.value
     ](image)
-    # Add the frame number.
+    # Add the frame number and sequence ID.
     features[Otf.IMAGE_FRAME_NUM.value] = _FEATURES_TO_FACTORIES[
         Otf.IMAGE_FRAME_NUM.value
     ]((frame_num,))
+    features[Otf.IMAGE_SEQUENCE_ID.value] = _FEATURES_TO_FACTORIES[
+        Otf.IMAGE_SEQUENCE_ID.value
+    ]((sequence_id,))
 
     return tf.train.Example(features=tf.train.Features(feature=features))
 
@@ -169,6 +211,10 @@ def _generate_clip_examples(
     first_frame = frame_nums.min()
     last_frame = frame_nums.max()
 
+    # Get the sequence ID for this clip.
+    sequence_id = annotations[Otf.IMAGE_SEQUENCE_ID.value].unique()[0]
+    logger.debug("Sequence ID: {}", sequence_id)
+
     for frame_num in range(first_frame, last_frame + 1):
         logger.debug("Generating example for frame {}.", frame_num)
 
@@ -188,6 +234,7 @@ def _generate_clip_examples(
             image=frame_image,
             frame_annotations=frame_annotations,
             frame_num=frame_num,
+            sequence_id=sequence_id,
         )
 
 

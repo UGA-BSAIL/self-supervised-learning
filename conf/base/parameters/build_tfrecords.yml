@@ -1,5 +1,4 @@
-# This is a boilerplate parameters config generated for pipeline 'build_tfrecords'
-# using Kedro 0.17.1.
-#
-# Documentation for this file format can be found in "Parameters"
-# Link: https://kedro.readthedocs.io/en/stable/04_kedro_project_setup/02_configuration.html#parameters
+# Specific clips to use for testing.
+test_clips: [4, 16]
+# Specific clips to use for validation.
+valid_clips: [1, 10]

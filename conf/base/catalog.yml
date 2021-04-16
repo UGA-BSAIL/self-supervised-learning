@@ -41,6 +41,17 @@ validation_data:
   type: MemoryDataSet
   copy_mode: assign
 
+# Intermediate TF datasets containing pre-processed data with
+# clips in-tact. This means that clips are not interleaved and
+# frames with no detections are included.
+testing_data_clips:
+  type: MemoryDataSet
+  copy_mode: assign
+
+validation_data_clips:
+  type: MemoryDataSet
+  copy_mode: assign
+
 _model_args: &model_args
   type: tensorflow.TensorFlowModelDataset
   load_args:

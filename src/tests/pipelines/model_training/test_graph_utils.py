@@ -340,7 +340,7 @@ def test_gcn_filter(faker: Faker, symmetric: bool) -> None:
     np.testing.assert_array_max_ulp(spektral_result, tensor_result, 3)
 
 
-def test_normalize_adjacency(faker: Faker) -> None:
+def test_bound_adjacency(faker: Faker) -> None:
     """
     Tests that `bound_adjacency` works.
 
@@ -356,6 +356,5 @@ def test_normalize_adjacency(faker: Faker) -> None:
     normalized = graph_utils.bound_adjacency(adjacency).numpy()
 
     # Assert.
-    # All values should be between 0 and 1.
-    assert normalized.max() <= 1.0
+    # All values should be positive.
     assert normalized.min() >= 0.0

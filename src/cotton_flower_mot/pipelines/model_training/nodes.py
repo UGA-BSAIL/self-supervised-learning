@@ -62,21 +62,6 @@ def set_check_numerics(enable: bool) -> None:
         tf.debugging.disable_check_numerics()
 
 
-def make_model_config(**kwargs: Any) -> ModelConfig:
-    """
-    Creates a configuration to use for the model.
-
-    Args:
-        **kwargs: Will be forwarded to the `ModelConfig` constructor.
-
-    Returns:
-        The `ModelConfig` that it created.
-
-    """
-    logger.debug("Creating model configuration: {}", kwargs)
-    return ModelConfig(**kwargs)
-
-
 def create_model(config: ModelConfig) -> tf.keras.Model:
     """
     Builds the model to use.

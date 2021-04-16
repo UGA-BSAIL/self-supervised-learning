@@ -9,6 +9,7 @@ import tensorflow as tf
 from faker import Faker
 
 from src.cotton_flower_mot.pipelines.model_training import gcnn_model
+from src.cotton_flower_mot.pipelines.schemas import ModelInputs, ModelTargets
 
 
 @pytest.mark.integration
@@ -230,3 +231,54 @@ def test_compute_association_smoke(faker: Faker) -> None:
     np.testing.assert_array_equal(
         got_assignment.row_lengths().numpy(), expected_lengths
     )
+
+
+@pytest.mark.skip
+def test_model_empty_tracklets(faker: Faker) -> None:
+    """
+    Tests that the model works when we have no tracklets.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+
+    """
+    # Arrange.
+    image_shape = (100, 100, 3)
+    batch_size = faker.random_int(min=1, max=16)
+    detections = faker.detected_objects(
+        image_shape=image_shape, batch_size=batch_size
+    )
+    # Create fake geometry features.
+    detections_geometry = faker.ragged_tensor(
+        row_lengths=detections.row_lengths(), inner_shape=(4,)
+    )
+
+    # Create empty tracklet features.
+    tracklets = tf.zeros((batch_size, 0) + image_shape)
+    tracklets_geometry = tf.zeros((batch_size, 0, 4))
+
+    config = faker.model_config(image_shape=image_shape)
+
+    # Create the model.
+    model = gcnn_model.build_model(config)
+
+    # Act.
+    model_outputs = model.predict(
+        {
+            ModelInputs.TRACKLETS.value: tracklets,
+            ModelInputs.TRACKLET_GEOMETRY.value: tracklets_geometry,
+            ModelInputs.DETECTIONS.value: detections,
+            ModelInputs.DETECTION_GEOMETRY.value: detections_geometry,
+        }
+    )
+
+    # Assert.
+    # The outputs should be the right shape.
+    sinkhorn_shape = model_outputs[
+        ModelTargets.SINKHORN.value
+    ].bounding_shape()
+    assignment_shape = model_outputs[
+        ModelTargets.ASSIGNMENT.value
+    ].bounding_shape()
+
+    assert sinkhorn_shape[0] == assignment_shape[0] == batch_size

@@ -85,6 +85,10 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
     assert detections_shape[1] == detection_geometry_shape[1]
     assert tracklets_shape[1] == tracklet_geometry_shape[1]
 
+    # It should have specified the sequence ID.
+    sequence_id_shape = tf.shape(inputs[ModelInputs.SEQUENCE_ID.value]).numpy()
+    np.testing.assert_array_equal(sequence_id_shape, (expected_batch_size,))
+
     sinkhorn_shape = tf.shape(targets[ModelTargets.SINKHORN.value]).numpy()
     assert len(sinkhorn_shape) == 2
     assert sinkhorn_shape[0] == expected_batch_size

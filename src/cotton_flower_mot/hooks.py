@@ -39,6 +39,7 @@ from .pipelines import (
     build_tfrecords,
     data_engineering,
     eda,
+    model_data_load,
     model_evaluation,
     model_training,
 )
@@ -53,21 +54,23 @@ class ProjectHooks:
             A mapping from a pipeline name to a ``Pipeline`` object.
 
         """
-        data_pipeline = data_engineering.create_pipeline()
+        data_engineering_pipeline = data_engineering.create_pipeline()
         tfrecord_pipeline = build_tfrecords.create_pipeline()
         eda_pipeline = eda.create_pipeline()
         training_pipeline = model_training.create_pipeline()
         evaluation_pipeline = model_evaluation.create_pipeline()
+        data_load_pipeline = model_data_load.create_pipeline()
 
         return {
-            "__default__": data_pipeline
+            "__default__": data_engineering_pipeline
+            + data_load_pipeline
             + tfrecord_pipeline
             + eda_pipeline
             + training_pipeline,
-            "build_tfrecords": data_pipeline + tfrecord_pipeline,
+            "build_tfrecords": data_engineering_pipeline + tfrecord_pipeline,
             "eda": eda_pipeline,
-            "model_training": training_pipeline,
-            "model_evaluation": evaluation_pipeline,
+            "model_training": data_load_pipeline + training_pipeline,
+            "model_evaluation": data_load_pipeline + evaluation_pipeline,
         }
 
     @hook_impl

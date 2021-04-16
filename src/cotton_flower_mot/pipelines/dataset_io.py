@@ -66,6 +66,10 @@ class FeatureNames(enum.Enum):
     """
     The frame number in the underlying video clip.
     """
+    SEQUENCE_ID = "sequence_id"
+    """
+    The sequence ID of the clip.
+    """
 
 
 _INPUT_FEATURES = [Otf.IMAGE_ENCODED.value]
@@ -199,11 +203,13 @@ def _load_single_image_features(
 
         object_ids = feature_dict[Otf.OBJECT_ID.value]
         frame_num = feature_dict[Otf.IMAGE_FRAME_NUM.value][0]
+        sequence_id = feature_dict[Otf.IMAGE_SEQUENCE_ID.value][0]
         return {
             FeatureNames.DETECTIONS.value: detections,
             FeatureNames.GEOMETRY.value: geometric_features,
             FeatureNames.OBJECT_IDS.value: object_ids,
             FeatureNames.FRAME_NUM.value: frame_num,
+            FeatureNames.SEQUENCE_ID.value: sequence_id,
         }
 
     return features.map(_process_image, num_parallel_calls=_NUM_THREADS)
@@ -243,6 +249,7 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         object_ids = _as_single_element(FeatureNames.OBJECT_IDS.value)
         detections = _as_single_element(FeatureNames.DETECTIONS.value)
         geometry = _as_single_element(FeatureNames.GEOMETRY.value)
+        sequence_ids = _as_single_element(FeatureNames.SEQUENCE_ID.value)
 
         # Compare frame numbers to ensure that these frames actually are
         # sequential.
@@ -278,6 +285,7 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
                 ModelInputs.TRACKLETS.value: tracklets,
                 ModelInputs.DETECTION_GEOMETRY.value: detection_geometry,
                 ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry,
+                ModelInputs.SEQUENCE_ID.value: sequence_ids,
             }
             targets = {
                 ModelTargets.SINKHORN.value: sinkhorn,
@@ -416,6 +424,7 @@ def _inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
     config: ModelConfig,
+    include_empty: bool = False,
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -424,6 +433,8 @@ def _inputs_and_targets_from_dataset(
     Args:
         raw_dataset: The raw dataset, containing serialized data.
         config: Model configuration we are loading data for.
+        include_empty: If true, will include examples with no detections
+            or tracklets. Otherwise, it will filter them.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -444,7 +455,10 @@ def _inputs_and_targets_from_dataset(
     pair_features = _load_pair_features(image_pairs)
 
     # Remove empty examples.
-    return _filter_empty(pair_features)
+    if not include_empty:
+        pair_features = _filter_empty(pair_features)
+
+    return pair_features
 
 
 def _batch_and_prefetch(
@@ -471,12 +485,17 @@ def _batch_and_prefetch(
     )
     ragged = _ensure_ragged(
         batched,
-        input_keys=[e.value for e in ModelInputs],
+        input_keys=[
+            ModelInputs.DETECTIONS.value,
+            ModelInputs.TRACKLETS.value,
+            ModelInputs.DETECTION_GEOMETRY.value,
+            ModelInputs.TRACKLET_GEOMETRY.value,
+        ],
         target_keys=[],
     )
     ragged = _ensure_not_ragged(
         ragged,
-        input_keys=[],
+        input_keys=[ModelInputs.SEQUENCE_ID.value],
         target_keys=[
             ModelTargets.SINKHORN.value,
             ModelTargets.ASSIGNMENT.value,
@@ -487,7 +506,11 @@ def _batch_and_prefetch(
 
 
 def inputs_and_targets_from_dataset(
-    raw_dataset: tf.data.Dataset, *, config: ModelConfig, **kwargs: Any
+    raw_dataset: tf.data.Dataset,
+    *,
+    config: ModelConfig,
+    include_empty: bool = False,
+    **kwargs: Any,
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -496,6 +519,8 @@ def inputs_and_targets_from_dataset(
     Args:
         raw_dataset: The raw dataset, containing serialized data.
         config: Model configuration we are loading data for.
+        include_empty: If true, will include examples with no detections
+            or tracklets. Otherwise, it will filter them.
         kwargs: Will be forwarded to `_batch_and_prefetch`.
 
     Returns:
@@ -503,7 +528,9 @@ def inputs_and_targets_from_dataset(
 
     """
     inputs_and_targets = _inputs_and_targets_from_dataset(
-        raw_dataset, config=config
+        raw_dataset,
+        config=config,
+        include_empty=include_empty,
     )
     return _batch_and_prefetch(inputs_and_targets, **kwargs)
 
@@ -512,6 +539,8 @@ def inputs_and_targets_from_datasets(
     raw_datasets: Iterable[tf.data.Dataset],
     *,
     config: ModelConfig,
+    interleave: bool = True,
+    include_empty: bool = False,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -521,6 +550,11 @@ def inputs_and_targets_from_datasets(
     Args:
         raw_datasets: The raw datasets to draw from.
         config: The model configuration to use.
+        interleave: Allows frames from multiple datasets to be interleaved
+            with each-other if true. Set to false if you want to keep
+            individual clips intact.
+        include_empty: If true, will include examples with no detections
+            or tracklets. Otherwise, it will filter them.
         **kwargs: Will be forwarded to `_batch_and_prefetch`.
 
     Returns:
@@ -531,13 +565,22 @@ def inputs_and_targets_from_datasets(
     parsed_datasets = []
     for raw_dataset in raw_datasets:
         parsed_datasets.append(
-            _inputs_and_targets_from_dataset(raw_dataset, config=config)
+            _inputs_and_targets_from_dataset(
+                raw_dataset, config=config, include_empty=include_empty
+            )
         )
 
-    # Interleave the results.
-    choices = tf.data.Dataset.range(len(parsed_datasets)).repeat()
-    interleaved = tf.data.experimental.choose_from_datasets(
-        parsed_datasets, choices
-    )
+    if interleave:
+        # Interleave the results.
+        choices = tf.data.Dataset.range(len(parsed_datasets)).repeat()
+        maybe_interleaved = tf.data.experimental.choose_from_datasets(
+            parsed_datasets, choices
+        )
 
-    return _batch_and_prefetch(interleaved, **kwargs)
+    else:
+        # Simply concatenate all of them together.
+        maybe_interleaved = parsed_datasets[0]
+        for dataset in parsed_datasets[1:]:
+            maybe_interleaved = maybe_interleaved.concatenate(dataset)
+
+    return _batch_and_prefetch(maybe_interleaved, **kwargs)

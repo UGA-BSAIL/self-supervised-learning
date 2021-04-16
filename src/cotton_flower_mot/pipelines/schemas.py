@@ -140,6 +140,11 @@ class ModelInputs(enum.Enum):
     Corresponding geometric features for the tracklet crops.
     """
 
+    SEQUENCE_ID = "sequence_id"
+    """
+    The sequence ID of the clip.
+    """
+
 
 @enum.unique
 class ModelTargets(enum.Enum):

@@ -1,0 +1,9 @@
+count_report_test:
+  type: yaml.YAMLDataSet
+  filepath: ${output_data_dir}/08_reporting/count_report_test.yml
+  versioned: True
+
+count_report_valid:
+  type: yaml.YAMLDataSet
+  filepath: ${output_data_dir}/08_reporting/count_report_valid.yml
+  versioned: True

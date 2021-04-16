@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import tensorflow as tf
 
@@ -42,7 +42,9 @@ class AssociationLayer(tf.keras.layers.Layer):
         return tf.concat((sums, tf.cast(row_shape, tf.float32)), axis=0)
 
     def call(
-        self, inputs: Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
+        self,
+        inputs: Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        training: Optional[bool] = None,
     ) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
         """
 
@@ -56,6 +58,7 @@ class AssociationLayer(tf.keras.layers.Layer):
                     Should be a vector of shape `[batch_size]`.
                 - num_tracklets: The number of tracklets in each example.
                     Should be a vector of shape `[batch_size]`.
+            training: Whether the layer should operate in training mode.
 
         Returns:
             The normalized optimal transport matrix, and the corresponding hard

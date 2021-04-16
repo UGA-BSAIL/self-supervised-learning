@@ -30,6 +30,8 @@ def compute_ious(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
         of bounding boxes.
 
     """
+    boxes1 = tf.ensure_shape(boxes1, (None, 4))
+    boxes2 = tf.ensure_shape(boxes2, (None, 4))
 
     def _min_max(boxes: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
         """
