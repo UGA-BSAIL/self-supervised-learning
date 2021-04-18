@@ -105,6 +105,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
             dataset = self.__create_dataset(
                 len(self.__datasets), base_path=base_path
             )
+            logger.debug("Created dataset at {}.", base_path)
             self.__datasets.append(dataset)
 
             yield dataset

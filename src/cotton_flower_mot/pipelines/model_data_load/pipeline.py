@@ -14,7 +14,11 @@ def create_pipeline(**kwargs):
     # Preset for loading testing and validation data that doesn't randomize
     # or interleave clips.
     load_clips = partial(
-        inputs_and_targets_from_datasets, interleave=False, include_empty=True
+        inputs_and_targets_from_datasets,
+        interleave=False,
+        include_empty=True,
+        include_frame=True,
+        batch_size=1,
     )
 
     return Pipeline(
@@ -63,7 +67,6 @@ def create_pipeline(**kwargs):
                 dict(
                     raw_datasets="tfrecord_test",
                     config="model_config",
-                    batch_size="params:batch_size",
                 ),
                 "testing_data_clips",
             ),
@@ -72,7 +75,6 @@ def create_pipeline(**kwargs):
                 dict(
                     raw_datasets="tfrecord_valid",
                     config="model_config",
-                    batch_size="params:batch_size",
                 ),
                 "validation_data_clips",
             ),

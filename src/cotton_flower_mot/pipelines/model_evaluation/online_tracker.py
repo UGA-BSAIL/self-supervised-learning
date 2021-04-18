@@ -320,17 +320,24 @@ class OnlineTracker:
                 of shape `[num_detections, 4]`.
 
         """
-        # Apply the model.
-        logger.info("Applying model to {} detections...", len(detections))
-        model_inputs = self.__create_model_inputs(
-            detections=detections, geometry=geometry
+        # Default assignment matrix adds no new detections.
+        assignment = np.zeros(
+            (len(self.__previous_detections), 0), dtype=np.bool
         )
-        model_outputs = self.__model(model_inputs, training=False)
+
+        if len(detections) > 0:
+            # Apply the model.
+            logger.info("Applying model to {} detections...", len(detections))
+            model_inputs = self.__create_model_inputs(
+                detections=detections, geometry=geometry
+            )
+            model_outputs = self.__model(model_inputs, training=False)
+            assignment = model_outputs[ModelTargets.ASSIGNMENT.value][
+                0
+            ].numpy()
 
         # Update the tracks.
-        self.__update_tracks(
-            model_outputs[ModelTargets.ASSIGNMENT.value][0].numpy()
-        )
+        self.__update_tracks(assignment)
         # Update the state.
         self.__update_saved_state(detections=detections, geometry=geometry)
 
@@ -347,13 +354,9 @@ class OnlineTracker:
                 of shape `[num_detections, 4]`.
 
         """
-        if (
-            not self.__maybe_init_state(
-                detections=detections, geometry=geometry
-            )
-            and len(detections) > 0
+        if not self.__maybe_init_state(
+            detections=detections, geometry=geometry
         ):
-            # We have something to track, so update the state.
             self.__match_frame_pair(detections=detections, geometry=geometry)
 
         self.__frame_num += 1

@@ -20,12 +20,18 @@ Number of elements that are in the test dataset.
 
 
 @pytest.mark.integration
-def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
+@pytest.mark.parametrize(
+    "include_frame", (True, False), ids=["include_frame", "no_frame"]
+)
+def test_inputs_and_targets_from_dataset_smoke(
+    faker: Faker, include_frame: bool
+) -> None:
     """
     Attempts to load actual data and makes sure that it works.
 
     Args:
         faker: The fixture to use for generating fake data.
+        include_frame: Whether to test including the full frame.
 
     """
     # Arrange.
@@ -36,7 +42,7 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
 
     # Act.
     dataset = dataset_io.inputs_and_targets_from_dataset(
-        raw_dataset, config=config
+        raw_dataset, config=config, include_frame=include_frame
     )
 
     # Assert.
@@ -46,7 +52,11 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
     inputs, targets = batch
 
     # Make sure we have the right inputs.
-    for element in ModelInputs:
+    expected_inputs = set(ModelInputs)
+    if not include_frame:
+        # We won't have a frame input in this case.
+        expected_inputs -= {ModelInputs.FRAME}
+    for element in expected_inputs:
         assert element.value in inputs
     for element in ModelTargets:
         assert element.value in targets
@@ -66,6 +76,12 @@ def test_inputs_and_targets_from_dataset_smoke(faker: Faker) -> None:
     assert detections_shape[0] == tracklets_shape[0] == expected_batch_size
     assert np.all(detections_shape[2:] == (100, 100, 3))
     assert np.all(tracklets_shape[2:] == (100, 100, 3))
+
+    if include_frame:
+        # Check the frame shape.
+        frame_shape = tf.shape(inputs[ModelInputs.FRAME.value]).numpy()
+        assert len(frame_shape) == 4
+        assert frame_shape[0] == expected_batch_size
 
     detection_geometry_shape = (
         inputs[ModelInputs.DETECTION_GEOMETRY.value].bounding_shape().numpy()

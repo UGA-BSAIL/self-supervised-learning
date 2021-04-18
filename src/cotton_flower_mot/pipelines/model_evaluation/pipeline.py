@@ -4,7 +4,7 @@ Model evaluation pipeline.
 
 from kedro.pipeline import Pipeline, node
 
-from .nodes import compute_counts, compute_tracks_for_clip
+from .nodes import compute_counts, compute_tracks_for_clip, make_track_videos
 
 
 def create_pipeline(**kwargs):
@@ -39,6 +39,23 @@ def create_pipeline(**kwargs):
                     annotations="annotations_pandas",
                 ),
                 "count_report_valid",
+            ),
+            # Create tracking videos.
+            node(
+                make_track_videos,
+                dict(
+                    tracks_from_clips="testing_tracks",
+                    clip_dataset="testing_data_clips",
+                ),
+                "tracking_videos_test",
+            ),
+            node(
+                make_track_videos,
+                dict(
+                    tracks_from_clips="validation_tracks",
+                    clip_dataset="validation_data_clips",
+                ),
+                "tracking_videos_valid",
             ),
         ]
     )

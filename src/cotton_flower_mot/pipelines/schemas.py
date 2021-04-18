@@ -130,6 +130,10 @@ class ModelInputs(enum.Enum):
     """
     Extracted tracklet crops.
     """
+    FRAME = "frame"
+    """
+    The raw frame image.
+    """
 
     DETECTION_GEOMETRY = "detection_geometry"
     """

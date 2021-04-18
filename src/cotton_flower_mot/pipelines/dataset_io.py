@@ -50,6 +50,10 @@ class FeatureNames(enum.Enum):
     Standard key names for processed features.
     """
 
+    FRAME_IMAGE = "frame_image"
+    """
+    Full frame image.
+    """
     DETECTIONS = "detections"
     """
     Extracted detection crops.
@@ -166,7 +170,10 @@ def _extract_detection_images(
 
 
 def _load_single_image_features(
-    features: tf.data.Dataset, *, config: ModelConfig
+    features: tf.data.Dataset,
+    *,
+    config: ModelConfig,
+    include_frame: bool = False,
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -174,6 +181,7 @@ def _load_single_image_features(
     Args:
         features: The raw (combined) feature dictionary for one image.
         config: The model configuration to use.
+        include_frame: If true, include the full frame image in the features.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -204,13 +212,17 @@ def _load_single_image_features(
         object_ids = feature_dict[Otf.OBJECT_ID.value]
         frame_num = feature_dict[Otf.IMAGE_FRAME_NUM.value][0]
         sequence_id = feature_dict[Otf.IMAGE_SEQUENCE_ID.value][0]
-        return {
+
+        loaded_features = {
             FeatureNames.DETECTIONS.value: detections,
             FeatureNames.GEOMETRY.value: geometric_features,
             FeatureNames.OBJECT_IDS.value: object_ids,
             FeatureNames.FRAME_NUM.value: frame_num,
             FeatureNames.SEQUENCE_ID.value: sequence_id,
         }
+        if include_frame:
+            loaded_features[FeatureNames.FRAME_IMAGE.value] = image
+        return loaded_features
 
     return features.map(_process_image, num_parallel_calls=_NUM_THREADS)
 
@@ -250,6 +262,9 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         detections = _as_single_element(FeatureNames.DETECTIONS.value)
         geometry = _as_single_element(FeatureNames.GEOMETRY.value)
         sequence_ids = _as_single_element(FeatureNames.SEQUENCE_ID.value)
+        frame_images = None
+        if FeatureNames.FRAME_IMAGE.value in pair_features:
+            frame_images = _as_single_element(FeatureNames.FRAME_IMAGE.value)
 
         # Compare frame numbers to ensure that these frames actually are
         # sequential.
@@ -287,6 +302,9 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
                 ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry,
                 ModelInputs.SEQUENCE_ID.value: sequence_ids,
             }
+            if frame_images is not None:
+                # Frame images should both be identical.
+                inputs[ModelInputs.FRAME.value] = frame_images[0]
             targets = {
                 ModelTargets.SINKHORN.value: sinkhorn,
                 ModelTargets.ASSIGNMENT.value: assignment,
@@ -425,6 +443,7 @@ def _inputs_and_targets_from_dataset(
     *,
     config: ModelConfig,
     include_empty: bool = False,
+    include_frame: bool = False,
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -435,6 +454,8 @@ def _inputs_and_targets_from_dataset(
         config: Model configuration we are loading data for.
         include_empty: If true, will include examples with no detections
             or tracklets. Otherwise, it will filter them.
+        include_frame: If true, will include the full frame image as well
+            as the detection crops.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -448,7 +469,7 @@ def _inputs_and_targets_from_dataset(
 
     # Extract the features.
     single_image_features = _load_single_image_features(
-        deserialized, config=config
+        deserialized, config=config, include_frame=include_frame
     )
     # Break into pairs.
     image_pairs = single_image_features.window(2, shift=1, drop_remainder=True)
@@ -464,6 +485,7 @@ def _inputs_and_targets_from_dataset(
 def _batch_and_prefetch(
     dataset: tf.data.Dataset,
     *,
+    include_frame: bool = False,
     batch_size: int = 32,
     num_prefetch_batches: int = 5,
 ) -> tf.data.Dataset:
@@ -472,6 +494,8 @@ def _batch_and_prefetch(
 
     Args:
         dataset: The dataset to process.
+        include_frame: If true, will include the full frame image as well
+            as the detection crops.
         batch_size: The batch size to use.
         num_prefetch_batches: The number of batches to prefetch.
 
@@ -493,9 +517,13 @@ def _batch_and_prefetch(
         ],
         target_keys=[],
     )
+
+    input_keys_not_ragged = [ModelInputs.SEQUENCE_ID.value]
+    if include_frame:
+        input_keys_not_ragged.append(ModelInputs.FRAME.value)
     ragged = _ensure_not_ragged(
         ragged,
-        input_keys=[ModelInputs.SEQUENCE_ID.value],
+        input_keys=input_keys_not_ragged,
         target_keys=[
             ModelTargets.SINKHORN.value,
             ModelTargets.ASSIGNMENT.value,
@@ -510,6 +538,7 @@ def inputs_and_targets_from_dataset(
     *,
     config: ModelConfig,
     include_empty: bool = False,
+    include_frame: bool = False,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -521,6 +550,8 @@ def inputs_and_targets_from_dataset(
         config: Model configuration we are loading data for.
         include_empty: If true, will include examples with no detections
             or tracklets. Otherwise, it will filter them.
+        include_frame: If true, will include the full frame image as well
+            as the detection crops.
         kwargs: Will be forwarded to `_batch_and_prefetch`.
 
     Returns:
@@ -531,8 +562,11 @@ def inputs_and_targets_from_dataset(
         raw_dataset,
         config=config,
         include_empty=include_empty,
+        include_frame=include_frame,
     )
-    return _batch_and_prefetch(inputs_and_targets, **kwargs)
+    return _batch_and_prefetch(
+        inputs_and_targets, include_frame=include_frame, **kwargs
+    )
 
 
 def inputs_and_targets_from_datasets(
@@ -541,6 +575,7 @@ def inputs_and_targets_from_datasets(
     config: ModelConfig,
     interleave: bool = True,
     include_empty: bool = False,
+    include_frame: bool = False,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -555,6 +590,8 @@ def inputs_and_targets_from_datasets(
             individual clips intact.
         include_empty: If true, will include examples with no detections
             or tracklets. Otherwise, it will filter them.
+        include_frame: If true, will include the full frame image as well
+            as the detection crops.
         **kwargs: Will be forwarded to `_batch_and_prefetch`.
 
     Returns:
@@ -566,7 +603,10 @@ def inputs_and_targets_from_datasets(
     for raw_dataset in raw_datasets:
         parsed_datasets.append(
             _inputs_and_targets_from_dataset(
-                raw_dataset, config=config, include_empty=include_empty
+                raw_dataset,
+                config=config,
+                include_empty=include_empty,
+                include_frame=include_frame,
             )
         )
 
@@ -583,4 +623,6 @@ def inputs_and_targets_from_datasets(
         for dataset in parsed_datasets[1:]:
             maybe_interleaved = maybe_interleaved.concatenate(dataset)
 
-    return _batch_and_prefetch(maybe_interleaved, **kwargs)
+    return _batch_and_prefetch(
+        maybe_interleaved, include_frame=include_frame, **kwargs
+    )

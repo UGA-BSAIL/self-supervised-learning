@@ -1,3 +1,4 @@
+# Reports on counting accuracy.
 count_report_test:
   type: yaml.YAMLDataSet
   filepath: ${output_data_dir}/08_reporting/count_report_test.yml
@@ -6,4 +7,19 @@ count_report_test:
 count_report_valid:
   type: yaml.YAMLDataSet
   filepath: ${output_data_dir}/08_reporting/count_report_valid.yml
+  versioned: True
+
+# Tracking videos.
+tracking_videos_test:
+  type: cotton_flower_mot.data_sets.MultiFileDataSet
+  dataset: cotton_flower_mot.data_sets.VideoDataSet
+  filepath: ${output_data_dir}/08_reporting/tracking_videos/test
+  extension: .mp4
+  versioned: True
+
+tracking_videos_valid:
+  type: cotton_flower_mot.data_sets.MultiFileDataSet
+  dataset: cotton_flower_mot.data_sets.VideoDataSet
+  filepath: ${output_data_dir}/08_reporting/tracking_videos/valid
+  extension: .mp4
   versioned: True
