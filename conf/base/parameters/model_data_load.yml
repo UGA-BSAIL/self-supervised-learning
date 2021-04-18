@@ -3,7 +3,7 @@ image_input_shape: [100, 100, 3]
 # Number of appearance features to generate.
 num_appearance_features: 1024
 # Number of GCN output channels to use.
-num_gcn_channels: 128
+num_gcn_channels: 256
 # Sinkhorn normalization Lambda value.
 sinkhorn_lambda: 10.0
 
