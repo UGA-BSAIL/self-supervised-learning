@@ -775,3 +775,76 @@ def inputs_and_targets_from_datasets(
     return _batch_and_prefetch(
         maybe_interleaved, include_frame=include_frame, **kwargs
     )
+
+
+def drop_detections(
+    inputs_dataset: tf.data.Dataset,
+    *,
+    drop_probability: float,
+    repeat_probability: float,
+) -> tf.data.Dataset:
+    """
+    Modifies a dataset in order to drop random detections.
+
+    Args:
+        inputs_dataset: The dataset to modify, containing just the inputs. It
+            is necessary that this dataset not be batched.
+        drop_probability: The probability of dropping a detection given that
+            it has not been dropped in the previous frame.
+        repeat_probability: The probability of dropping a detection given
+            that it has been dropped in the previous frame.
+
+    Returns:
+        The modified dataset.
+
+    """
+    # Width of the drop mask to generate. If there are more than this number
+    # of detections, the mask will be repeated.
+    _MASK_WIDTH = 8
+
+    def _drop_mask() -> Iterable[np.ndarray]:
+        """
+        Generator that produces an infinite sequence of booleans indicating
+        whether corresponding values should be dropped.
+
+        Yields:
+            Boolean array of length _MASK_WIDTH where each element indicates
+            whether a value should be dropped.
+
+        """
+        currently_dropping = np.zeros((_MASK_WIDTH,), dtype=np.bool)
+        while True:
+            threshold = np.where(
+                currently_dropping, repeat_probability, drop_probability
+            )
+
+            currently_dropping = np.random.rand(_MASK_WIDTH) < threshold
+            yield currently_dropping
+
+    # Combine the inputs with the drop mask.
+    drop_mask = tf.data.Dataset.from_generator(
+        _drop_mask, output_types=tf.bool
+    )
+    inputs_with_mask = tf.data.Dataset.zip((inputs_dataset, drop_mask))
+
+    def _apply_mask(inputs: Feature, _drop_mask: tf.Tensor) -> Feature:
+        detections = inputs[ModelInputs.DETECTIONS.value]
+        geometry = inputs[ModelInputs.DETECTION_GEOMETRY.value]
+
+        # Make sure the mask is the proper shape.
+        num_detections = tf.shape(detections)[0]
+        mask_multiples = num_detections // _MASK_WIDTH + 1
+        mask_tiled = tf.tile(_drop_mask, tf.expand_dims(mask_multiples))
+        mask_tiled = mask_tiled[:num_detections]
+
+        # Flip the mask because it tells us what to drop, not keep.
+        mask_flipped = tf.logical_not(mask_tiled)
+        detections = tf.boolean_mask(detections, mask_flipped)
+        geometry = tf.boolean_mask(geometry, mask_flipped)
+
+        features = inputs
+        features[ModelInputs.DETECTIONS.value] = detections
+        features[ModelInputs.DETECTION_GEOMETRY.value] = geometry
+        return features
+
+    return inputs_with_mask.map(_apply_mask)
