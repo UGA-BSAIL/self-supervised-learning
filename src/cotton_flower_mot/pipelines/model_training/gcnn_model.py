@@ -99,16 +99,16 @@ def _build_appearance_feature_extractor(
     pool1 = layers.MaxPool2D()(conv1_2)
 
     # Dense blocks.
-    dense1 = DenseBlock(16, growth_rate=16)(pool1)
+    dense1 = DenseBlock(6, growth_rate=32)(pool1)
     transition1 = TransitionLayer()(dense1)
 
-    dense2 = DenseBlock(24, growth_rate=16)(transition1)
+    dense2 = DenseBlock(12, growth_rate=32)(transition1)
     transition2 = TransitionLayer()(dense2)
 
-    dense3 = DenseBlock(32, growth_rate=16)(transition2)
+    dense3 = DenseBlock(24, growth_rate=32)(transition2)
     transition3 = TransitionLayer()(dense3)
 
-    dense4 = DenseBlock(24, growth_rate=16)(transition3)
+    dense4 = DenseBlock(16, growth_rate=32)(transition3)
 
     # Generate feature vector.
     conv5_1 = _bn_relu_conv(config.num_appearance_features, 1, padding="same")(
