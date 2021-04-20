@@ -46,8 +46,8 @@ def compute_bipartite_edge_features(
         left_node_indices = tf.range(0, limit=num_left_nodes)
         right_node_indices = tf.range(0, limit=num_right_nodes)
 
-        index_pair_left, index_pair_right = tf.meshgrid(
-            left_node_indices, right_node_indices
+        index_pair_right, index_pair_left = tf.meshgrid(
+            right_node_indices, left_node_indices
         )
         index_pair_left = tf.reshape(index_pair_left, (-1,))
         index_pair_right = tf.reshape(index_pair_right, (-1,))

@@ -70,7 +70,7 @@ def compute_ious(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
     # Figure out the area.
     intersection_area = tf.reduce_prod(intersection, axis=1)
     union_area = tf.reduce_prod(union, axis=1)
-    return intersection_area / (union_area + _EPSILON)
+    return intersection_area / (tf.maximum(union_area, _EPSILON))
 
 
 def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
