@@ -84,41 +84,20 @@ def test_compute_bipartite_edge_features(
         num_features,
     )
 
-    def _is_feature_pair_present(
-        _left_feature: np.ndarray, _right_feature: np.ndarray
-    ) -> bool:
-        """
-        Checks that a particular pair of left and right features are present
-        in the edge features.
-
-        Args:
-            _left_feature: The left feature to check.
-            _right_feature: The right feature to check.
-
-        Returns:
-            True if the pair is present, false otherwise.
-
-        """
-        for candidate_left, candidate_right in _iter_feature_pairs(
-            edge_features
-        ):
-            if np.allclose(_left_feature, candidate_left) and np.allclose(
-                _right_feature, candidate_right
-            ):
-                return True
-
-        return False
-
     # Make sure we have all possible pairs of features.
     left_nodes = left_nodes.numpy()
     right_nodes = right_nodes.numpy()
 
-    for b, l, r in itertools.product(
-        *map(range, [batch_size, num_left_nodes, num_right_nodes])
+    for (b, l, r), (expected_left, expected_right) in zip(
+        itertools.product(
+            *map(range, [batch_size, num_left_nodes, num_right_nodes]),
+        ),
+        _iter_feature_pairs(edge_features),
     ):
         left_feature = left_nodes[b][l]
         right_feature = right_nodes[b][r]
-        assert _is_feature_pair_present(left_feature, right_feature)
+        np.testing.assert_allclose(left_feature, expected_left)
+        np.testing.assert_allclose(right_feature, expected_right)
 
 
 @pytest.mark.parametrize(

@@ -35,6 +35,9 @@ def compute_bipartite_edge_features(
         The last two dimensions contain the original features from the left node
         and right node.
 
+        The features should be enumerated in row-major order, assuming that
+        left nodes are rows and right nodes are columns.
+
     """
     left_rank_3 = tf.assert_rank(left_nodes, 3)
     right_rank_3 = tf.assert_rank(right_nodes, 3)
