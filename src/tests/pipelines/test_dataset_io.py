@@ -23,8 +23,11 @@ Number of elements that are in the test dataset.
 @pytest.mark.parametrize(
     "include_frame", (True, False), ids=["include_frame", "no_frame"]
 )
+@pytest.mark.parametrize(
+    "random_drop", (True, False), ids=["random_drop", "no_random_drop"]
+)
 def test_inputs_and_targets_from_dataset_smoke(
-    faker: Faker, include_frame: bool
+    faker: Faker, include_frame: bool, random_drop: bool
 ) -> None:
     """
     Attempts to load actual data and makes sure that it works.
@@ -32,6 +35,7 @@ def test_inputs_and_targets_from_dataset_smoke(
     Args:
         faker: The fixture to use for generating fake data.
         include_frame: Whether to test including the full frame.
+        random_drop: Whether to test dropping random examples.
 
     """
     # Arrange.
@@ -41,8 +45,16 @@ def test_inputs_and_targets_from_dataset_smoke(
     config = faker.model_config(image_shape=(100, 100, 3))
 
     # Act.
+    expected_batch_size = 8
+    drop_kwargs = {}
+    if random_drop:
+        drop_kwargs = dict(drop_probability=0.5, repeats=2)
     dataset = dataset_io.inputs_and_targets_from_dataset(
-        raw_dataset, config=config, include_frame=include_frame
+        raw_dataset,
+        config=config,
+        include_frame=include_frame,
+        batch_size=8,
+        **drop_kwargs
     )
 
     # Assert.
@@ -60,10 +72,6 @@ def test_inputs_and_targets_from_dataset_smoke(
         assert element.value in inputs
     for element in ModelTargets:
         assert element.value in targets
-
-    # We expect the batch size to be one fewer than the number of elements, due
-    # to windowing.
-    expected_batch_size = _TEST_DATASET_SIZE - 1
 
     # Check the shapes of things.
     detections_shape = (

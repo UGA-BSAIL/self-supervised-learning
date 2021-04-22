@@ -20,6 +20,13 @@ def create_pipeline(**kwargs):
         include_frame=True,
         batch_size=1,
     )
+    # Common configuration for standard dataset loading.
+    loading_config = dict(
+        config="model_config",
+        batch_size="params:batch_size",
+        drop_probability="params:drop_probability",
+        repeats="params:repeats",
+    )
 
     return Pipeline(
         [
@@ -36,29 +43,17 @@ def create_pipeline(**kwargs):
             # Load the datasets.
             node(
                 inputs_and_targets_from_datasets,
-                dict(
-                    raw_datasets="tfrecord_train",
-                    config="model_config",
-                    batch_size="params:batch_size",
-                ),
+                dict(raw_datasets="tfrecord_train", **loading_config),
                 "training_data",
             ),
             node(
                 inputs_and_targets_from_datasets,
-                dict(
-                    raw_datasets="tfrecord_test",
-                    config="model_config",
-                    batch_size="params:batch_size",
-                ),
+                dict(raw_datasets="tfrecord_test", **loading_config),
                 "testing_data",
             ),
             node(
                 inputs_and_targets_from_datasets,
-                dict(
-                    raw_datasets="tfrecord_valid",
-                    config="model_config",
-                    batch_size="params:batch_size",
-                ),
+                dict(raw_datasets="tfrecord_valid", **loading_config),
                 "validation_data",
             ),
             # Create clip datasets.

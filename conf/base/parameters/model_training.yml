@@ -1,9 +1,6 @@
 # How much to weight positive samples in the loss.
 positive_sample_weight: 3.0
 
-# Batch size to use for training.
-batch_size: 16
-
 # Tensorboard parameters.
 # Log directory.
 tensorboard_output_dir: ${log_dir}/tensorboard
@@ -26,8 +23,8 @@ learning_phases:
       # Specify that we want to decay over time.
       decay: true
       # Number of steps to decay over.
-      # (210 steps per epoch)
-      decay_steps: 630
+      # (205 steps per epoch)
+      decay_steps: 615
       # Used to derive the number of iterations in the i-th period.
       t_mul: 2.0
       # Used to derive the initial learning rate of the i-th period.

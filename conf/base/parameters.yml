@@ -1,0 +1,2 @@
+# Batch size to use for training.
+batch_size: 16

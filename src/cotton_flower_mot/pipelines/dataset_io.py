@@ -1,7 +1,9 @@
 import enum
+from functools import partial
 from multiprocessing import cpu_count
 from typing import Any, Dict, Iterable, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from .assignment import construct_gt_sinkhorn_matrix
@@ -42,6 +44,10 @@ Feature dictionary that contains only ragged tensors.
 MaybeRaggedFeature = Dict[str, Union[tf.Tensor, tf.RaggedTensor]]
 """
 Feature dictionary that may contain normal or ragged tensors.
+"""
+_RANDOM_SEED = 2021
+"""
+Seed to use for random number generation.
 """
 
 
@@ -228,6 +234,42 @@ def _load_single_image_features(
     return features.map(_process_image, num_parallel_calls=_NUM_THREADS)
 
 
+def _window_to_nested(windowed_features: tf.data.Dataset) -> tf.data.Dataset:
+    """
+    Transforms a dataset that we have applied windowing to into one where
+    each window is represented as a Tensor instead of a sub-dataset.
+
+    Args:
+        windowed_features: The windowed feature dataset.
+
+    Returns:
+        The same dataset, with windows represented as Tensors.
+
+    """
+
+    def _convert_element(features: MaybeRaggedFeature) -> MaybeRaggedFeature:
+        # Windowing combines features into sub-datasets with two elements. To
+        # access them, we will batch them into a single element and then
+        # extract them.
+        def _as_single_element(
+            feature_key: str,
+        ) -> Union[tf.Tensor, tf.RaggedTensor]:
+            window_dataset = features[feature_key]
+            window_dataset = window_dataset.apply(
+                tf.data.experimental.dense_to_ragged_batch(2)
+            )
+            return tf.data.experimental.get_single_element(window_dataset)
+
+        # Convert every feature.
+        converted = {}
+        for name in features:
+            converted[name] = _as_single_element(name)
+
+        return converted
+
+    return windowed_features.map(_convert_element)
+
+
 def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     """
     Loads the features that need to be extracted from a consecutive image
@@ -244,74 +286,48 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     """
 
     def _process_pair(
-        pair_features: Dict[str, tf.data.Dataset],
+        pair_features: Feature,
     ) -> Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
-        # Windowing combines features into sub-datasets with two elements. To
-        # access them, we will batch them into a single element and then
-        # extract them.
-        def _as_single_element(
-            feature_key: str,
-        ) -> Union[tf.Tensor, tf.RaggedTensor]:
-            window_dataset = pair_features[feature_key]
-            window_dataset = window_dataset.apply(
-                tf.data.experimental.dense_to_ragged_batch(2)
-            )
-            return tf.data.experimental.get_single_element(window_dataset)
+        object_ids = pair_features[FeatureNames.OBJECT_IDS.value]
+        detections = pair_features[FeatureNames.DETECTIONS.value]
+        geometry = pair_features[FeatureNames.GEOMETRY.value]
+        sequence_ids = pair_features[FeatureNames.SEQUENCE_ID.value]
+        frame_images = pair_features.get(FeatureNames.FRAME_IMAGE.value, None)
 
-        frame_nums = _as_single_element(FeatureNames.FRAME_NUM.value)
-        object_ids = _as_single_element(FeatureNames.OBJECT_IDS.value)
-        detections = _as_single_element(FeatureNames.DETECTIONS.value)
-        geometry = _as_single_element(FeatureNames.GEOMETRY.value)
-        sequence_ids = _as_single_element(FeatureNames.SEQUENCE_ID.value)
-        frame_images = None
-        if FeatureNames.FRAME_IMAGE.value in pair_features:
-            frame_images = _as_single_element(FeatureNames.FRAME_IMAGE.value)
-
-        # Compare frame numbers to ensure that these frames actually are
-        # sequential.
-        first_frame_num = frame_nums[0]
-        next_frame_num = frame_nums[1]
-        are_consecutive = tf.assert_equal(
-            first_frame_num,
-            next_frame_num - tf.constant(1, dtype=tf.int64),
-            message="Pair frame numbers are not consecutive.",
+        # Compute the ground-truth Sinkhorn matrix.
+        tracklet_ids = object_ids[0]
+        detection_ids = object_ids[1]
+        sinkhorn = construct_gt_sinkhorn_matrix(
+            detection_ids=detection_ids, tracklet_ids=tracklet_ids
         )
+        # The sinkhorn matrix produced by the model is flattened.
+        sinkhorn = tf.reshape(sinkhorn, (-1,))
+        # Assignment target is the same as the sinkhorn matrix, just not a
+        # float.
+        assignment = tf.cast(sinkhorn, tf.bool)
 
-        with tf.control_dependencies([are_consecutive]):
-            # Compute the ground-truth Sinkhorn matrix.
-            tracklet_ids = object_ids[0]
-            detection_ids = object_ids[1]
-            sinkhorn = construct_gt_sinkhorn_matrix(
-                detection_ids=detection_ids, tracklet_ids=tracklet_ids
-            )
-            # The sinkhorn matrix produced by the model is flattened.
-            sinkhorn = tf.reshape(sinkhorn, (-1,))
-            # Assignment target is the same as the sinkhorn matrix, just not a
-            # float.
-            assignment = tf.cast(sinkhorn, tf.bool)
+        tracklets = detections[0]
+        detections = detections[1]
+        tracklet_geometry = geometry[0]
+        detection_geometry = geometry[1]
 
-            tracklets = detections[0]
-            detections = detections[1]
-            tracklet_geometry = geometry[0]
-            detection_geometry = geometry[1]
+        # Merge everything into input and target feature dictionaries.
+        inputs = {
+            ModelInputs.DETECTIONS.value: detections,
+            ModelInputs.TRACKLETS.value: tracklets,
+            ModelInputs.DETECTION_GEOMETRY.value: detection_geometry,
+            ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry,
+            ModelInputs.SEQUENCE_ID.value: sequence_ids,
+        }
+        if frame_images is not None:
+            # Frame images should both be identical.
+            inputs[ModelInputs.FRAME.value] = frame_images[0]
+        targets = {
+            ModelTargets.SINKHORN.value: sinkhorn,
+            ModelTargets.ASSIGNMENT.value: assignment,
+        }
 
-            # Merge everything into input and target feature dictionaries.
-            inputs = {
-                ModelInputs.DETECTIONS.value: detections,
-                ModelInputs.TRACKLETS.value: tracklets,
-                ModelInputs.DETECTION_GEOMETRY.value: detection_geometry,
-                ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry,
-                ModelInputs.SEQUENCE_ID.value: sequence_ids,
-            }
-            if frame_images is not None:
-                # Frame images should both be identical.
-                inputs[ModelInputs.FRAME.value] = frame_images[0]
-            targets = {
-                ModelTargets.SINKHORN.value: sinkhorn,
-                ModelTargets.ASSIGNMENT.value: assignment,
-            }
-
-            return inputs, targets
+        return inputs, targets
 
     return features.map(_process_pair, num_parallel_calls=_NUM_THREADS)
 
@@ -347,6 +363,111 @@ def _filter_empty(features: tf.data.Dataset) -> tf.data.Dataset:
         return tf.logical_and(detections_shape[0] > 0, tracklets_shape[0] > 0)
 
     return features.filter(_is_not_empty)
+
+
+def _filter_out_of_order(pair_features: tf.data.Dataset) -> tf.data.Dataset:
+    """
+    A side-effect of repeating the input dataset multiple times is that
+    the windowing will produce an invalid frame pair at the seams between
+    the dataset. This transformation filters those out.
+
+    Args:
+        pair_features: The paired features.
+
+    Returns:
+        The filtered paired features.
+
+    """
+
+    def _is_ordered(_pair_features: Feature) -> bool:
+        frame_nums = _pair_features[FeatureNames.FRAME_NUM.value]
+        # Compare frame numbers to ensure that these frames are ordered.
+        first_frame_num = frame_nums[0]
+        next_frame_num = frame_nums[1]
+
+        return first_frame_num < next_frame_num
+
+    return pair_features.filter(_is_ordered)
+
+
+def _drop_mask(
+    drop_probability: float = 0.5,
+    repeat_probability: float = 0.9,
+    width: int = 1,
+) -> Iterable[np.ndarray]:
+    """
+    Generator that produces an infinite sequence of booleans indicating
+    whether corresponding values should be dropped.
+
+    Args:
+        drop_probability: The probability of dropping the next item when we
+            didn't drop the previous one.
+        repeat_probability: The probability of dropping the next item when we
+            did drop the previous one.
+        width: The width of the mask to create.
+
+    Yields:
+        Boolean array of length _MASK_WIDTH where each element indicates
+        whether a value should be kept.
+
+    """
+    generator = np.random.default_rng(_RANDOM_SEED)
+
+    currently_dropping = np.zeros((width,), dtype=np.bool)
+    while True:
+        threshold = np.where(
+            currently_dropping, repeat_probability, drop_probability
+        )
+
+        currently_dropping = generator.random(size=(width,)) < threshold
+        yield np.logical_not(currently_dropping)
+
+
+def _randomize_example_spacing(
+    examples: tf.data.Dataset,
+    *,
+    drop_probability: float,
+    repeats: int = 1,
+) -> tf.data.Dataset:
+    """
+    Nominally, we create training examples from consecutive frames. However,
+    better training results can sometimes be achieved by randomly skipping some
+    frames. This transformation implements this using a geometric distribution
+    to determine how many frames to skip.
+
+    Args:
+        examples: The dataset containing examples. This will not actually be
+            interpreted, so it doesn't matter what it contains.
+        drop_probability:
+            The probability of dropping a particular frame. This is the p-value
+            for the geometric distribution.
+        repeats: Repeat the underlying dataset this many times. This allows us
+            to make the length of the output similar to that of the input,
+            despite dropping data.
+
+    Returns:
+        The transformed dataset, with some items dropped.
+
+    """
+    examples = examples.repeat(repeats)
+
+    # Create the masks.
+    drop_mask = partial(
+        _drop_mask,
+        drop_probability=drop_probability,
+        repeat_probability=drop_probability,
+    )
+    drop_mask = tf.data.Dataset.from_generator(
+        drop_mask, output_signature=tf.TensorSpec(shape=(1,), dtype=tf.bool)
+    )
+    # Combine the masks with the dataset.
+    examples_with_masks = tf.data.Dataset.zip((examples, drop_mask))
+
+    # Use the mask to perform filtering.
+    filtered = examples_with_masks.filter(lambda _, m: tf.squeeze(m))
+
+    # Remove the extraneous mask component.
+    return filtered.map(lambda e, _: e, num_parallel_calls=_NUM_THREADS)
 
 
 def _ensure_ragged(
@@ -445,6 +566,8 @@ def _inputs_and_targets_from_dataset(
     config: ModelConfig,
     include_empty: bool = False,
     include_frame: bool = False,
+    drop_probability: float = 0.0,
+    repeats: int = 1,
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -457,13 +580,21 @@ def _inputs_and_targets_from_dataset(
             or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
+        drop_probability: Probability to drop a particular example.
+        repeats: Number of times to repeat the dataset to make up for dropped
+            examples.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
 
     """
+    # Do the example filtering.
+    filtered_raw = _randomize_example_spacing(
+        raw_dataset, drop_probability=drop_probability, repeats=repeats
+    )
+
     # Deserialize it.
-    deserialized = raw_dataset.map(
+    deserialized = filtered_raw.map(
         lambda s: tf.io.parse_single_example(s, _FEATURE_DESCRIPTION),
         num_parallel_calls=_NUM_THREADS,
     )
@@ -473,7 +604,10 @@ def _inputs_and_targets_from_dataset(
         deserialized, config=config, include_frame=include_frame
     )
     # Break into pairs.
-    image_pairs = single_image_features.window(2, shift=1, drop_remainder=True)
+    image_pairs = _window_to_nested(
+        single_image_features.window(2, shift=1, drop_remainder=True)
+    )
+    image_pairs = _filter_out_of_order(image_pairs)
     pair_features = _load_pair_features(image_pairs)
 
     # Remove empty examples.
@@ -540,6 +674,8 @@ def inputs_and_targets_from_dataset(
     config: ModelConfig,
     include_empty: bool = False,
     include_frame: bool = False,
+    drop_probability: float = 0.0,
+    repeats: int = 1,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -553,6 +689,9 @@ def inputs_and_targets_from_dataset(
             or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
+        drop_probability: Probability to drop a particular example.
+        repeats: Number of times to repeat the dataset to make up for dropped
+            examples.
         kwargs: Will be forwarded to `_batch_and_prefetch`.
 
     Returns:
@@ -564,6 +703,8 @@ def inputs_and_targets_from_dataset(
         config=config,
         include_empty=include_empty,
         include_frame=include_frame,
+        drop_probability=drop_probability,
+        repeats=repeats,
     )
     return _batch_and_prefetch(
         inputs_and_targets, include_frame=include_frame, **kwargs
@@ -577,6 +718,8 @@ def inputs_and_targets_from_datasets(
     interleave: bool = True,
     include_empty: bool = False,
     include_frame: bool = False,
+    drop_probability: float = 0.0,
+    repeats: int = 1,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -593,6 +736,9 @@ def inputs_and_targets_from_datasets(
             or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
+        drop_probability: Probability to drop a particular example.
+        repeats: Number of times to repeat the dataset to make up for dropped
+            examples.
         **kwargs: Will be forwarded to `_batch_and_prefetch`.
 
     Returns:
@@ -608,6 +754,8 @@ def inputs_and_targets_from_datasets(
                 config=config,
                 include_empty=include_empty,
                 include_frame=include_frame,
+                drop_probability=drop_probability,
+                repeats=repeats,
             )
         )
 
