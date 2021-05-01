@@ -2,3 +2,8 @@
 test_clips: [14, 21, 23]
 # Specific clips to use for validation.
 valid_clips: [26, 12, 20]
+
+# Fraction of the data to use for training, for random splits.
+train_fraction: 0.7
+# Fraction of the data to use for testing, for random splits.
+test_fraction: 0.15

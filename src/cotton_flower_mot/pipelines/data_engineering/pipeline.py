@@ -3,7 +3,6 @@ from functools import partial
 from kedro.pipeline import Pipeline, node
 
 from .nodes import (
-    cut_video,
     merge_annotations,
     mot_to_object_detection_format,
     record_task_id,

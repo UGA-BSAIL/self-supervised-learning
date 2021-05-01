@@ -11,26 +11,6 @@ from ..schemas import MotAnnotationColumns as Mot
 from ..schemas import ObjectTrackingFeatures as Otf
 
 
-def cut_video(
-    annotations_mot: pd.DataFrame, *, new_length: int
-) -> pd.DataFrame:
-    """
-    Cuts a video down to the first N frames.
-
-    Args:
-        annotations_mot: The annotations, in MOT 1.1 format, from a single
-            video.
-        new_length: All frames beyond this one will be dropped.
-
-    Returns:
-        The same annotations, with extraneous frames dropped.
-
-    """
-    # We assume frames are one-indexed, as per MOT standard.
-    frame_condition = annotations_mot[Mot.FRAME.value] <= new_length
-    return annotations_mot[frame_condition]
-
-
 def record_task_id(annotations: pd.DataFrame, *, task_id: int) -> pd.DataFrame:
     """
     Stores the associated CVAT task ID in the `IMAGE_SOURCE_ID` parameter
@@ -99,6 +79,8 @@ def split_clips(
             # This is a new video in the underlying data.
             current_clip_length = 0
             new_sequence_id += 1
+            # Our frame numbers will start over here.
+            old_frame_num = 0
         old_sequence_id = sequence_id
 
         if frame_num != old_frame_num:

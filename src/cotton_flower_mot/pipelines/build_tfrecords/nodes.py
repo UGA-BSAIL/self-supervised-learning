@@ -29,7 +29,7 @@ _FEATURES_TO_FACTORIES = {
 }
 
 
-def random_splits(
+def split_random(
     annotations: pd.DataFrame, *, train_fraction: float, test_fraction: float
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """

@@ -13,19 +13,28 @@ cotton_videos_170:
   task_id: 170
   << : *cvat_credentials
 
+# Column names for the MOT format data.
+_mot_column_names: &mot_column_names
+  names:
+    - frame
+    - id
+    - bb_left
+    - bb_top
+    - bb_width
+    - bb_height
+    - not_ignored
+    - class_id
+    - visibility
+
 # Raw annotations, in MOT 1.1 format, corresponding to the frames.
-annotations_mot_1_1:
+annotations_mot_1_1_169:
   type: pandas.CSVDataSet
-  filepath: data/01_raw/flower_annotations_2021_03_08/gt.txt
+  filepath: data/01_raw/flower_annotations_169_2021_03_08/gt.txt
   load_args:
-    # MOT format column names.
-    names:
-      - frame
-      - id
-      - bb_left
-      - bb_top
-      - bb_width
-      - bb_height
-      - not_ignored
-      - class_id
-      - visibility
+    << : *mot_column_names
+
+annotations_mot_1_1_170:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/flower_annotations_170_2021_04_30/gt.txt
+  load_args:
+    << : *mot_column_names

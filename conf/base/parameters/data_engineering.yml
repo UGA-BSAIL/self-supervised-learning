@@ -1,5 +1,2 @@
 # Max length of the clips to use when training and evaluating, in frames.
 max_clip_length: 300
-
-# Use only this number of frames from the beginning of the video.
-use_first_frames: 5320

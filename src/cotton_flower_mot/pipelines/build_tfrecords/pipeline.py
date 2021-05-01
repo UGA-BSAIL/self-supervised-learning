@@ -1,17 +1,17 @@
 from kedro.pipeline import Pipeline, node
 
-from .nodes import generate_examples, split_specific
+from .nodes import generate_examples, split_random
 
 
 def create_pipeline(**kwargs):
     return Pipeline(
         [
             node(
-                split_specific,
+                split_random,
                 dict(
                     annotations="annotations_pandas",
-                    test_clips="params:test_clips",
-                    valid_clips="params:valid_clips",
+                    train_fraction="params:train_fraction",
+                    test_fraction="params:test_fraction",
                 ),
                 [
                     "annotations_tf_train",
