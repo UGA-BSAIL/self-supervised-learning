@@ -1,5 +1,5 @@
 import random
-from typing import Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ _FEATURES_TO_FACTORIES = {
     Otf.IMAGE_HEIGHT.value: int_feature,
     Otf.IMAGE_WIDTH.value: int_feature,
     Otf.IMAGE_FILENAME.value: bytes_feature,
-    Otf.IMAGE_SOURCE_ID.value: bytes_feature,
+    Otf.IMAGE_SOURCE_ID.value: int_feature,
     Otf.IMAGE_ENCODED.value: bytes_feature,
     Otf.IMAGE_FORMAT.value: bytes_feature,
     Otf.OBJECT_BBOX_X_MIN.value: float_feature,
@@ -239,20 +239,23 @@ def _generate_clip_examples(
 
 
 def generate_examples(
-    video_frames: Task, annotations: pd.DataFrame
+    video_frames: Iterable[Task], annotations: pd.DataFrame
 ) -> Iterable[Iterable[tf.train.Example]]:
     """
     Generates TFRecord examples from annotations and corresponding video
     frames for all clips.
 
     Args:
-        video_frames: The CVAT `Task` to source frames from.
+        video_frames: The CVAT `Task`s to source frames from.
         annotations: The loaded annotations, transformed to the TF format.
 
     Yields:
         Iterables of TFRecord examples for each clip.
 
     """
+    # Associate tasks with their corresponding ID.
+    id_to_task = {task.id: task for task in video_frames}
+
     # Set the index to the sequence ID to speed up filtering operations.
     annotations.set_index(
         Otf.IMAGE_SEQUENCE_ID.value, inplace=True, drop=False
@@ -260,6 +263,16 @@ def generate_examples(
 
     for sequence_id in annotations.index.unique():
         logger.info("Generating TFRecords for clip {}.", sequence_id)
+
+        sequence_annotations = annotations.iloc[
+            annotations.index == sequence_id
+        ]
+        task_id = int(
+            sequence_annotations[Otf.IMAGE_SOURCE_ID.value].unique().squeeze()
+        )
+        logger.debug("Using frames from task {}.", task_id)
+
         yield _generate_clip_examples(
-            video_frames, annotations.iloc[annotations.index == sequence_id]
+            id_to_task[task_id],
+            annotations.iloc[annotations.index == sequence_id],
         )

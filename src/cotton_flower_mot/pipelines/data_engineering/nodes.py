@@ -3,7 +3,7 @@ Nodes for the `data_engineering` pipeline.
 """
 
 import random
-from typing import Any, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -28,6 +28,23 @@ def cut_video(
     # We assume frames are one-indexed, as per MOT standard.
     frame_condition = annotations_mot["frame"] <= new_length
     return annotations_mot[frame_condition]
+
+
+def record_task_id(annotations: pd.DataFrame, *, task_id: int) -> pd.DataFrame:
+    """
+    Stores the associated CVAT task ID in the `IMAGE_SOURCE_ID` parameter
+    within the annotations.
+
+    Args:
+        annotations: The annotations to add the task ID to.
+        task_id: The task ID.
+
+    Returns:
+        The same annotations, with the task ID.
+
+    """
+    annotations[Otf.IMAGE_SOURCE_ID.value] = task_id
+    return annotations
 
 
 def merge_annotations(*args: Any) -> pd.DataFrame:

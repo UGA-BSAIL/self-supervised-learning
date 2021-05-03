@@ -31,7 +31,7 @@ def create_pipeline(**kwargs):
                 dict(
                     model="initial_model",
                     training_data="training_data",
-                    testing_data="testing_data",
+                    testing_data="validation_data",
                     learning_phases="params:learning_phases",
                     positive_sample_weight="params:positive_sample_weight",
                     callbacks="callbacks",

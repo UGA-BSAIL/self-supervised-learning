@@ -1,4 +1,4 @@
 # Specific clips to use for testing.
-test_clips: [4, 16]
+test_clips: [14, 21, 23]
 # Specific clips to use for validation.
-valid_clips: [1, 10]
+valid_clips: [26, 12, 20]

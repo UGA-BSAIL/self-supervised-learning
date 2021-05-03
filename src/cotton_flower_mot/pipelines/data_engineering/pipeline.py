@@ -1,9 +1,12 @@
+from functools import partial
+
 from kedro.pipeline import Pipeline, node
 
 from .nodes import (
     cut_video,
     merge_annotations,
     mot_to_object_detection_format,
+    record_task_id,
     shuffle_clips,
     split_clips,
 )
@@ -12,17 +15,21 @@ from .nodes import (
 def create_pipeline(**kwargs):
     return Pipeline(
         [
+            # Add the task IDs to the annotations.
             node(
-                cut_video,
-                dict(
-                    annotations_mot="annotations_mot_1_1",
-                    new_length="params:use_first_frames",
-                ),
-                "annotations_mot_1_1_clipped",
+                partial(record_task_id, task_id=169),
+                "annotations_mot_1_1_169",
+                "annotations_mot_169_ex",
             ),
             node(
+                partial(record_task_id, task_id=170),
+                "annotations_mot_1_1_170",
+                "annotations_mot_170_ex",
+            ),
+            # Merge all annotations into one.
+            node(
                 merge_annotations,
-                ["annotations_mot_1_1_clipped"],
+                ["annotations_mot_169_ex", "annotations_mot_170_ex"],
                 "annotations_mot_merged",
             ),
             node(

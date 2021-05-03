@@ -36,6 +36,13 @@ def create_pipeline(**kwargs):
                 ),
                 "tfrecord_valid",
             ),
+            # This node is needed so we can pass an iterable of datasets as
+            # input to the next node.
+            node(
+                lambda *args: args,
+                ["cotton_videos_169", "cotton_videos_170"],
+                "cotton_videos",
+            ),
             node(
                 generate_examples,
                 dict(
