@@ -13,7 +13,8 @@ _FEATURE_DESCRIPTION = {
     Otf.IMAGE_HEIGHT.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),
     Otf.IMAGE_WIDTH.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),
     Otf.IMAGE_FILENAME.value: tf.io.FixedLenFeature([1], tf.dtypes.string),
-    Otf.IMAGE_SOURCE_ID.value: tf.io.FixedLenFeature([1], tf.dtypes.string),
+    # TODO (danielp): These should be compressed into a single value per frame.
+    Otf.IMAGE_SOURCE_ID.value: tf.io.RaggedFeature(tf.dtypes.int64),
     Otf.IMAGE_ENCODED.value: tf.io.FixedLenFeature([1], tf.dtypes.string),
     Otf.IMAGE_FORMAT.value: tf.io.FixedLenFeature([1], tf.dtypes.string),
     Otf.OBJECT_BBOX_X_MIN.value: tf.io.RaggedFeature(tf.dtypes.float32),
