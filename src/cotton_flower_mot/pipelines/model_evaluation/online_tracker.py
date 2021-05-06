@@ -17,6 +17,11 @@ class Track:
     Represents a single track.
     """
 
+    _NEXT_ID = 1
+    """
+    Allows us to associate a unique ID with each track.
+    """
+
     def __init__(self, indices: Iterable[int] = ()):
         """
         Args:
@@ -27,6 +32,9 @@ class Track:
         self.__frames_to_indices = {f: i for f, i in enumerate(indices)}
         # Keeps track of the last frame we have a detection for.
         self.__latest_frame = -1
+
+        self.__id = Track._NEXT_ID
+        Track._NEXT_ID += 1
 
     def add_new_detection(
         self, *, frame_num: int, detection_index: int
@@ -74,6 +82,15 @@ class Track:
 
         """
         return self.__frames_to_indices.get(frame_num)
+
+    @property
+    def id(self) -> int:
+        """
+        Returns:
+            The unique ID associated with this track.
+
+        """
+        return self.__id
 
 
 class OnlineTracker:

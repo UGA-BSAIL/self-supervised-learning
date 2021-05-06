@@ -2,19 +2,92 @@
 Framework for creating tracking videos.
 """
 
-from typing import Dict, Iterable, List
+import random
+from functools import lru_cache
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import tensorflow as tf
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from ..schemas import ModelInputs
 from .online_tracker import Track
 
-_BOX_COLORS = np.random.randint(0, 255, (10, 3))
+try:
+    _TAG_FONT = ImageFont.truetype("VeraBd.ttf", 24)
+except OSError:
+    # We probably don't have this font installed. We'll use something safer
+    # but less readable.
+    _TAG_FONT = ImageFont.truetype("Pillow/Tests/fonts/FreeMono.ttf", 24)
 """
-Bounding box colors to use.
+Font to use for bounding box tags.
 """
+
+
+@lru_cache
+def _color_for_track(track: Track) -> Tuple[int, int, int]:
+    """
+    Generates a unique color for a particular track.
+
+    Args:
+        track: The track to generate a color for.
+
+    Returns:
+        The generated color.
+
+    """
+    # Seed the random number generator with the track ID.
+    random.seed(track.id)
+
+    # Create a random color. We want it to be not very green (because the
+    # background is pretty green), and relatively dark, so the label shows up
+    # well.
+    rgb = np.array(
+        [
+            random.randint(0, 255),
+            random.randint(0, 128),
+            random.randint(0, 255),
+        ],
+        dtype=np.float32,
+    )
+
+    brightness = np.sum(rgb)
+    scale = brightness / 300
+    # Keep a constant brightness.
+    rgb *= scale
+
+    return tuple(rgb.astype(int))
+
+
+def _draw_text(
+    artist: ImageDraw.ImageDraw,
+    *,
+    text: str,
+    coordinates: Tuple[int, int],
+    anchor: str = "la",
+    color: Tuple[int, int, int] = (0, 0, 0),
+) -> None:
+    """
+    Draws text on an image, over a colored box.
+
+    Args:
+        artist: The `ImageDraw` object to draw with.
+        text: The text to draw.
+        coordinates: The coordinates to place the text at.
+        anchor: The anchor type to use for the text.
+        color: The background color to use. (The text itself will be white.)
+
+    """
+    # Find and draw the bounding box.
+    text_bbox = artist.textbbox(
+        coordinates, text, anchor=anchor, font=_TAG_FONT
+    )
+    artist.rectangle(text_bbox, fill=color)
+
+    # Draw the text itself.
+    artist.text(
+        coordinates, text, fill=(255, 255, 255), anchor=anchor, font=_TAG_FONT
+    )
 
 
 def _draw_bounding_box(
@@ -38,10 +111,19 @@ def _draw_bounding_box(
     max_point = tuple(max_point)
 
     # Choose a color.
-    color_index = hash(track) % len(_BOX_COLORS)
-    color = _BOX_COLORS[color_index]
+    color = _color_for_track(track)
 
-    artist.rectangle([min_point, max_point], outline=tuple(color), width=3)
+    artist.rectangle([min_point, max_point], outline=color, width=5)
+
+    # Draw a tag with the track ID.
+    tag_pos = min_point
+    _draw_text(
+        artist,
+        text=f"Track {track.id}",
+        anchor="lb",
+        color=color,
+        coordinates=tag_pos,
+    )
 
 
 def draw_track_frame(
@@ -49,7 +131,7 @@ def draw_track_frame(
     *,
     frame_num: int,
     tracks: List[Track],
-    geometry: np.ndarray
+    geometry: np.ndarray,
 ) -> np.ndarray:
     """
     Draws the tracks on a single frame.
