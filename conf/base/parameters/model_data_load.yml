@@ -8,6 +8,6 @@ num_gcn_channels: 128
 sinkhorn_lambda: 10.0
 
 # Probability of dropping a particular example to use.
-drop_probability: 0.0
+drop_probability: 0.5
 # Number of times to repeat the dataset to make up for dropped examples.
-repeats: 1
+repeats: 2
