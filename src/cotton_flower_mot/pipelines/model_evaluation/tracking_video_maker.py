@@ -6,6 +6,7 @@ import random
 from functools import lru_cache
 from typing import Dict, Iterable, List, Tuple
 
+import cv2
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageDraw, ImageFont
@@ -147,8 +148,13 @@ def draw_track_frame(
         The modified frame.
 
     """
+    # Convert from OpenCV format to PIL.
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame = Image.fromarray(frame, mode="RGB")
     draw = ImageDraw.Draw(frame)
+
+    # Because the image is flipped, we have to flip our bounding boxes.
+    geometry[:, 1] = frame.height - geometry[:, 1]
 
     # Determine the associated bounding box for all the tracks.
     for track in tracks:
@@ -182,6 +188,9 @@ def draw_tracks(
     for frame_num, feature_dict in enumerate(inputs):
         frame = feature_dict[ModelInputs.FRAME.value].numpy()
         geometry = feature_dict[ModelInputs.DETECTION_GEOMETRY.value].numpy()
+
+        # Flip the frame, because the input data is upside-down.
+        frame = cv2.flip(frame, 0)
 
         frame = draw_track_frame(
             frame, frame_num=frame_num, tracks=tracks, geometry=geometry

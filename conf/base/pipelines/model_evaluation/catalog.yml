@@ -15,6 +15,7 @@ tracking_videos_test:
   dataset: cotton_flower_mot.data_sets.VideoDataSet
   filepath: ${output_data_dir}/08_reporting/tracking_videos/test
   extension: .mp4
+  bgr_color: false
   versioned: True
 
 tracking_videos_valid:
@@ -22,4 +23,5 @@ tracking_videos_valid:
   dataset: cotton_flower_mot.data_sets.VideoDataSet
   filepath: ${output_data_dir}/08_reporting/tracking_videos/valid
   extension: .mp4
+  bgr_color: false
   versioned: True

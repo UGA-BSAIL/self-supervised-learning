@@ -24,6 +24,7 @@ class VideoDataSet(AbstractVersionedDataSet):
         codec: str = "mp4v",
         fps: int = 30,
         resolution: Tuple[int, int] = (1920, 1080),
+        bgr_color: bool = True,
     ):
         """
         Args:
@@ -33,12 +34,16 @@ class VideoDataSet(AbstractVersionedDataSet):
             fps: The FPS to use when writing the video.
             resolution: The output resolution of the video, in the form
                 `(width, height)`.
+            bgr_color: If true, it will load and save images in the BGR color
+                space. Otherwise, it will load and save images in the RGB color
+                space.
         """
         super().__init__(PurePosixPath(filepath), version)
 
         self.__codec = codec
         self.__fps = fps
         self.__resolution = resolution
+        self.__bgr_color = bgr_color
 
     def _load(self) -> Iterable[np.ndarray]:
         """
@@ -55,6 +60,10 @@ class VideoDataSet(AbstractVersionedDataSet):
             if not status:
                 logger.warning("Failed to read frame, skipping.")
                 continue
+
+            if not self.__bgr_color:
+                # OpenCV works with BGR images, but we need RGB.
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             yield frame
 
@@ -84,6 +93,9 @@ class VideoDataSet(AbstractVersionedDataSet):
             raise RuntimeError("Failed to open video writer.")
 
         for frame in data:
+            if self.__bgr_color:
+                # OpenCV works with BGR images, but VideoWriter expects RGB.
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             writer.write(frame)
 
         writer.release()
