@@ -14,12 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ..schemas import ModelInputs
 from .online_tracker import Track
 
-try:
-    _TAG_FONT = ImageFont.truetype("VeraBd.ttf", 24)
-except OSError:
-    # We probably don't have this font installed. We'll use something safer
-    # but less readable.
-    _TAG_FONT = ImageFont.truetype("Pillow/Tests/fonts/FreeMono.ttf", 24)
+_TAG_FONT = ImageFont.truetype("fonts/VeraBd.ttf", 24)
 """
 Font to use for bounding box tags.
 """
