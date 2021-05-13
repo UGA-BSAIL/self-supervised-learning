@@ -83,7 +83,10 @@ def solve_optimal_transport(
         [cost_3d, row_sums_2d, column_sums_2d, lambda_0d, epsilon_0d]
     ):
         # Create initial optimal transport matrix.
-        transport = tf.exp(-lamb * cost)
+        regularized_cost = -lamb * cost
+        # Clip anything that's too large to guard against numerical instability.
+        regularized_cost = tf.minimum(regularized_cost, 10)
+        transport = tf.exp(regularized_cost)
         transport /= tf.reduce_sum(transport)
 
         # Add extra dimension to row and column sums for easy multiplication.
