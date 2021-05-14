@@ -21,7 +21,12 @@ from .graph_utils import (
 )
 from .layers.association import AssociationLayer
 from .layers.dense import DenseBlock, TransitionLayer
-from .similarity_utils import compute_ious, cosine_similarity
+from .similarity_utils import (
+    aspect_ratio_penalty,
+    compute_ious,
+    cosine_similarity,
+    distance_penalty,
+)
 
 
 def _bn_relu_conv(
@@ -286,12 +291,26 @@ def _build_affinity_mlp(
         Will have a shape of `[batch_size, max_n_tracklets, max_n_detections]`.
 
     """
-    # Compute IOUs and cosine similarity.
+    # Compute similarity parameters.
     iou = layers.Lambda(
         lambda f: _compute_pairwise_similarities(
             compute_ious, tracklet_features=f[0], detection_features=f[1]
         ),
         name="iou",
+    )((tracklet_geom_features, detection_geom_features))
+    distance = layers.Lambda(
+        lambda f: _compute_pairwise_similarities(
+            distance_penalty, tracklet_features=f[0], detection_features=f[1]
+        ),
+        name="distance_penalty",
+    )((tracklet_geom_features, detection_geom_features))
+    aspect_ratio = layers.Lambda(
+        lambda f: _compute_pairwise_similarities(
+            aspect_ratio_penalty,
+            tracklet_features=f[0],
+            detection_features=f[1],
+        ),
+        name="aspect_ratio_penalty",
     )((tracklet_geom_features, detection_geom_features))
     cosine = layers.Lambda(
         lambda f: _compute_pairwise_similarities(
@@ -301,10 +320,10 @@ def _build_affinity_mlp(
     )((tracklet_inter_features, detection_inter_features))
 
     # Concatenate into our input.
-    similarity_input = tf.stack((iou, cosine), axis=-1)
+    similarity_input = tf.stack((iou, distance, aspect_ratio, cosine), axis=-1)
     # Make sure the channels dimension is defined statically so Keras layers
     # work.
-    similarity_input = tf.ensure_shape(similarity_input, (None, None, None, 2))
+    similarity_input = tf.ensure_shape(similarity_input, (None, None, None, 4))
 
     # Apply the MLP. 1x1 convolution is an efficient way to apply the same MLP
     # to every detection/tracklet pair.
