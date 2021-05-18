@@ -1,6 +1,8 @@
 _multi_file_csv_parameters: &multi_file_csv_parameters
   type: cotton_flower_mot.data_sets.MultiFileDataSet
   dataset: pandas.CSVDataSet
+  file_name_format: "{index:06d}"
+  skip_missing: true
   extension: .txt
   version: False
   load_args:
@@ -12,6 +14,8 @@ _multi_file_csv_parameters: &multi_file_csv_parameters
       - center_y
       - width
       - height
+    # Separator is a space for these data.
+    sep: " "
 
 # Raw annotations, using Chenjiao's data format.
 annotations_mot_chenjiao_1:
@@ -31,22 +35,25 @@ annotations_mot_chenjiao_4:
   <<: *multi_file_csv_parameters
 
 # Converted annotations, in MOT 1.1 format.
-converted_annotations_mot_1_1_video_1:
+_mot_csv_parameters: &mot_csv_parameters
   type: pandas.CSVDataSet
-  filepath: data/02_intermediate/video_1.csv
   versioned: True
+  save_args:
+    # No header row.
+    header: false
+
+converted_annotations_mot_1_1_video_1:
+  filepath: data/02_intermediate/video_1/gt.txt
+  << : *mot_csv_parameters
 
 converted_annotations_mot_1_1_video_2:
-  type: pandas.CSVDataSet
-  filepath: data/02_intermediate/video_2.csv
-  versioned: True
+  filepath: data/02_intermediate/video_2/gt.txt
+  << : *mot_csv_parameters
 
 converted_annotations_mot_1_1_video_3:
-  type: pandas.CSVDataSet
-  filepath: data/02_intermediate/video_3.csv
-  versioned: True
+  filepath: data/02_intermediate/video_3/gt.txt
+  << : *mot_csv_parameters
 
 converted_annotations_mot_1_1_video_4:
-  type: pandas.CSVDataSet
-  filepath: data/02_intermediate/video_4.csv
-  versioned: True
+  filepath: data/02_intermediate/video_4/gt.txt
+  << : *mot_csv_parameters

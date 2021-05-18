@@ -52,19 +52,19 @@ def _bboxes_to_mot_format(
     """
     # Specify the bounding box in the correct way.
     image_width, image_height = image_size
-    bbox_width_px = int(annotations["width"] * image_width)
-    bbox_height_px = int(annotations["height"] * image_height)
-    bbox_x_min_px = int(annotations["center_x"] - bbox_width_px / 2)
-    bbox_y_min_px = int(annotations["center_y"] - bbox_height_px / 2)
+    bbox_width_px = annotations["width"] * image_width
+    bbox_height_px = annotations["height"] * image_height
+    bbox_x_min_px = annotations["center_x"] - bbox_width_px / 2
+    bbox_y_min_px = annotations["center_y"] - bbox_height_px / 2
 
-    annotations[Mot.BBOX_X_MIN_PX.value] = bbox_x_min_px
-    annotations[Mot.BBOX_Y_MIN_PX.value] = bbox_y_min_px
-    annotations[Mot.BBOX_WIDTH_PX.value] = bbox_width_px
-    annotations[Mot.BBOX_HEIGHT_PX.value] = bbox_height_px
+    annotations[Mot.BBOX_X_MIN_PX.value] = bbox_x_min_px.astype(int)
+    annotations[Mot.BBOX_Y_MIN_PX.value] = bbox_y_min_px.astype(int)
+    annotations[Mot.BBOX_WIDTH_PX.value] = bbox_width_px.astype(int)
+    annotations[Mot.BBOX_HEIGHT_PX.value] = bbox_height_px.astype(int)
 
     # Drop the originals.
     annotations.drop(
-        ["width, height", "center_x", "center_y"], axis=1, inplace=True
+        ["width", "height", "center_x", "center_y"], axis=1, inplace=True
     )
 
 

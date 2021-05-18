@@ -6,7 +6,6 @@ directory.
 """
 
 
-import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional
 
@@ -27,17 +26,22 @@ class MultiFileDataSet(AbstractVersionedDataSet):
         filepath: PurePosixPath,
         dataset: str,
         extension: str,
-        prefix: str = "data_",
+        file_name_format: str = "data_{index}",
         version: Optional[Version] = None,
+        skip_missing: bool = False,
         **kwargs: Any,
     ):
         """
         Args:
             filepath: The path to the output directory.
-            version: The version information for the `DataSet`.
             dataset: The name of the dataset module that we are wrapping.
             extension: Extension to use for created files.
-            prefix: Prefix to use for created files.
+            file_name_format: The format to use for the individual files in
+                the dataset. The variable "index" can be used in the format, and
+                will be an integer that indicates the specific file number.
+            version: The version information for the `DataSet`.
+            skip_missing: If true, it will simply skip missing data files
+                when loading instead of failing.
             **kwargs: Will be forwarded to the internal datasets.
         """
         super().__init__(PurePosixPath(filepath), version)
@@ -46,14 +50,11 @@ class MultiFileDataSet(AbstractVersionedDataSet):
         self.__version = version
         self.__dataset_config = kwargs
         self.__extension = extension
-        self.__prefix = prefix
+        self.__file_name_format = file_name_format
+        self.__skip_missing = skip_missing
 
         # The internal datasets that we use for saving and loading.
         self.__datasets = []
-        # Expression for matching data files.
-        self.__file_name_expression = re.compile(
-            fr"{self.__prefix}_0*\d+{self.__extension}"
-        )
 
     def __create_dataset(
         self, index: int, *, base_path: Path
@@ -71,7 +72,8 @@ class MultiFileDataSet(AbstractVersionedDataSet):
 
         """
         # Construct the file path.
-        filepath = base_path / f"{self.__prefix}{index}{self.__extension}"
+        file_name = self.__file_name_format.format(index=index)
+        filepath = base_path / f"{file_name}{self.__extension}"
         logger.debug(
             "Creating {} to save data at {}.", self.__dataset_type, filepath
         )
@@ -133,6 +135,11 @@ class MultiFileDataSet(AbstractVersionedDataSet):
         for _, dataset in zip(
             saved_files, self.__iter_datasets(base_path=load_path)
         ):
+            if not dataset.exists() and self.__skip_missing:
+                # Skip the missing dataset.
+                logger.info("Skipping non-existent dataset load.")
+                continue
+
             yield dataset.load()
 
     def _save(self, data: Iterable[Any]) -> None:
