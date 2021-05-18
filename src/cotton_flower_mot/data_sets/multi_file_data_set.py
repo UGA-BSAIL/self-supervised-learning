@@ -6,6 +6,7 @@ directory.
 """
 
 
+import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional
 
@@ -24,9 +25,10 @@ class MultiFileDataSet(AbstractVersionedDataSet):
     def __init__(
         self,
         filepath: PurePosixPath,
-        version: Optional[Version],
         dataset: str,
         extension: str,
+        prefix: str = "data_",
+        version: Optional[Version] = None,
         **kwargs: Any,
     ):
         """
@@ -35,6 +37,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
             version: The version information for the `DataSet`.
             dataset: The name of the dataset module that we are wrapping.
             extension: Extension to use for created files.
+            prefix: Prefix to use for created files.
             **kwargs: Will be forwarded to the internal datasets.
         """
         super().__init__(PurePosixPath(filepath), version)
@@ -43,9 +46,14 @@ class MultiFileDataSet(AbstractVersionedDataSet):
         self.__version = version
         self.__dataset_config = kwargs
         self.__extension = extension
+        self.__prefix = prefix
 
         # The internal datasets that we use for saving and loading.
         self.__datasets = []
+        # Expression for matching data files.
+        self.__file_name_expression = re.compile(
+            fr"{self.__prefix}_0*\d+{self.__extension}"
+        )
 
     def __create_dataset(
         self, index: int, *, base_path: Path
@@ -63,7 +71,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
 
         """
         # Construct the file path.
-        filepath = base_path / f"data_{index}{self.__extension}"
+        filepath = base_path / f"{self.__prefix}{index}{self.__extension}"
         logger.debug(
             "Creating {} to save data at {}.", self.__dataset_type, filepath
         )
@@ -73,11 +81,18 @@ class MultiFileDataSet(AbstractVersionedDataSet):
             **self.__dataset_config,
         )
 
+        load_version = None
+        save_version = None
+        if self.__version is not None:
+            # Specify load and save versions.
+            load_version = self.__version.load
+            save_version = self.__version.save
+
         return AbstractVersionedDataSet.from_config(
             f"{self.__dataset_type}_{index}",
             config,
-            load_version=self.__version.load,
-            save_version=self.__version.save,
+            load_version=load_version,
+            save_version=save_version,
         )
 
     def __iter_datasets(

@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from ..schemas import MotAnnotationColumns as Mot
 from ..schemas import ObjectTrackingFeatures as Otf
 
 
@@ -26,7 +27,7 @@ def cut_video(
 
     """
     # We assume frames are one-indexed, as per MOT standard.
-    frame_condition = annotations_mot["frame"] <= new_length
+    frame_condition = annotations_mot[Mot.FRAME.value] <= new_length
     return annotations_mot[frame_condition]
 
 
@@ -91,7 +92,8 @@ def split_clips(
 
     new_sequence_ids = []
     for sequence_id, frame_num in zip(
-        annotations_mot[Otf.IMAGE_SEQUENCE_ID.value], annotations_mot["frame"]
+        annotations_mot[Otf.IMAGE_SEQUENCE_ID.value],
+        annotations_mot[Mot.FRAME.value],
     ):
         if sequence_id != old_sequence_id:
             # This is a new video in the underlying data.
@@ -158,16 +160,16 @@ def _transform_bounding_boxes(mot_annotations: pd.DataFrame) -> None:
             modified in-place. It will use the TensorFlow column names.
 
     """
-    x_min = mot_annotations["bb_left"]
-    y_min = mot_annotations["bb_top"]
-    x_max = x_min + mot_annotations["bb_width"]
-    y_max = y_min + mot_annotations["bb_height"]
+    x_min = mot_annotations[Mot.BBOX_X_MIN_PX.value]
+    y_min = mot_annotations[Mot.BBOX_Y_MIN_PX.value]
+    x_max = x_min + mot_annotations[Mot.BBOX_WIDTH_PX.value]
+    y_max = y_min + mot_annotations[Mot.BBOX_HEIGHT_PX.value]
 
     # Use the right column names.
     mot_annotations.rename(
         {
-            "bb_left": Otf.OBJECT_BBOX_X_MIN.value,
-            "bb_top": Otf.OBJECT_BBOX_Y_MIN.value,
+            Mot.BBOX_X_MIN_PX.value: Otf.OBJECT_BBOX_X_MIN.value,
+            Mot.BBOX_Y_MIN_PX.value: Otf.OBJECT_BBOX_Y_MIN.value,
         },
         axis=1,
         inplace=True,
@@ -176,7 +178,11 @@ def _transform_bounding_boxes(mot_annotations: pd.DataFrame) -> None:
     mot_annotations[Otf.OBJECT_BBOX_X_MAX.value] = x_max
     mot_annotations[Otf.OBJECT_BBOX_Y_MAX.value] = y_max
     # Remove the extraneous columns.
-    mot_annotations.drop(["bb_width", "bb_height"], axis=1, inplace=True)
+    mot_annotations.drop(
+        [Mot.BBOX_WIDTH_PX.value, Mot.BBOX_HEIGHT_PX.value],
+        axis=1,
+        inplace=True,
+    )
 
 
 def mot_to_object_detection_format(
@@ -198,11 +204,23 @@ def mot_to_object_detection_format(
 
     # Rename the remaining columns.
     mot_annotations.rename(
-        {"frame": Otf.IMAGE_FRAME_NUM.value, "id": Otf.OBJECT_ID.value},
+        {
+            Mot.FRAME.value: Otf.IMAGE_FRAME_NUM.value,
+            Mot.ID.value: Otf.OBJECT_ID.value,
+        },
         axis=1,
         inplace=True,
     )
     # Drop columns that we don't care about.
-    mot_annotations.drop(["conf", "x", "y", "z"], axis=1, inplace=True)
+    mot_annotations.drop(
+        [
+            Mot.CONFIDENCE.value,
+            Mot.OBJECT_X.value,
+            Mot.OBJECT_Y.value,
+            Mot.OBJECT_Z.value,
+        ],
+        axis=1,
+        inplace=True,
+    )
 
     return mot_annotations

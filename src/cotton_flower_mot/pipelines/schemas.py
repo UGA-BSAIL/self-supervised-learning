@@ -29,6 +29,54 @@ def _merge_enums(
 
 
 @enum.unique
+class MotAnnotationColumns(enum.Enum):
+    """
+    Column names for MOT 1.1 annotations.
+    """
+
+    FRAME = "frame"
+    """
+    The frame number.
+    """
+    ID = "id"
+    """
+    The track ID.
+    """
+    BBOX_X_MIN_PX = "bb_left"
+    """
+    The minimum x-coordinate of the object bounding box, in pixels.
+    """
+    BBOX_Y_MIN_PX = "bb_top"
+    """
+    The minimum y-coordinate of the object bounding box, in pixels.
+    """
+    BBOX_WIDTH_PX = "bb_width"
+    """
+    The width of the bounding box, in pixels.
+    """
+    BBOX_HEIGHT_PX = "bb_height"
+    """
+    The height of the bounding box, in pixels.
+    """
+    CONFIDENCE = "conf"
+    """
+    The confidence score from the detector.
+    """
+    OBJECT_X = "x"
+    """
+    The estimated x-coordinate of the object's location.
+    """
+    OBJECT_Y = "y"
+    """
+    The estimated y-coordinate of the object's location.
+    """
+    OBJECT_Z = "z"
+    """
+    The estimated z-coordinate of the object's location.
+    """
+
+
+@enum.unique
 class ObjectDetectionFeatures(enum.Enum):
     """
     Standard feature names used by the TF Object Detection API.
