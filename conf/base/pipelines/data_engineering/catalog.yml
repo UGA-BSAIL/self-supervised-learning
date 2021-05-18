@@ -26,7 +26,6 @@ annotations_mot_1_1:
       - bb_top
       - bb_width
       - bb_height
-      - conf
-      - x
-      - y
-      - z
+      - not_ignored
+      - class_id
+      - visibility

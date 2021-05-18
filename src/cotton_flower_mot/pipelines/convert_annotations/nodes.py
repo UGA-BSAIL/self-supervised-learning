@@ -30,6 +30,10 @@ def merge_frame_annotations(
     # Add the frame number to individual data frames.
     def _with_frame() -> Iterable[pd.DataFrame]:
         for frame_num, frame_annotations in enumerate(annotations):
+            if frame_annotations is None:
+                # There are no annotations provided for this frame.
+                continue
+
             frame_annotations[Mot.FRAME.value] = frame_num
             yield frame_annotations
 
@@ -54,13 +58,13 @@ def _bboxes_to_mot_format(
     image_width, image_height = image_size
     bbox_width_px = annotations["width"] * image_width
     bbox_height_px = annotations["height"] * image_height
-    bbox_x_min_px = annotations["center_x"] - bbox_width_px / 2
-    bbox_y_min_px = annotations["center_y"] - bbox_height_px / 2
+    bbox_x_min_px = annotations["center_x"] * image_width - bbox_width_px / 2
+    bbox_y_min_px = annotations["center_y"] * image_height - bbox_height_px / 2
 
-    annotations[Mot.BBOX_X_MIN_PX.value] = bbox_x_min_px.astype(int)
-    annotations[Mot.BBOX_Y_MIN_PX.value] = bbox_y_min_px.astype(int)
-    annotations[Mot.BBOX_WIDTH_PX.value] = bbox_width_px.astype(int)
-    annotations[Mot.BBOX_HEIGHT_PX.value] = bbox_height_px.astype(int)
+    annotations[Mot.BBOX_X_MIN_PX.value] = bbox_x_min_px
+    annotations[Mot.BBOX_Y_MIN_PX.value] = bbox_y_min_px
+    annotations[Mot.BBOX_WIDTH_PX.value] = bbox_width_px
+    annotations[Mot.BBOX_HEIGHT_PX.value] = bbox_height_px
 
     # Drop the originals.
     annotations.drop(
@@ -92,9 +96,8 @@ def convert_to_mot_format(
     annotations.drop(["class"], axis=1, inplace=True)
 
     # Fill extraneous columns with default values.
-    annotations[Mot.CONFIDENCE.value] = 1.0
-    annotations[Mot.OBJECT_X.value] = 0
-    annotations[Mot.OBJECT_Y.value] = 0
-    annotations[Mot.OBJECT_Z.value] = 0
+    annotations[Mot.NOT_IGNORED.value] = 1
+    annotations[Mot.CLASS_ID.value] = 1
+    annotations[Mot.VISIBILITY.value] = 1.0
 
     return annotations

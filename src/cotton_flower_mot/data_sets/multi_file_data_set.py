@@ -41,7 +41,8 @@ class MultiFileDataSet(AbstractVersionedDataSet):
                 will be an integer that indicates the specific file number.
             version: The version information for the `DataSet`.
             skip_missing: If true, it will simply skip missing data files
-                when loading instead of failing.
+                when loading instead of failing. The loading iterator will
+                return `None` for skipped files.
             **kwargs: Will be forwarded to the internal datasets.
         """
         super().__init__(PurePosixPath(filepath), version)
@@ -138,9 +139,10 @@ class MultiFileDataSet(AbstractVersionedDataSet):
             if not dataset.exists() and self.__skip_missing:
                 # Skip the missing dataset.
                 logger.info("Skipping non-existent dataset load.")
-                continue
+                yield None
 
-            yield dataset.load()
+            else:
+                yield dataset.load()
 
     def _save(self, data: Iterable[Any]) -> None:
         for data_item, dataset in zip(data, self.__iter_datasets()):

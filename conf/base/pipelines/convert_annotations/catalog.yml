@@ -41,6 +41,17 @@ _mot_csv_parameters: &mot_csv_parameters
   save_args:
     # No header row.
     header: false
+    # Columns to write.
+    columns:
+      - frame
+      - id
+      - bb_left
+      - bb_top
+      - bb_width
+      - bb_height
+      - not_ignored
+      - class_id
+      - visibility
 
 converted_annotations_mot_1_1_video_1:
   filepath: data/02_intermediate/video_1/gt.txt

@@ -58,21 +58,17 @@ class MotAnnotationColumns(enum.Enum):
     """
     The height of the bounding box, in pixels.
     """
-    CONFIDENCE = "conf"
+    NOT_IGNORED = "not_ignored"
     """
-    The confidence score from the detector.
+    Attribute from CVAT specifying whether the annotation is ignored.
     """
-    OBJECT_X = "x"
+    CLASS_ID = "class_id"
     """
-    The estimated x-coordinate of the object's location.
+    Attribute from CVAT specifying the corresponding label (1-indexed).
     """
-    OBJECT_Y = "y"
+    VISIBILITY = "visibility"
     """
-    The estimated y-coordinate of the object's location.
-    """
-    OBJECT_Z = "z"
-    """
-    The estimated z-coordinate of the object's location.
+    Attribute from CVAT specifying the visibility.
     """
 
 
