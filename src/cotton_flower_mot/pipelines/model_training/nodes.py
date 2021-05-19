@@ -118,7 +118,6 @@ def train_model(
     learning_phases: List[Dict[str, Any]],
     callbacks: List[tf.keras.callbacks.Callback] = [],
     validation_frequency: int = 1,
-    positive_sample_weight: float = 1.0,
 ) -> tf.keras.Model:
     """
     Trains a model.
@@ -132,9 +131,6 @@ def train_model(
         callbacks: The callbacks to use when training.
         validation_frequency: Number of training epochs after which to run
             validation.
-        positive_sample_weight: How much to weight positive samples in our
-            loss function in order to make up for the inherent sparsity of
-            association matrices.
 
     Returns:
         The trained model.
@@ -151,7 +147,7 @@ def train_model(
         )
         model.compile(
             optimizer=optimizer,
-            loss=make_losses(positive_sample_weight=positive_sample_weight),
+            loss=make_losses(),
             metrics=make_metrics(),
         )
         model.fit(
