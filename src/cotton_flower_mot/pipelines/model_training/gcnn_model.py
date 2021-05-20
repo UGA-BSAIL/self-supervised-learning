@@ -352,9 +352,13 @@ def _update_adjacency_matrix() -> Callable[
             adjacency_matrix=tf.expand_dims(x[0], axis=-1), node_features=x[1]
         )
     )
-    # The MLP operation over all edges is actually implemented as a 1x1
+
+    # The MLP operation over all edges is actually implemented as 1x1
     # convolution for convenience.
-    conv1_2 = _bn_relu_conv(1, 1, padding="same")
+    conv1_2 = _bn_relu_conv(128, 1, name="edge_conv_1")
+    conv1_3 = _bn_relu_conv(128, 1, name="edge_conv_2")
+    conv1_4 = _bn_relu_conv(1, 1, name="edge_conv_3")
+
     # Normalization operation for the matrix.
     norm1_3 = layers.Lambda(
         lambda x: bound_adjacency(x), name="normalize_adjacency"
@@ -374,7 +378,9 @@ def _update_adjacency_matrix() -> Callable[
 
         """
         node_features, adjacency_matrix = inputs
-        adjacency = norm1_3(conv1_2(aug1_1((adjacency_matrix, node_features))))
+        augmented_features = aug1_1((adjacency_matrix, node_features))
+        mlp_features = conv1_4(conv1_3(conv1_2(augmented_features)))
+        adjacency = norm1_3(mlp_features)
         # Remove the final dimension, which should be one.
         return adjacency[:, :, :, 0]
 
