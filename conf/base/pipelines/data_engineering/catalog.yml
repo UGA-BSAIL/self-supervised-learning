@@ -13,6 +13,26 @@ cotton_videos_170:
   task_id: 170
   << : *cvat_credentials
 
+cotton_videos_172:
+  type: pycvat.CvatDataSet
+  task_id: 172
+  << : *cvat_credentials
+
+cotton_videos_173:
+  type: pycvat.CvatDataSet
+  task_id: 173
+  << : *cvat_credentials
+
+cotton_videos_174:
+  type: pycvat.CvatDataSet
+  task_id: 174
+  << : *cvat_credentials
+
+cotton_videos_175:
+  type: pycvat.CvatDataSet
+  task_id: 175
+  << : *cvat_credentials
+
 # Column names for the MOT format data.
 _mot_column_names: &mot_column_names
   names:
@@ -36,5 +56,33 @@ annotations_mot_1_1_169:
 annotations_mot_1_1_170:
   type: pandas.CSVDataSet
   filepath: data/01_raw/flower_annotations_170_2021_04_30/gt.txt
+  load_args:
+    << : *mot_column_names
+
+annotations_mot_1_1_172:
+  type: pandas.CSVDataSet
+  filepath: data/02_intermediate/video_1/gt.txt
+  versioned: True
+  load_args:
+    << : *mot_column_names
+
+annotations_mot_1_1_173:
+  type: pandas.CSVDataSet
+  filepath: data/02_intermediate/video_2/gt.txt
+  versioned: True
+  load_args:
+    << : *mot_column_names
+
+annotations_mot_1_1_174:
+  type: pandas.CSVDataSet
+  filepath: data/02_intermediate/video_3/gt.txt
+  versioned: True
+  load_args:
+    << : *mot_column_names
+
+annotations_mot_1_1_175:
+  type: pandas.CSVDataSet
+  filepath: data/02_intermediate/video_4/gt.txt
+  versioned: True
   load_args:
     << : *mot_column_names

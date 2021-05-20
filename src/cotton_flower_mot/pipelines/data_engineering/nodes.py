@@ -196,10 +196,9 @@ def mot_to_object_detection_format(
     # Drop columns that we don't care about.
     mot_annotations.drop(
         [
-            Mot.CONFIDENCE.value,
-            Mot.OBJECT_X.value,
-            Mot.OBJECT_Y.value,
-            Mot.OBJECT_Z.value,
+            Mot.NOT_IGNORED.value,
+            Mot.CLASS_ID.value,
+            Mot.VISIBILITY.value,
         ],
         axis=1,
         inplace=True,
