@@ -6,7 +6,10 @@ from functools import partial
 
 from kedro.pipeline import Pipeline, node
 
-from ..dataset_io import inputs_and_targets_from_datasets
+from ..dataset_io import (
+    DataAugmentationConfig,
+    inputs_and_targets_from_datasets,
+)
 from .nodes import make_model_config
 
 
@@ -40,12 +43,25 @@ def create_pipeline(**kwargs):
                 ),
                 "model_config",
             ),
+            node(
+                DataAugmentationConfig,
+                dict(
+                    max_bbox_jitter="params:bbox_jitter_fraction",
+                    max_brightness_delta="params:max_brightness_delta",
+                    max_hue_delta="params:max_hue_delta",
+                    min_contrast="params:min_contrast",
+                    max_contrast="params:max_contrast",
+                    min_saturation="params:min_saturation",
+                    max_saturation="params:max_saturation",
+                ),
+                "data_augmentation_config",
+            ),
             # Load the datasets.
             node(
                 inputs_and_targets_from_datasets,
                 dict(
                     raw_datasets="tfrecord_train",
-                    max_jitter_fraction="params:bbox_jitter_fraction",
+                    augmentation_config="data_augmentation_config",
                     **loading_config
                 ),
                 "training_data",

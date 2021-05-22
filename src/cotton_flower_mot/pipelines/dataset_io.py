@@ -1,10 +1,11 @@
 import enum
 from functools import partial
 from multiprocessing import cpu_count
-from typing import Any, Dict, Iterable, Tuple, Union
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+from pydantic.dataclasses import dataclass
 
 from .assignment import construct_gt_sinkhorn_matrix
 from .config import ModelConfig
@@ -94,6 +95,35 @@ Number of threads to use for multi-threaded operations.
 """
 
 
+@dataclass(frozen=True)
+class DataAugmentationConfig:
+    """
+    Configuration to use for data augmentation.
+
+    Attributes:
+        max_bbox_jitter: Maximum amount of jitter to add to the bounding boxes,
+            as a fraction of the frame size.
+        max_brightness_delta: Maximum amount to adjust the brightness by.
+        max_hue_delta: Maximum amount to adjust the hue by.
+
+        min_contrast: Minimum contrast to use.
+        max_contrast: Maximum contrast to use.
+
+        min_saturation: Minimum saturation factor to use.
+        max_saturation: Maximum saturation factor to use.
+    """
+
+    max_bbox_jitter: float = 0.0
+    max_brightness_delta: float = 0.0
+    max_hue_delta: float = 0.0
+
+    min_contrast: Optional[float] = None
+    max_contrast: Optional[float] = None
+
+    min_saturation: Optional[float] = None
+    max_saturation: Optional[float] = None
+
+
 def _add_bbox_jitter(
     bbox_coords: tf.Tensor,
     *,
@@ -131,6 +161,39 @@ def _add_bbox_jitter(
 
     # Apply the jitters.
     return bbox_coords + jitter_magnitude
+
+
+def _augment_images(
+    images: tf.Tensor, config: DataAugmentationConfig
+) -> tf.Tensor:
+    """
+    Applies data augmentation to images.
+
+    Args:
+        images: The images to augment.
+        config: Configuration for data augmentation.
+
+    Returns:
+        The augmented images.
+
+    """
+    # Convert to floats once so we're not doing many redundant conversions.
+    images = tf.cast(images, tf.float32)
+
+    images = tf.image.random_brightness(images, config.max_brightness_delta)
+    images = tf.image.random_hue(images, config.max_hue_delta)
+
+    if config.min_contrast is not None and config.max_contrast is not None:
+        images = tf.image.random_contrast(
+            images, config.min_contrast, config.max_contrast
+        )
+    if config.min_saturation is not None and config.max_saturation is not None:
+        images = tf.image.random_saturation(
+            images, config.min_saturation, config.max_saturation
+        )
+
+    images = tf.clip_by_value(images, 0.0, 255.0)
+    return tf.cast(images, tf.uint8)
 
 
 def _get_geometric_features(
@@ -230,7 +293,7 @@ def _load_single_image_features(
     *,
     config: ModelConfig,
     include_frame: bool = False,
-    max_jitter_fraction: float = 0.05,
+    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -239,8 +302,7 @@ def _load_single_image_features(
         features: The raw (combined) feature dictionary for one image.
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
-        max_jitter_fraction: The maximum amount of jitter to add to the
-            bounding box coordinates as a fraction of the full image size.
+        augmentation_config: Configuration for data augmentation.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -266,13 +328,15 @@ def _load_single_image_features(
         bbox_coords = _add_bbox_jitter(
             bbox_coords,
             image_shape=tf.shape(image),
-            max_fractional_change=max_jitter_fraction,
+            max_fractional_change=augmentation_config.max_bbox_jitter,
         )
 
         # Extract the detection crops.
         detections = _extract_detection_images(
             bbox_coords=bbox_coords, image=image, config=config
         )
+        # Augment the crops.
+        detections = _augment_images(detections, augmentation_config)
 
         # Compute the geometric features.
         geometric_features = _get_geometric_features(
@@ -631,7 +695,7 @@ def _inputs_and_targets_from_dataset(
     include_frame: bool = False,
     drop_probability: float = 0.0,
     repeats: int = 1,
-    max_jitter_fraction: float = 0.0,
+    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -647,8 +711,7 @@ def _inputs_and_targets_from_dataset(
         drop_probability: Probability to drop a particular example.
         repeats: Number of times to repeat the dataset to make up for dropped
             examples.
-        max_jitter_fraction: The maximum amount of jitter to add to the
-            bounding box coordinates as a fraction of the full image size.
+        augmentation_config: Configuration to use for data augmentation.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -670,7 +733,7 @@ def _inputs_and_targets_from_dataset(
         deserialized,
         config=config,
         include_frame=include_frame,
-        max_jitter_fraction=max_jitter_fraction,
+        augmentation_config=augmentation_config,
     )
     # Break into pairs.
     image_pairs = _window_to_nested(
