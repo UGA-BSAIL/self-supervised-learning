@@ -94,7 +94,9 @@ Number of threads to use for multi-threaded operations.
 """
 
 
-def _get_geometric_features(bbox_coords: tf.Tensor) -> tf.Tensor:
+def _get_geometric_features(
+    bbox_coords: tf.Tensor, *, image_shape: tf.Tensor
+) -> tf.Tensor:
     """
     Converts a batch of bounding boxes from the format in TFRecords to the
     single-tensor geometric feature format.
@@ -102,12 +104,14 @@ def _get_geometric_features(bbox_coords: tf.Tensor) -> tf.Tensor:
     Args:
         bbox_coords: The bounding box coordinates. Should have the shape
             `[N, 4]`, where each row takes the form
-            `[min_y, min_x, max_y, max_x]`.
+            `[min_y, min_x, max_y, max_x]`, in pixels.
+        image_shape: A 1D vector describing the shape of the corresponding
+            image.
 
     Returns:
         A tensor of shape [N, 4], where N is the total number of bounding
-        boxes in the input. The ith row specifies the coordinates of the ith
-        bounding box in the form [center_x, center_y, width, height].
+        boxes in the input. The ith row specifies the normalized coordinates of
+        the ith bounding box in the form [center_x, center_y, width, height].
 
     """
     bbox_coords = tf.ensure_shape(bbox_coords, (None, 4))
@@ -123,7 +127,13 @@ def _get_geometric_features(bbox_coords: tf.Tensor) -> tf.Tensor:
         center_x = x_min + width_x / tf.constant(2.0)
         center_y = y_min + width_y / tf.constant(2.0)
 
-        return tf.stack([center_x, center_y, width_x, width_y], axis=1)
+        geometry = tf.stack([center_x, center_y, width_x, width_y], axis=1)
+
+        # Convert from pixel to normalized coordinates.
+        image_width_height = image_shape[:2][::-1]
+        image_width_height = tf.cast(image_width_height, tf.float32)
+        image_width_height = tf.tile(image_width_height, (2,))
+        return geometry / image_width_height
 
     # Handle the case where we have no detections.
     return tf.cond(
@@ -206,14 +216,16 @@ def _load_single_image_features(
         y_max = feature_dict[Otf.OBJECT_BBOX_Y_MAX.value]
         bbox_coords = tf.stack([y_min, x_min, y_max, x_max], axis=1)
 
-        # Compute the geometric features.
-        geometric_features = _get_geometric_features(bbox_coords)
-
         # Extract the detection crops.
         image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
         image = tf.io.decode_jpeg(image_encoded[0])
         detections = _extract_detection_images(
             bbox_coords=bbox_coords, image=image, config=config
+        )
+
+        # Compute the geometric features.
+        geometric_features = _get_geometric_features(
+            bbox_coords, image_shape=tf.shape(image)
         )
 
         object_ids = feature_dict[Otf.OBJECT_ID.value]
