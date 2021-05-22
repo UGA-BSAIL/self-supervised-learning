@@ -94,6 +94,45 @@ Number of threads to use for multi-threaded operations.
 """
 
 
+def _add_bbox_jitter(
+    bbox_coords: tf.Tensor,
+    *,
+    max_fractional_change: float = 0.05,
+    image_shape: tf.Tensor,
+) -> tf.Tensor:
+    """
+    Adds uniform random jitter to bounding box coordinates.
+
+    Args:
+        bbox_coords: The bounding box coordinates. Should have the shape
+            `[N, 4]`, where each row takes the form
+            `[min_y, min_x, max_y, max_x]`, in pixels.
+        max_fractional_change: The maximum absolute amount that a coordinate
+            can change, as a fraction of the original coordinate value.
+        image_shape: A 1D vector describing the shape of the corresponding
+            image.
+
+    Returns:
+        The bounding box coordinates with jitter.
+
+    """
+    # Calculate maximum change in pixels.
+    image_height_width = tf.cast(image_shape[:2], tf.float32)
+    max_absolute_change = image_height_width * max_fractional_change
+    # Expand it so it aligns with both the corner points.
+    max_absolute_change = tf.tile(max_absolute_change, (2,))
+
+    # Generate random jitters.
+    jitter_magnitude = tf.random.uniform(
+        tf.shape(bbox_coords),
+        minval=-max_absolute_change,
+        maxval=max_absolute_change,
+    )
+
+    # Apply the jitters.
+    return bbox_coords + jitter_magnitude
+
+
 def _get_geometric_features(
     bbox_coords: tf.Tensor, *, image_shape: tf.Tensor
 ) -> tf.Tensor:
@@ -191,6 +230,7 @@ def _load_single_image_features(
     *,
     config: ModelConfig,
     include_frame: bool = False,
+    max_jitter_fraction: float = 0.05,
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -199,6 +239,8 @@ def _load_single_image_features(
         features: The raw (combined) feature dictionary for one image.
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
+        max_jitter_fraction: The maximum amount of jitter to add to the
+            bounding box coordinates as a fraction of the full image size.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -216,9 +258,18 @@ def _load_single_image_features(
         y_max = feature_dict[Otf.OBJECT_BBOX_Y_MAX.value]
         bbox_coords = tf.stack([y_min, x_min, y_max, x_max], axis=1)
 
-        # Extract the detection crops.
+        # Decode the image.
         image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
         image = tf.io.decode_jpeg(image_encoded[0])
+
+        # Add random jitter.
+        bbox_coords = _add_bbox_jitter(
+            bbox_coords,
+            image_shape=tf.shape(image),
+            max_fractional_change=max_jitter_fraction,
+        )
+
+        # Extract the detection crops.
         detections = _extract_detection_images(
             bbox_coords=bbox_coords, image=image, config=config
         )
@@ -580,6 +631,7 @@ def _inputs_and_targets_from_dataset(
     include_frame: bool = False,
     drop_probability: float = 0.0,
     repeats: int = 1,
+    max_jitter_fraction: float = 0.0,
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -595,6 +647,8 @@ def _inputs_and_targets_from_dataset(
         drop_probability: Probability to drop a particular example.
         repeats: Number of times to repeat the dataset to make up for dropped
             examples.
+        max_jitter_fraction: The maximum amount of jitter to add to the
+            bounding box coordinates as a fraction of the full image size.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -613,7 +667,10 @@ def _inputs_and_targets_from_dataset(
 
     # Extract the features.
     single_image_features = _load_single_image_features(
-        deserialized, config=config, include_frame=include_frame
+        deserialized,
+        config=config,
+        include_frame=include_frame,
+        max_jitter_fraction=max_jitter_fraction,
     )
     # Break into pairs.
     image_pairs = _window_to_nested(
@@ -683,11 +740,9 @@ def _batch_and_prefetch(
 def inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
-    config: ModelConfig,
-    include_empty: bool = False,
     include_frame: bool = False,
-    drop_probability: float = 0.0,
-    repeats: int = 1,
+    batch_size: int = 32,
+    num_prefetch_batches: int = 5,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -696,42 +751,34 @@ def inputs_and_targets_from_dataset(
 
     Args:
         raw_dataset: The raw dataset, containing serialized data.
-        config: Model configuration we are loading data for.
-        include_empty: If true, will include examples with no detections
-            or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
-        drop_probability: Probability to drop a particular example.
-        repeats: Number of times to repeat the dataset to make up for dropped
-            examples.
-        kwargs: Will be forwarded to `_batch_and_prefetch`.
+        batch_size: The batch size to use.
+        num_prefetch_batches: The number of batches to prefetch.
+        kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
 
     """
     inputs_and_targets = _inputs_and_targets_from_dataset(
-        raw_dataset,
-        config=config,
-        include_empty=include_empty,
-        include_frame=include_frame,
-        drop_probability=drop_probability,
-        repeats=repeats,
+        raw_dataset, include_frame=include_frame, **kwargs
     )
     return _batch_and_prefetch(
-        inputs_and_targets, include_frame=include_frame, **kwargs
+        inputs_and_targets,
+        include_frame=include_frame,
+        batch_size=batch_size,
+        num_prefetch_batches=num_prefetch_batches,
     )
 
 
 def inputs_and_targets_from_datasets(
     raw_datasets: Iterable[tf.data.Dataset],
     *,
-    config: ModelConfig,
     interleave: bool = True,
-    include_empty: bool = False,
     include_frame: bool = False,
-    drop_probability: float = 0.0,
-    repeats: int = 1,
+    batch_size: int = 32,
+    num_prefetch_batches: int = 5,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -740,18 +787,14 @@ def inputs_and_targets_from_datasets(
 
     Args:
         raw_datasets: The raw datasets to draw from.
-        config: The model configuration to use.
         interleave: Allows frames from multiple datasets to be interleaved
             with each-other if true. Set to false if you want to keep
             individual clips intact.
-        include_empty: If true, will include examples with no detections
-            or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
-        drop_probability: Probability to drop a particular example.
-        repeats: Number of times to repeat the dataset to make up for dropped
-            examples.
-        **kwargs: Will be forwarded to `_batch_and_prefetch`.
+        batch_size: The batch size to use.
+        num_prefetch_batches: The number of batches to prefetch.
+        **kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -762,12 +805,7 @@ def inputs_and_targets_from_datasets(
     for raw_dataset in raw_datasets:
         parsed_datasets.append(
             _inputs_and_targets_from_dataset(
-                raw_dataset,
-                config=config,
-                include_empty=include_empty,
-                include_frame=include_frame,
-                drop_probability=drop_probability,
-                repeats=repeats,
+                raw_dataset, include_frame=include_frame, **kwargs
             )
         )
 
@@ -785,7 +823,10 @@ def inputs_and_targets_from_datasets(
             maybe_interleaved = maybe_interleaved.concatenate(dataset)
 
     return _batch_and_prefetch(
-        maybe_interleaved, include_frame=include_frame, **kwargs
+        maybe_interleaved,
+        include_frame=include_frame,
+        batch_size=batch_size,
+        num_prefetch_batches=num_prefetch_batches,
     )
 
 

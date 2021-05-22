@@ -7,6 +7,10 @@ num_gcn_channels: 128
 # Sinkhorn normalization Lambda value.
 sinkhorn_lambda: 10.0
 
+# Amount of random jitter to add to the bounding boxes when training, as
+# a fraction of the frame size.
+bbox_jitter_fraction: 0.01
+
 # Probability of dropping a particular example to use.
 drop_probability: 0.75
 # Number of times to repeat the dataset to make up for dropped examples.

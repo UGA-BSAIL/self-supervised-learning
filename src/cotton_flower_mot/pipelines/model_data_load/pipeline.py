@@ -43,7 +43,11 @@ def create_pipeline(**kwargs):
             # Load the datasets.
             node(
                 inputs_and_targets_from_datasets,
-                dict(raw_datasets="tfrecord_train", **loading_config),
+                dict(
+                    raw_datasets="tfrecord_train",
+                    max_jitter_fraction="params:bbox_jitter_fraction",
+                    **loading_config
+                ),
                 "training_data",
             ),
             node(
