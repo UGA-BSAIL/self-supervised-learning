@@ -547,7 +547,7 @@ def extract_interaction_features(
     """
     # Extract the appearance features.
     (
-        detection_app_features,
+        detections_app_features,
         tracklets_app_features,
     ) = extract_appearance_features(
         detections=detections, tracklets=tracklets, config=config
@@ -556,37 +556,38 @@ def extract_interaction_features(
     # For the rest of the pipeline, we need a dense representation of the
     # features.
     to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
-    detection_app_features = to_tensor(detection_app_features)
+    detections_app_features = to_tensor(detections_app_features)
     tracklets_app_features = to_tensor(tracklets_app_features)
-    detections_geom_features = to_tensor(detections_geometry)
-    tracklets_geom_features = to_tensor(tracklets_geometry)
-
-    # Create the edge feature extractor.
-    edge_features = _build_edge_mlp(
-        geometric_features=(detections_geom_features, tracklets_geom_features),
-        appearance_features=(detection_app_features, tracklets_app_features),
-    )
-
-    # Create the adjacency matrix and build the GCN.
-    adjacency_matrix = layers.Lambda(
-        lambda f: bound_adjacency(make_adjacency_matrix(f)),
-        name="adjacency_matrix",
-    )(edge_features)
-    # Note that the order of concatenation is important here.
-    combined_app_features = layers.Concatenate(axis=-2)(
-        (tracklets_app_features, detection_app_features)
-    )
-    final_node_features = _build_gnn(
-        adjacency_matrix=adjacency_matrix,
-        node_features=combined_app_features,
-        config=config,
-    )
-
-    # Split back into separate tracklets and detections.
-    max_num_tracklets = tf.shape(tracklets_app_features)[1]
-    tracklets_inter_features = final_node_features[:, :max_num_tracklets, :]
-    detections_inter_features = final_node_features[:, max_num_tracklets:, :]
-    return tracklets_inter_features, detections_inter_features
+    # detections_geom_features = to_tensor(detections_geometry)
+    # tracklets_geom_features = to_tensor(tracklets_geometry)
+    #
+    # # Create the edge feature extractor.
+    # edge_features = _build_edge_mlp(
+    #     geometric_features=(detections_geom_features, tracklets_geom_features),
+    #     appearance_features=(detections_app_features, tracklets_app_features),
+    # )
+    #
+    # # Create the adjacency matrix and build the GCN.
+    # adjacency_matrix = layers.Lambda(
+    #     lambda f: bound_adjacency(make_adjacency_matrix(f)),
+    #     name="adjacency_matrix",
+    # )(edge_features)
+    # # Note that the order of concatenation is important here.
+    # combined_app_features = layers.Concatenate(axis=1)(
+    #     (tracklets_app_features, detections_app_features)
+    # )
+    # final_node_features = _build_gnn(
+    #     adjacency_matrix=adjacency_matrix,
+    #     node_features=combined_app_features,
+    #     config=config,
+    # )
+    #
+    # # Split back into separate tracklets and detections.
+    # max_num_tracklets = tf.shape(tracklets_app_features)[1]
+    # tracklets_inter_features = final_node_features[:, :max_num_tracklets, :]
+    # detections_inter_features = final_node_features[:, max_num_tracklets:, :]
+    # return tracklets_inter_features, detections_inter_features
+    return tracklets_app_features, detections_app_features
 
 
 def compute_association(
