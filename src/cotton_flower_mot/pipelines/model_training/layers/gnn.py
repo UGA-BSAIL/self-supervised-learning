@@ -34,17 +34,13 @@ class _AdjacencyMatrixUpdate(layers.Layer):
             lambda x: augment_adjacency_matrix(
                 adjacency_matrix=tf.expand_dims(x[0], axis=-1),
                 node_features=x[1],
-            )
+            ),
+            name="augment_adjacency",
         )
 
         # The MLP operation over all edges is actually implemented as 1x1
         # convolution for convenience.
         self._conv1_2 = BnReluConv(1, 1, name="edge_conv_1")
-
-        # Normalization operation for the matrix.
-        self._norm1_3 = layers.Lambda(
-            lambda x: bound_adjacency(x), name="normalize_adjacency"
-        )
 
     def call(
         self,
@@ -67,8 +63,7 @@ class _AdjacencyMatrixUpdate(layers.Layer):
         """
         node_features, adjacency_matrix = inputs
         augmented_features = self._aug1_1((adjacency_matrix, node_features))
-        mlp_features = self._conv1_2(augmented_features, training=training)
-        adjacency = self._norm1_3(mlp_features)
+        adjacency = self._conv1_2(augmented_features, training=training)
 
         # Remove the final dimension, which should be one.
         return adjacency[:, :, :, 0]
@@ -79,7 +74,9 @@ class DynamicEdgeGcn(layers.Layer):
     A new GCN layer with a corresponding affinity matrix update,
     in accordance with the method described in
     https://arxiv.org/pdf/2010.00067.pdf. Note that it performs the Laplacian
-    calculation as well as batch normalization and activation internally.
+    calculation as well as batch normalization and activation internally. It
+    will also take care of clipping the adjacency matrix to remove negative
+    values.
 
     """
 
@@ -105,6 +102,10 @@ class DynamicEdgeGcn(layers.Layer):
         self._gcn1_1 = spektral.layers.GCNConv(*args, **kwargs)
 
         self._edges1_1 = _AdjacencyMatrixUpdate()
+        # Normalization operation for the adjacency matrix.
+        self._edge_norm1_1 = layers.Lambda(
+            lambda x: bound_adjacency(x), name="normalize_adjacency"
+        )
 
     def call(
         self,
@@ -135,9 +136,10 @@ class DynamicEdgeGcn(layers.Layer):
         nodes_normalized = self._norm1_1(node_features, training=training)
         nodes_pre_activated = self._relu1_1(nodes_normalized)
 
-        new_nodes = self._gcn1_1(
-            (nodes_pre_activated, self._laplacian1_1(adjacency_matrix))
+        normalized_laplacian = self._laplacian1_1(
+            self._edge_norm1_1(adjacency_matrix)
         )
+        new_nodes = self._gcn1_1((nodes_pre_activated, normalized_laplacian))
 
         new_edges = tf.constant([])
         if not skip_edge_update:
@@ -187,8 +189,8 @@ class ResidualGcn(layers.Layer):
         self._conv1_1 = None
 
         self._gcn1_1 = DynamicEdgeGcn(channels, *args, **kwargs)
-        self._add_nodes = layers.Add()
-        self._add_edges = layers.Add()
+        self._add_nodes = layers.Add(name="add_nodes")
+        self._add_edges = layers.Add(name="add_edges")
 
     def build(
         self, input_shape: Tuple[tf.TensorShape, tf.TensorShape]

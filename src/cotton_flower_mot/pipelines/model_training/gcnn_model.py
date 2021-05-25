@@ -11,11 +11,7 @@ from tensorflow.keras import layers
 
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
-from .graph_utils import (
-    bound_adjacency,
-    compute_bipartite_edge_features,
-    make_adjacency_matrix,
-)
+from .graph_utils import compute_bipartite_edge_features, make_adjacency_matrix
 from .layers import (
     AssociationLayer,
     BnReluConv,
@@ -428,7 +424,7 @@ def extract_interaction_features(
 
     # Create the adjacency matrix and build the GCN.
     adjacency_matrix = layers.Lambda(
-        lambda f: bound_adjacency(make_adjacency_matrix(f)),
+        lambda f: make_adjacency_matrix(f),
         name="adjacency_matrix",
     )(edge_features)
     # Note that the order of concatenation is important here.
