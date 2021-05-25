@@ -1,6 +1,8 @@
 from functools import partial
+from typing import List
 
 from kedro.pipeline import Pipeline, node
+from kedro.pipeline.node import Node
 
 from .nodes import (
     merge_annotations,
@@ -10,25 +12,45 @@ from .nodes import (
     split_clips,
 )
 
+_TASK_IDS = [169, 170, 172, 173, 174, 175]
+"""
+All task IDs of the data we are processing.
+"""
+
+
+def _task_specific_nodes(task_id: int) -> List[Node]:
+    """
+    Creates nodes that are specific to a particular task.
+
+    Args:
+        task_id: The task ID.
+
+    Returns:
+        The list of task-specific nodes.
+
+    """
+    return [
+        node(
+            partial(record_task_id, task_id=task_id),
+            f"annotations_mot_1_1_{task_id}",
+            f"annotations_mot_{task_id}_ex",
+        ),
+    ]
+
 
 def create_pipeline(**kwargs):
+    # Create all the task-specific nodes.
+    task_specific_nodes = []
+    for task_id in _TASK_IDS:
+        task_specific_nodes.extend(_task_specific_nodes(task_id))
+
     return Pipeline(
-        [
-            # Add the task IDs to the annotations.
-            node(
-                partial(record_task_id, task_id=169),
-                "annotations_mot_1_1_169",
-                "annotations_mot_169_ex",
-            ),
-            node(
-                partial(record_task_id, task_id=170),
-                "annotations_mot_1_1_170",
-                "annotations_mot_170_ex",
-            ),
+        task_specific_nodes
+        + [
             # Merge all annotations into one.
             node(
                 merge_annotations,
-                ["annotations_mot_169_ex", "annotations_mot_170_ex"],
+                [f"annotations_mot_{t}_ex" for t in _TASK_IDS],
                 "annotations_mot_merged",
             ),
             node(

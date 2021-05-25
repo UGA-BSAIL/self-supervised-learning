@@ -91,12 +91,10 @@ def test_inputs_and_targets_from_dataset_smoke(
         assert len(frame_shape) == 4
         assert frame_shape[0] == expected_batch_size
 
-    detection_geometry_shape = (
-        inputs[ModelInputs.DETECTION_GEOMETRY.value].bounding_shape().numpy()
-    )
-    tracklet_geometry_shape = (
-        inputs[ModelInputs.TRACKLET_GEOMETRY.value].bounding_shape().numpy()
-    )
+    detection_geometry = inputs[ModelInputs.DETECTION_GEOMETRY.value]
+    tracklet_geometry = inputs[ModelInputs.TRACKLET_GEOMETRY.value]
+    detection_geometry_shape = detection_geometry.bounding_shape().numpy()
+    tracklet_geometry_shape = tracklet_geometry.bounding_shape().numpy()
     assert len(detection_geometry_shape) == len(tracklet_geometry_shape) == 3
     assert (
         detection_geometry_shape[0]
@@ -104,6 +102,12 @@ def test_inputs_and_targets_from_dataset_smoke(
         == expected_batch_size
     )
     assert detection_geometry_shape[2] == tracklet_geometry_shape[2] == 4
+
+    # The geometry should all be normalized.
+    assert np.all(detection_geometry.to_tensor().numpy() >= 0.0)
+    assert np.all(detection_geometry.to_tensor().numpy() <= 1.0)
+    assert np.all(tracklet_geometry.to_tensor().numpy() >= 0.0)
+    assert np.all(tracklet_geometry.to_tensor().numpy() <= 1.0)
 
     # The number of nodes should be consistent.
     assert detections_shape[1] == detection_geometry_shape[1]

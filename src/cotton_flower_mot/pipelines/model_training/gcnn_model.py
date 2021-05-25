@@ -180,9 +180,6 @@ def _build_edge_mlp(
         `[batch_size, n_left_nodes, n_right_nodes, 1]`.
 
     """
-    right_features, left_features = geometric_features
-    num_right_nodes = tf.shape(right_features)[1]
-    num_left_nodes = tf.shape(left_features)[1]
 
     def _combine_input_impl(
         features: Tuple[tf.Tensor, tf.Tensor]
@@ -191,14 +188,19 @@ def _build_edge_mlp(
         input_edge_features = compute_bipartite_edge_features(
             left_nodes=tracklets, right_nodes=detections
         )
+
+        # Concatenate the detection and tracklet features.
+        tracklet_features = input_edge_features[:, :, :, 0, :]
+        detection_features = input_edge_features[:, :, :, 1, :]
+        fused_features = tf.concat(
+            (tracklet_features, detection_features), axis=3
+        )
+
         # We should know this statically.
         num_features = detections.shape[-1]
-        # We need to get rid of the node dimension so we can
-        # feed it into an MLP. We also concatenate the detection and tracklet
-        # features at the same time.
         return tf.ensure_shape(
-            tf.reshape(input_edge_features, (-1, num_features * 2)),
-            (None, num_features * 2),
+            fused_features,
+            (None, None, None, num_features * 2),
         )
 
     geometric_combined = layers.Lambda(
@@ -213,10 +215,7 @@ def _build_edge_mlp(
 
     # Apply the MLP. We need to use a feature size of one for the output,
     # since these values are going directly in the affinity matrix.
-    edge_features = _bn_relu_dense(1)(all_features)
-
-    # Transform back to the expanded shape.
-    return tf.reshape(edge_features, (-1, num_left_nodes, num_right_nodes, 1))
+    return _bn_relu_conv(1, 1)(all_features)
 
 
 def _compute_pairwise_similarities(
@@ -463,9 +462,9 @@ def _build_gnn(
     gcn1_1 = _gcn_block(config.num_gcn_channels)(
         (node_features, adjacency_matrix)
     )
-    gcn1_2 = _gcn_block(config.num_gcn_channels)(gcn1_1)
+    # gcn1_2 = _gcn_block(config.num_gcn_channels)(gcn1_1)
 
-    nodes, _ = gcn1_2
+    nodes, _ = gcn1_1
     return nodes
 
 
@@ -554,7 +553,7 @@ def extract_interaction_features(
     """
     # Extract the appearance features.
     (
-        detection_app_features,
+        detections_app_features,
         tracklets_app_features,
     ) = extract_appearance_features(
         detections=detections, tracklets=tracklets, config=config
@@ -563,7 +562,7 @@ def extract_interaction_features(
     # For the rest of the pipeline, we need a dense representation of the
     # features.
     to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
-    detection_app_features = to_tensor(detection_app_features)
+    detections_app_features = to_tensor(detections_app_features)
     tracklets_app_features = to_tensor(tracklets_app_features)
     detections_geom_features = to_tensor(detections_geometry)
     tracklets_geom_features = to_tensor(tracklets_geometry)
@@ -571,7 +570,7 @@ def extract_interaction_features(
     # Create the edge feature extractor.
     edge_features = _build_edge_mlp(
         geometric_features=(detections_geom_features, tracklets_geom_features),
-        appearance_features=(detection_app_features, tracklets_app_features),
+        appearance_features=(detections_app_features, tracklets_app_features),
     )
 
     # Create the adjacency matrix and build the GCN.
@@ -580,8 +579,8 @@ def extract_interaction_features(
         name="adjacency_matrix",
     )(edge_features)
     # Note that the order of concatenation is important here.
-    combined_app_features = layers.Concatenate(axis=-2)(
-        (tracklets_app_features, detection_app_features)
+    combined_app_features = layers.Concatenate(axis=1)(
+        (tracklets_app_features, detections_app_features)
     )
     final_node_features = _build_gnn(
         adjacency_matrix=adjacency_matrix,

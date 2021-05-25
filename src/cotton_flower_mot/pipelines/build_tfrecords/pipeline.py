@@ -1,23 +1,38 @@
 from kedro.pipeline import Pipeline, node
 
-from .nodes import generate_examples, split_random
+from .nodes import generate_examples, split_specific
 
 
 def create_pipeline(**kwargs):
     return Pipeline(
         [
+            # Split into training, testing, and validation.
             node(
-                split_random,
+                split_specific,
                 dict(
                     annotations="annotations_pandas",
-                    train_fraction="params:train_fraction",
-                    test_fraction="params:test_fraction",
+                    test_clips="params:test_clips",
+                    valid_clips="params:valid_clips",
                 ),
                 [
                     "annotations_tf_train",
                     "annotations_tf_test",
                     "annotations_tf_valid",
                 ],
+            ),
+            # This node is needed so we can pass an iterable of datasets as
+            # input to the next node.
+            node(
+                lambda *args: args,
+                [
+                    "cotton_videos_169",
+                    "cotton_videos_170",
+                    "cotton_videos_172",
+                    "cotton_videos_173",
+                    "cotton_videos_174",
+                    "cotton_videos_175",
+                ],
+                "cotton_videos",
             ),
             # Generate TFRecords from all splits.
             node(
@@ -35,13 +50,6 @@ def create_pipeline(**kwargs):
                     annotations="annotations_tf_valid",
                 ),
                 "tfrecord_valid",
-            ),
-            # This node is needed so we can pass an iterable of datasets as
-            # input to the next node.
-            node(
-                lambda *args: args,
-                ["cotton_videos_169", "cotton_videos_170"],
-                "cotton_videos",
             ),
             node(
                 generate_examples,

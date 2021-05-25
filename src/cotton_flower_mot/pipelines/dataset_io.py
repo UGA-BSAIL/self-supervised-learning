@@ -1,10 +1,11 @@
 import enum
 from functools import partial
 from multiprocessing import cpu_count
-from typing import Any, Dict, Iterable, Tuple, Union
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+from pydantic.dataclasses import dataclass
 
 from .assignment import construct_gt_sinkhorn_matrix
 from .config import ModelConfig
@@ -94,7 +95,110 @@ Number of threads to use for multi-threaded operations.
 """
 
 
-def _get_geometric_features(bbox_coords: tf.Tensor) -> tf.Tensor:
+@dataclass(frozen=True)
+class DataAugmentationConfig:
+    """
+    Configuration to use for data augmentation.
+
+    Attributes:
+        max_bbox_jitter: Maximum amount of jitter to add to the bounding boxes,
+            as a fraction of the frame size.
+        max_brightness_delta: Maximum amount to adjust the brightness by.
+        max_hue_delta: Maximum amount to adjust the hue by.
+
+        min_contrast: Minimum contrast to use.
+        max_contrast: Maximum contrast to use.
+
+        min_saturation: Minimum saturation factor to use.
+        max_saturation: Maximum saturation factor to use.
+    """
+
+    max_bbox_jitter: float = 0.0
+    max_brightness_delta: float = 0.0
+    max_hue_delta: float = 0.0
+
+    min_contrast: Optional[float] = None
+    max_contrast: Optional[float] = None
+
+    min_saturation: Optional[float] = None
+    max_saturation: Optional[float] = None
+
+
+def _add_bbox_jitter(
+    bbox_coords: tf.Tensor,
+    *,
+    max_fractional_change: float = 0.05,
+    image_shape: tf.Tensor,
+) -> tf.Tensor:
+    """
+    Adds uniform random jitter to bounding box coordinates.
+
+    Args:
+        bbox_coords: The bounding box coordinates. Should have the shape
+            `[N, 4]`, where each row takes the form
+            `[min_y, min_x, max_y, max_x]`, in pixels.
+        max_fractional_change: The maximum absolute amount that a coordinate
+            can change, as a fraction of the original coordinate value.
+        image_shape: A 1D vector describing the shape of the corresponding
+            image.
+
+    Returns:
+        The bounding box coordinates with jitter.
+
+    """
+    # Calculate maximum change in pixels.
+    image_height_width = tf.cast(image_shape[:2], tf.float32)
+    max_absolute_change = image_height_width * max_fractional_change
+    # Expand it so it aligns with both the corner points.
+    max_absolute_change = tf.tile(max_absolute_change, (2,))
+
+    # Generate random jitters.
+    jitter_magnitude = tf.random.uniform(
+        tf.shape(bbox_coords),
+        minval=-max_absolute_change,
+        maxval=max_absolute_change,
+    )
+
+    # Apply the jitters.
+    return bbox_coords + jitter_magnitude
+
+
+def _augment_images(
+    images: tf.Tensor, config: DataAugmentationConfig
+) -> tf.Tensor:
+    """
+    Applies data augmentation to images.
+
+    Args:
+        images: The images to augment.
+        config: Configuration for data augmentation.
+
+    Returns:
+        The augmented images.
+
+    """
+    # Convert to floats once so we're not doing many redundant conversions.
+    images = tf.cast(images, tf.float32)
+
+    images = tf.image.random_brightness(images, config.max_brightness_delta)
+    images = tf.image.random_hue(images, config.max_hue_delta)
+
+    if config.min_contrast is not None and config.max_contrast is not None:
+        images = tf.image.random_contrast(
+            images, config.min_contrast, config.max_contrast
+        )
+    if config.min_saturation is not None and config.max_saturation is not None:
+        images = tf.image.random_saturation(
+            images, config.min_saturation, config.max_saturation
+        )
+
+    images = tf.clip_by_value(images, 0.0, 255.0)
+    return tf.cast(images, tf.uint8)
+
+
+def _get_geometric_features(
+    bbox_coords: tf.Tensor, *, image_shape: tf.Tensor
+) -> tf.Tensor:
     """
     Converts a batch of bounding boxes from the format in TFRecords to the
     single-tensor geometric feature format.
@@ -102,12 +206,14 @@ def _get_geometric_features(bbox_coords: tf.Tensor) -> tf.Tensor:
     Args:
         bbox_coords: The bounding box coordinates. Should have the shape
             `[N, 4]`, where each row takes the form
-            `[min_y, min_x, max_y, max_x]`.
+            `[min_y, min_x, max_y, max_x]`, in pixels.
+        image_shape: A 1D vector describing the shape of the corresponding
+            image.
 
     Returns:
         A tensor of shape [N, 4], where N is the total number of bounding
-        boxes in the input. The ith row specifies the coordinates of the ith
-        bounding box in the form [center_x, center_y, width, height].
+        boxes in the input. The ith row specifies the normalized coordinates of
+        the ith bounding box in the form [center_x, center_y, width, height].
 
     """
     bbox_coords = tf.ensure_shape(bbox_coords, (None, 4))
@@ -123,7 +229,13 @@ def _get_geometric_features(bbox_coords: tf.Tensor) -> tf.Tensor:
         center_x = x_min + width_x / tf.constant(2.0)
         center_y = y_min + width_y / tf.constant(2.0)
 
-        return tf.stack([center_x, center_y, width_x, width_y], axis=1)
+        geometry = tf.stack([center_x, center_y, width_x, width_y], axis=1)
+
+        # Convert from pixel to normalized coordinates.
+        image_width_height = image_shape[:2][::-1]
+        image_width_height = tf.cast(image_width_height, tf.float32)
+        image_width_height = tf.tile(image_width_height, (2,))
+        return geometry / image_width_height
 
     # Handle the case where we have no detections.
     return tf.cond(
@@ -181,6 +293,7 @@ def _load_single_image_features(
     *,
     config: ModelConfig,
     include_frame: bool = False,
+    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -189,6 +302,7 @@ def _load_single_image_features(
         features: The raw (combined) feature dictionary for one image.
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
+        augmentation_config: Configuration for data augmentation.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -206,14 +320,27 @@ def _load_single_image_features(
         y_max = feature_dict[Otf.OBJECT_BBOX_Y_MAX.value]
         bbox_coords = tf.stack([y_min, x_min, y_max, x_max], axis=1)
 
-        # Compute the geometric features.
-        geometric_features = _get_geometric_features(bbox_coords)
-
-        # Extract the detection crops.
+        # Decode the image.
         image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
         image = tf.io.decode_jpeg(image_encoded[0])
+
+        # Add random jitter.
+        bbox_coords = _add_bbox_jitter(
+            bbox_coords,
+            image_shape=tf.shape(image),
+            max_fractional_change=augmentation_config.max_bbox_jitter,
+        )
+
+        # Extract the detection crops.
         detections = _extract_detection_images(
             bbox_coords=bbox_coords, image=image, config=config
+        )
+        # Augment the crops.
+        detections = _augment_images(detections, augmentation_config)
+
+        # Compute the geometric features.
+        geometric_features = _get_geometric_features(
+            bbox_coords, image_shape=tf.shape(image)
         )
 
         object_ids = feature_dict[Otf.OBJECT_ID.value]
@@ -568,6 +695,7 @@ def _inputs_and_targets_from_dataset(
     include_frame: bool = False,
     drop_probability: float = 0.0,
     repeats: int = 1,
+    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Deserializes raw data from a `Dataset`, and coerces it into the form used by
@@ -583,6 +711,7 @@ def _inputs_and_targets_from_dataset(
         drop_probability: Probability to drop a particular example.
         repeats: Number of times to repeat the dataset to make up for dropped
             examples.
+        augmentation_config: Configuration to use for data augmentation.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -601,7 +730,10 @@ def _inputs_and_targets_from_dataset(
 
     # Extract the features.
     single_image_features = _load_single_image_features(
-        deserialized, config=config, include_frame=include_frame
+        deserialized,
+        config=config,
+        include_frame=include_frame,
+        augmentation_config=augmentation_config,
     )
     # Break into pairs.
     image_pairs = _window_to_nested(
@@ -671,11 +803,9 @@ def _batch_and_prefetch(
 def inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
-    config: ModelConfig,
-    include_empty: bool = False,
     include_frame: bool = False,
-    drop_probability: float = 0.0,
-    repeats: int = 1,
+    batch_size: int = 32,
+    num_prefetch_batches: int = 5,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -684,42 +814,34 @@ def inputs_and_targets_from_dataset(
 
     Args:
         raw_dataset: The raw dataset, containing serialized data.
-        config: Model configuration we are loading data for.
-        include_empty: If true, will include examples with no detections
-            or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
-        drop_probability: Probability to drop a particular example.
-        repeats: Number of times to repeat the dataset to make up for dropped
-            examples.
-        kwargs: Will be forwarded to `_batch_and_prefetch`.
+        batch_size: The batch size to use.
+        num_prefetch_batches: The number of batches to prefetch.
+        kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
 
     """
     inputs_and_targets = _inputs_and_targets_from_dataset(
-        raw_dataset,
-        config=config,
-        include_empty=include_empty,
-        include_frame=include_frame,
-        drop_probability=drop_probability,
-        repeats=repeats,
+        raw_dataset, include_frame=include_frame, **kwargs
     )
     return _batch_and_prefetch(
-        inputs_and_targets, include_frame=include_frame, **kwargs
+        inputs_and_targets,
+        include_frame=include_frame,
+        batch_size=batch_size,
+        num_prefetch_batches=num_prefetch_batches,
     )
 
 
 def inputs_and_targets_from_datasets(
     raw_datasets: Iterable[tf.data.Dataset],
     *,
-    config: ModelConfig,
     interleave: bool = True,
-    include_empty: bool = False,
     include_frame: bool = False,
-    drop_probability: float = 0.0,
-    repeats: int = 1,
+    batch_size: int = 32,
+    num_prefetch_batches: int = 5,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -728,18 +850,14 @@ def inputs_and_targets_from_datasets(
 
     Args:
         raw_datasets: The raw datasets to draw from.
-        config: The model configuration to use.
         interleave: Allows frames from multiple datasets to be interleaved
             with each-other if true. Set to false if you want to keep
             individual clips intact.
-        include_empty: If true, will include examples with no detections
-            or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
-        drop_probability: Probability to drop a particular example.
-        repeats: Number of times to repeat the dataset to make up for dropped
-            examples.
-        **kwargs: Will be forwarded to `_batch_and_prefetch`.
+        batch_size: The batch size to use.
+        num_prefetch_batches: The number of batches to prefetch.
+        **kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
 
     Returns:
         A dataset that produces input images and target bounding boxes.
@@ -750,12 +868,7 @@ def inputs_and_targets_from_datasets(
     for raw_dataset in raw_datasets:
         parsed_datasets.append(
             _inputs_and_targets_from_dataset(
-                raw_dataset,
-                config=config,
-                include_empty=include_empty,
-                include_frame=include_frame,
-                drop_probability=drop_probability,
-                repeats=repeats,
+                raw_dataset, include_frame=include_frame, **kwargs
             )
         )
 
@@ -773,7 +886,10 @@ def inputs_and_targets_from_datasets(
             maybe_interleaved = maybe_interleaved.concatenate(dataset)
 
     return _batch_and_prefetch(
-        maybe_interleaved, include_frame=include_frame, **kwargs
+        maybe_interleaved,
+        include_frame=include_frame,
+        batch_size=batch_size,
+        num_prefetch_batches=num_prefetch_batches,
     )
 
 
