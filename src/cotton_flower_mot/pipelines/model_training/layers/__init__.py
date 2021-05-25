@@ -7,7 +7,7 @@ from kedro.extras.datasets.tensorflow import TensorFlowModelDataset
 
 from .association import AssociationLayer
 from .dense import DenseBlock, TransitionLayer
-from .gnn import DynamicEdgeGcn
+from .gnn import DynamicEdgeGcn, ResidualGcn
 from .mlp_conv import MlpConv
 from .utility import BnReluConv, BnReluDense
 
@@ -23,5 +23,6 @@ TensorFlowModelDataset.DEFAULT_LOAD_ARGS["custom_objects"].update(
         "BnReluConv": BnReluConv,
         "BnReluDense": BnReluDense,
         "DynamicEdgeGcn": DynamicEdgeGcn,
+        "ResidualGcn": ResidualGcn,
     }
 )
