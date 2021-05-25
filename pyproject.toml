@@ -7,7 +7,6 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "~3.8"
-# Using a release candidate here for better RaggedTensor support in Keras.
 tensorflow = "~2.4.0"
 kedro = {extras = ["matplotlib", "pandas"], version = "^0.17.1"}
 pycvat = {git = "git@github.com:UGA-BSAIL/pycvat.git", rev = "a7a0d510"}

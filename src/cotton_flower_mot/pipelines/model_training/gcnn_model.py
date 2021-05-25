@@ -3,9 +3,8 @@ Implements a model inspired by GCNNTrack.
 https://arxiv.org/pdf/2010.00067.pdf
 """
 
-from typing import Any, Callable, Tuple
+from typing import Callable, Tuple
 
-import spektral
 import tensorflow as tf
 from loguru import logger
 from tensorflow.keras import layers
@@ -13,70 +12,23 @@ from tensorflow.keras import layers
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
 from .graph_utils import (
-    augment_adjacency_matrix,
     bound_adjacency,
     compute_bipartite_edge_features,
-    gcn_filter,
     make_adjacency_matrix,
 )
-from .layers.association import AssociationLayer
-from .layers.dense import DenseBlock, TransitionLayer
+from .layers import (
+    AssociationLayer,
+    BnReluConv,
+    DenseBlock,
+    DynamicEdgeGcn,
+    TransitionLayer,
+)
 from .similarity_utils import (
     aspect_ratio_penalty,
     compute_ious,
     cosine_similarity,
     distance_penalty,
 )
-
-
-def _bn_relu_conv(
-    *args: Any, **kwargs: Any
-) -> Callable[[tf.Tensor], tf.Tensor]:
-    """
-    Small helper function that builds a bn-relu-conv block.
-
-    Args:
-        *args: Forwarded to `Conv2D()`.
-        **kwargs: Forwarded to `Conv2D()`.
-
-    Returns:
-        The block, which can be called to apply it to some input, similar to
-        a Keras layer.
-
-    """
-    conv = layers.Conv2D(*args, **kwargs)
-    norm = layers.BatchNormalization()
-    relu = layers.Activation("relu")
-
-    def _apply_block(block_input: tf.Tensor) -> tf.Tensor:
-        return conv(relu(norm(block_input)))
-
-    return _apply_block
-
-
-def _bn_relu_dense(
-    *args: Any, **kwargs: Any
-) -> Callable[[tf.Tensor], tf.Tensor]:
-    """
-    Small helper function that builds a bn-relu-dense block.
-
-    Args:
-        *args: Forwarded to `Dense()`.
-        **kwargs: Forwarded to `Dense()`.
-
-    Returns:
-        The block, which can be called to apply it to some input, similar to
-        a Keras layer.
-
-    """
-    dense = layers.Dense(*args, **kwargs)
-    norm = layers.BatchNormalization()
-    relu = layers.Activation("relu")
-
-    def _apply_block(block_input: tf.Tensor) -> tf.Tensor:
-        return dense(relu(norm(block_input)))
-
-    return _apply_block
 
 
 def _build_appearance_feature_extractor(
@@ -99,8 +51,8 @@ def _build_appearance_feature_extractor(
     )
 
     # Input convolution layers.
-    conv1_1 = _bn_relu_conv(48, 3, padding="same")(normalized_input)
-    conv1_2 = _bn_relu_conv(48, 3, padding="same")(conv1_1)
+    conv1_1 = BnReluConv(48, 3, padding="same")(normalized_input)
+    conv1_2 = BnReluConv(48, 3, padding="same")(conv1_1)
     pool1 = layers.MaxPool2D()(conv1_2)
 
     # Dense blocks.
@@ -116,10 +68,10 @@ def _build_appearance_feature_extractor(
     dense4 = DenseBlock(24, growth_rate=16)(transition3)
 
     # Generate feature vector.
-    conv5_1 = _bn_relu_conv(config.num_appearance_features, 1, padding="same")(
+    conv5_1 = BnReluConv(config.num_appearance_features, 1, padding="same")(
         dense4
     )
-    conv5_2 = _bn_relu_conv(config.num_appearance_features, 1, padding="same")(
+    conv5_2 = BnReluConv(config.num_appearance_features, 1, padding="same")(
         conv5_1
     )
     pool5_1 = layers.GlobalAvgPool2D()(conv5_2)
@@ -215,7 +167,7 @@ def _build_edge_mlp(
 
     # Apply the MLP. We need to use a feature size of one for the output,
     # since these values are going directly in the affinity matrix.
-    return _bn_relu_conv(1, 1)(all_features)
+    return BnReluConv(1, 1)(all_features)
 
 
 def _compute_pairwise_similarities(
@@ -326,113 +278,12 @@ def _build_affinity_mlp(
 
     # Apply the MLP. 1x1 convolution is an efficient way to apply the same MLP
     # to every detection/tracklet pair.
-    conv1_1 = _bn_relu_conv(128, 1, name="affinity_conv_1")(similarity_input)
-    conv1_2 = _bn_relu_conv(128, 1, name="affinity_conv_2")(conv1_1)
-    conv1_3 = _bn_relu_conv(1, 1, name="affinity_conv_3")(conv1_2)
+    conv1_1 = BnReluConv(128, 1, name="affinity_conv_1")(similarity_input)
+    conv1_2 = BnReluConv(128, 1, name="affinity_conv_2")(conv1_1)
+    conv1_3 = BnReluConv(1, 1, name="affinity_conv_3")(conv1_2)
 
     # Remove the extraneous 1 dimension.
     return conv1_3[:, :, :, 0]
-
-
-def _update_adjacency_matrix() -> Callable[
-    [Tuple[tf.Tensor, tf.Tensor]], tf.Tensor
-]:
-    """
-    Updates the adjacency matrix for the next layer according to the method
-    specified in https://arxiv.org/pdf/2010.00067.pdf.
-
-    Returns:
-        A function returning the adjacency matrix for the next layer.
-
-    """
-    # Combine the affinity matrix with node features.
-    aug1_1 = layers.Lambda(
-        lambda x: augment_adjacency_matrix(
-            adjacency_matrix=tf.expand_dims(x[0], axis=-1), node_features=x[1]
-        )
-    )
-
-    # The MLP operation over all edges is actually implemented as 1x1
-    # convolution for convenience.
-    conv1_2 = _bn_relu_conv(128, 1, name="edge_conv_1")
-    conv1_3 = _bn_relu_conv(128, 1, name="edge_conv_2")
-    conv1_4 = _bn_relu_conv(1, 1, name="edge_conv_3")
-
-    # Normalization operation for the matrix.
-    norm1_3 = layers.Lambda(
-        lambda x: bound_adjacency(x), name="normalize_adjacency"
-    )
-
-    def _apply_block(inputs: Tuple[tf.Tensor, tf.Tensor]) -> tf.Tensor:
-        """
-        Args:
-            inputs: Inputs for this operation, including:
-            - node_features: The node features from the previous layer. Should
-                have the shape `[batch_size, n_nodes, n_features]`.
-            - adjacency_matrix: The adjacency matrix from the previous layer.
-                Should have the shape `[batch_size, n_nodes, n_nodes]`.
-
-        Returns:
-            The adjacency matrix for the next layer.
-
-        """
-        node_features, adjacency_matrix = inputs
-        augmented_features = aug1_1((adjacency_matrix, node_features))
-        mlp_features = conv1_4(conv1_3(conv1_2(augmented_features)))
-        adjacency = norm1_3(mlp_features)
-        # Remove the final dimension, which should be one.
-        return adjacency[:, :, :, 0]
-
-    return _apply_block
-
-
-def _gcn_block(
-    *args: Any, **kwargs: Any
-) -> Callable[[Tuple[tf.Tensor, tf.Tensor]], Tuple[tf.Tensor, tf.Tensor]]:
-    """
-    Creates a new GCN layer with a corresponding affinity matrix update,
-    in accordance with the method described in
-    https://arxiv.org/pdf/2010.00067.pdf
-
-    Args:
-        *args: Will be forwarded to the `GCNConv` layer.
-        **kwargs: Will be forwarded to the `GCNConv` layer.
-
-    Returns:
-        A function taking the same inputs as `GCNConv`. As output, it returns
-        both the new node features and the new adjacency matrix.
-
-    """
-    # Compute the next node features.
-    laplacian1_1 = layers.Lambda(gcn_filter)
-    gcn1_1 = spektral.layers.GCNConv(*args, **kwargs)
-    norm1_1 = layers.BatchNormalization()
-
-    # Compute the next edge features.
-    edges1_1 = _update_adjacency_matrix()
-
-    def _apply_block(
-        inputs: Tuple[tf.Tensor, tf.Tensor]
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
-        """
-        Args:
-            inputs: Inputs for this operation, including:
-            - node_features: The node features from the previous layer. Should
-                have the shape `[batch_size, n_nodes, n_features]`.
-            - adjacency_matrix: The adjacency matrix from the previous layer.
-                Should have the shape `[batch_size, n_nodes, n_nodes, 1]`.
-
-        Returns:
-            The new node features and the new adjacency matrix.
-
-        """
-        node_features, adjacency_matrix = inputs
-        new_nodes = norm1_1(
-            gcn1_1((node_features, laplacian1_1(adjacency_matrix)))
-        )
-        return new_nodes, edges1_1((new_nodes, adjacency_matrix))
-
-    return _apply_block
 
 
 def _build_gnn(
@@ -459,12 +310,14 @@ def _build_gnn(
     # Remove the final dimension from the adjacency matrix, since it's just 1.
     adjacency_matrix = adjacency_matrix[:, :, :, 0]
 
-    gcn1_1 = _gcn_block(config.num_gcn_channels)(
+    gcn1_1 = DynamicEdgeGcn(config.num_gcn_channels)(
         (node_features, adjacency_matrix)
     )
-    # gcn1_2 = _gcn_block(config.num_gcn_channels)(gcn1_1)
+    gcn1_2 = DynamicEdgeGcn(config.num_gcn_channels)(
+        gcn1_1, skip_edge_update=True
+    )
 
-    nodes, _ = gcn1_1
+    nodes, _ = gcn1_2
     return nodes
 
 
