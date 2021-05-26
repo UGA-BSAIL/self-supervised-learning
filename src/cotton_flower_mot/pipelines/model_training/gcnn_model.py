@@ -72,7 +72,6 @@ def _build_appearance_feature_extractor(
     )
     pool5_1 = layers.GlobalAvgPool2D()(conv5_2)
 
-    # Fully-connected layer to generate feature vector.
     return pool5_1
 
 
@@ -200,14 +199,16 @@ def _compute_pairwise_similarities(
     combinations_outer_shape = combinations_shape[:3]
     num_features = combinations_shape[-1]
 
-    # Reshape so we can compute IOUs in one pass.
+    # Reshape so we can compute similarities in one pass.
     flat_shape = tf.stack((-1, 2, num_features), axis=0)
     combinations = tf.reshape(combinations, flat_shape)
-    tracklet_boxes = combinations[:, 0, :]
-    detection_boxes = combinations[:, 1, :]
+    tracklet_features_flat = combinations[:, 0, :]
+    detection_features_flat = combinations[:, 1, :]
 
     # Compute similarities.
-    similarities = similarity_function(tracklet_boxes, detection_boxes)
+    similarities = similarity_function(
+        tracklet_features_flat, detection_features_flat
+    )
 
     # Add the other dimensions back.
     return tf.reshape(similarities, combinations_outer_shape)
@@ -229,9 +230,9 @@ def _build_affinity_mlp(
         tracklet_geom_features: The padded tracklet geometry features,
             with shape `[batch_size, max_n_tracklets, 4]`.
         detection_inter_features: The padded detection interaction features,
-            with shape `[batch_size, max_n_detections, 4]`.
+            with shape `[batch_size, max_n_detections, num_features]`.
         tracklet_inter_features: The padded tracklet interaction features,
-            with shape `[batch_size, max_n_tracklets, 4]`.
+            with shape `[batch_size, max_n_tracklets, num_features]`.
 
     Returns:
         The final affinity scores between each pair of tracklet and detections.

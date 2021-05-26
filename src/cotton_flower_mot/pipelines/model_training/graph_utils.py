@@ -256,8 +256,7 @@ def bound_adjacency(adjacency_matrix: tf.Tensor) -> tf.Tensor:
             `[batch_size, n_nodes, n_nodes, n_features]`.
 
     Returns:
-        The same adjacency matrix, but with the last three dimensions
-        normalized.
+        The same adjacency matrix, but bounded.
 
     """
-    return tf.maximum(adjacency_matrix, 0.0)
+    return tf.square(adjacency_matrix)
