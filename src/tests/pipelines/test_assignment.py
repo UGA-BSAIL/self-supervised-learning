@@ -138,8 +138,9 @@ def test_solve_optimal_transport_deserts(snapshot: Snapshot) -> None:
             [26, 25, 24],
             np.array([[0, 0, 1], [0, 1, 0], [1, 0, 0]]),
         ),
+        ([1, 0, 2], [4, 3, 5], np.zeros((3, 3))),
     ],
-    ids=["nominal", "empty", "no_births_or_deaths"],
+    ids=["nominal", "empty", "no_births_or_deaths", "no_overlap"],
 )
 def test_construct_gt_sinkhorn_matrix(
     detection_ids: Iterable[int],
