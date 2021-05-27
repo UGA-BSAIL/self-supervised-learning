@@ -114,11 +114,17 @@ def test_extract_interaction_features_smoke(faker: Faker) -> None:
     tracklet_geometry_input = tf.keras.Input(geom_input_shape, ragged=True)
 
     (
+        detection_app_features,
+        tracklet_app_features,
+    ) = gcnn_model.extract_dense_appearance_features(
+        detections=detection_input, tracklets=tracklet_input, config=config
+    )
+    (
         tracklet_inter_features,
         detection_inter_features,
     ) = gcnn_model.extract_interaction_features(
-        detections=detection_input,
-        tracklets=tracklet_input,
+        detections_app_features=detection_app_features,
+        tracklets_app_features=tracklet_app_features,
         detections_geometry=detection_geometry_input,
         tracklets_geometry=tracklet_geometry_input,
         config=config,

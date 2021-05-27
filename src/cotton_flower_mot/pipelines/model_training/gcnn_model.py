@@ -220,6 +220,8 @@ def _build_affinity_mlp(
     tracklet_geom_features: tf.Tensor,
     detection_inter_features: tf.Tensor,
     tracklet_inter_features: tf.Tensor,
+    detection_app_features: tf.Tensor,
+    tracklet_app_features: tf.Tensor,
 ) -> tf.Tensor:
     """
     Builds the MLP that computes the affinity score between two nodes.
@@ -232,6 +234,10 @@ def _build_affinity_mlp(
         detection_inter_features: The padded detection interaction features,
             with shape `[batch_size, max_n_detections, num_features]`.
         tracklet_inter_features: The padded tracklet interaction features,
+            with shape `[batch_size, max_n_tracklets, num_features]`.
+        detection_app_features: The padded detection appearance features,
+            with shape `[batch_size, max_n_detections, num_features]`.
+        tracklet_app_features: The padded tracklet appearance features,
             with shape `[batch_size, max_n_tracklets, num_features]`.
 
     Returns:
@@ -260,18 +266,27 @@ def _build_affinity_mlp(
         ),
         name="aspect_ratio_penalty",
     )((tracklet_geom_features, detection_geom_features))
-    cosine = layers.Lambda(
+    interaction_cosine = layers.Lambda(
         lambda f: _compute_pairwise_similarities(
             cosine_similarity, tracklet_features=f[0], detection_features=f[1]
         ),
-        name="cosine_similarity",
+        name="interaction_cosine_similarity",
     )((tracklet_inter_features, detection_inter_features))
+    appearance_cosine = layers.Lambda(
+        lambda f: _compute_pairwise_similarities(
+            cosine_similarity, tracklet_features=f[0], detection_features=f[1]
+        ),
+        name="appearance_cosine_similarity",
+    )((tracklet_app_features, detection_app_features))
 
     # Concatenate into our input.
-    similarity_input = tf.stack((iou, distance, aspect_ratio, cosine), axis=-1)
+    similarity_input = tf.stack(
+        (iou, distance, aspect_ratio, interaction_cosine, appearance_cosine),
+        axis=-1,
+    )
     # Make sure the channels dimension is defined statically so Keras layers
     # work.
-    similarity_input = tf.ensure_shape(similarity_input, (None, None, None, 4))
+    similarity_input = tf.ensure_shape(similarity_input, (None, None, None, 5))
 
     # Apply the MLP. 1x1 convolution is an efficient way to apply the same MLP
     # to every detection/tracklet pair.
@@ -365,16 +380,15 @@ def extract_appearance_features(
     return detections_features_ragged, tracklets_features_ragged
 
 
-def extract_interaction_features(
+def extract_dense_appearance_features(
     *,
     detections: tf.RaggedTensor,
     tracklets: tf.RaggedTensor,
-    detections_geometry: tf.RaggedTensor,
-    tracklets_geometry: tf.RaggedTensor,
     config: ModelConfig,
 ) -> Tuple[tf.Tensor, tf.Tensor]:
     """
-    Builds the portion of the system that extracts interaction features.
+    Builds the portion of the system that extracts appearance features, and
+    produces features that are padded into a tensor.
 
     Args:
         detections: Extracted detection images. Should have the shape
@@ -383,6 +397,47 @@ def extract_interaction_features(
         tracklets: Extracted final images from each tracklet. Should have the
             shape `[batch_size, n_tracklets, height, width, channels]`, where
             the second dimension is ragged.
+        config: The model configuration.
+
+    Returns:
+        The extracted appearance features, for both the detections and
+        tracklets. Each set will have the shape
+        `[batch_size, max_num_nodes, n_features]`, where the second dimension is
+        padded.
+
+    """
+    # Extract the appearance features.
+    (
+        detections_app_features,
+        tracklets_app_features,
+    ) = extract_appearance_features(
+        detections=detections, tracklets=tracklets, config=config
+    )
+
+    # Pad them to dense tensors.
+    to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
+    detections_app_features = to_tensor(detections_app_features)
+    tracklets_app_features = to_tensor(tracklets_app_features)
+
+    return detections_app_features, tracklets_app_features
+
+
+def extract_interaction_features(
+    *,
+    detections_app_features: tf.Tensor,
+    tracklets_app_features: tf.Tensor,
+    detections_geometry: tf.RaggedTensor,
+    tracklets_geometry: tf.RaggedTensor,
+    config: ModelConfig,
+) -> Tuple[tf.Tensor, tf.Tensor]:
+    """
+    Builds the portion of the system that extracts interaction features.
+
+    Args:
+        detections_app_features: Padded detection appearance features, with
+            shape `[batch_size, max_num_detections, num_features]`.
+        tracklets_app_features: Padded tracklet appearance features, with shape
+            `[batch_size, max_num_tracklets, num_features]`.
         detections_geometry: The geometric features associated with the
             detections. Should have the shape
             `[batch_size, n_detections, n_features]`, where the second dimension
@@ -401,19 +456,9 @@ def extract_interaction_features(
         right nodes to detections.
 
     """
-    # Extract the appearance features.
-    (
-        detections_app_features,
-        tracklets_app_features,
-    ) = extract_appearance_features(
-        detections=detections, tracklets=tracklets, config=config
-    )
-
     # For the rest of the pipeline, we need a dense representation of the
     # features.
     to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
-    detections_app_features = to_tensor(detections_app_features)
-    tracklets_app_features = to_tensor(tracklets_app_features)
     detections_geom_features = to_tensor(detections_geometry)
     tracklets_geom_features = to_tensor(tracklets_geometry)
 
@@ -482,13 +527,20 @@ def compute_association(
         Hungarian algorithm.
 
     """
+    # Extract appearance features.
+    (
+        detections_app_features,
+        tracklets_app_features,
+    ) = extract_dense_appearance_features(
+        detections=detections, tracklets=tracklets, config=config
+    )
     # Extract interaction features.
     (
         tracklets_inter_features,
         detections_inter_features,
     ) = extract_interaction_features(
-        detections=detections,
-        tracklets=tracklets,
+        detections_app_features=detections_app_features,
+        tracklets_app_features=tracklets_app_features,
         detections_geometry=detections_geometry,
         tracklets_geometry=tracklets_geometry,
         config=config,
@@ -504,6 +556,8 @@ def compute_association(
         tracklet_geom_features=tracklets_geom_features,
         detection_inter_features=detections_inter_features,
         tracklet_inter_features=tracklets_inter_features,
+        detection_app_features=detections_app_features,
+        tracklet_app_features=tracklets_app_features,
     )
 
     # Compute the association matrices.
