@@ -11,7 +11,7 @@ from loguru import logger
 from tensorflow.keras import layers
 
 from ..graph_utils import augment_adjacency_matrix, bound_adjacency, gcn_filter
-from .utility import BnReluConv
+from .utility import BnActConv
 
 
 class _AdjacencyMatrixUpdate(layers.Layer):
@@ -40,7 +40,7 @@ class _AdjacencyMatrixUpdate(layers.Layer):
 
         # The MLP operation over all edges is actually implemented as 1x1
         # convolution for convenience.
-        self._conv1_2 = BnReluConv(1, 1, name="edge_conv_1")
+        self._conv1_2 = BnActConv(1, 1, name="edge_conv_1")
 
     def call(
         self,
@@ -200,8 +200,9 @@ class ResidualGcn(layers.Layer):
         num_input_channels = node_shape[-1]
         if num_input_channels != self._num_channels:
             logger.debug(
-                "Adding extra convolution to residual layer to "
+                "Adding extra convolution to {} to "
                 "convert from {} channels to {}.",
+                self.name,
                 num_input_channels,
                 self._num_channels,
             )

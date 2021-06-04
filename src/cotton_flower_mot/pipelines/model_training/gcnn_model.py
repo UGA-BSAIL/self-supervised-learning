@@ -14,8 +14,8 @@ from ..schemas import ModelInputs, ModelTargets
 from .graph_utils import compute_bipartite_edge_features, make_adjacency_matrix
 from .layers import (
     AssociationLayer,
-    BnReluConv,
-    DenseBlock,
+    BnActConv,
+    HdaStage,
     ResidualGcn,
     TransitionLayer,
 )
@@ -46,28 +46,32 @@ def _build_appearance_feature_extractor(
         config.num_appearance_features,
     )
 
-    # Input convolution layers.
-    conv1_1 = BnReluConv(48, 3, padding="same")(normalized_input)
-    conv1_2 = BnReluConv(48, 3, padding="same")(conv1_1)
-    pool1 = layers.MaxPool2D()(conv1_2)
+    stage1 = HdaStage(
+        agg_depth=1, num_channels=64, activation="relu", name="hda_stage_3"
+    )
+    stage2 = HdaStage(
+        agg_depth=2, num_channels=128, activation="relu", name="hda_stage_4"
+    )
+    stage3 = HdaStage(
+        agg_depth=2, num_channels=256, activation="relu", name="hda_stage_5"
+    )
+    stage4 = HdaStage(
+        agg_depth=1, num_channels=512, activation="relu", name="hda_stage_6"
+    )
 
-    # Dense blocks.
-    dense1 = DenseBlock(16, growth_rate=16)(pool1)
-    transition1 = TransitionLayer()(dense1)
-
-    dense2 = DenseBlock(24, growth_rate=16)(transition1)
-    transition2 = TransitionLayer()(dense2)
-
-    dense3 = DenseBlock(32, growth_rate=16)(transition2)
-    transition3 = TransitionLayer()(dense3)
-
-    dense4 = DenseBlock(24, growth_rate=16)(transition3)
+    hda1 = stage1(normalized_input)
+    transition1 = TransitionLayer()(hda1)
+    hda2 = stage2(transition1)
+    transition2 = TransitionLayer()(hda2)
+    hda3 = stage3(transition2)
+    transition3 = TransitionLayer()(hda3)
+    hda4 = stage4(transition3)
 
     # Generate feature vector.
-    conv5_1 = BnReluConv(config.num_appearance_features, 1, padding="same")(
-        dense4
+    conv5_1 = BnActConv(config.num_appearance_features, 1, padding="same")(
+        hda4
     )
-    conv5_2 = BnReluConv(config.num_appearance_features, 1, padding="same")(
+    conv5_2 = BnActConv(config.num_appearance_features, 1, padding="same")(
         conv5_1
     )
     pool5_1 = layers.GlobalAvgPool2D()(conv5_2)
@@ -103,7 +107,9 @@ def _build_appearance_model(*, config: ModelConfig) -> tf.keras.Model:
     features = _build_appearance_feature_extractor(normalized, config=config)
 
     # Create the model.
-    return tf.keras.Model(inputs=images, outputs=features)
+    return tf.keras.Model(
+        inputs=images, outputs=features, name="appearance_model"
+    )
 
 
 def _build_edge_mlp(
@@ -162,7 +168,7 @@ def _build_edge_mlp(
 
     # Apply the MLP. We need to use a feature size of one for the output,
     # since these values are going directly in the affinity matrix.
-    return BnReluConv(1, 1)(all_features)
+    return BnActConv(1, 1)(all_features)
 
 
 def _compute_pairwise_similarities(
@@ -290,9 +296,9 @@ def _build_affinity_mlp(
 
     # Apply the MLP. 1x1 convolution is an efficient way to apply the same MLP
     # to every detection/tracklet pair.
-    conv1_1 = BnReluConv(128, 1, name="affinity_conv_1")(similarity_input)
-    conv1_2 = BnReluConv(128, 1, name="affinity_conv_2")(conv1_1)
-    conv1_3 = BnReluConv(1, 1, name="affinity_conv_3")(conv1_2)
+    conv1_1 = BnActConv(128, 1, name="affinity_conv_1")(similarity_input)
+    conv1_2 = BnActConv(128, 1, name="affinity_conv_2")(conv1_1)
+    conv1_3 = BnActConv(1, 1, name="affinity_conv_3")(conv1_2)
 
     # Remove the extraneous 1 dimension.
     return conv1_3[:, :, :, 0]
@@ -632,4 +638,5 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
             ModelTargets.SINKHORN.value: sinkhorn,
             ModelTargets.ASSIGNMENT.value: assignment,
         },
+        name="gcnnmatch",
     )
