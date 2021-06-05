@@ -3,13 +3,15 @@ Tests for the `gcnn_model` module.
 """
 
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 import tensorflow as tf
 from faker import Faker
 
 from src.cotton_flower_mot.pipelines.model_training import gcnn_model
-from src.cotton_flower_mot.pipelines.schemas import ModelInputs, ModelTargets
+from src.cotton_flower_mot.pipelines.model_training.layers import CUSTOM_LAYERS
 
 
 @pytest.mark.integration
@@ -239,52 +241,33 @@ def test_compute_association_smoke(faker: Faker) -> None:
     )
 
 
-@pytest.mark.skip
-def test_model_empty_tracklets(faker: Faker) -> None:
+@pytest.mark.integration
+@pytest.mark.slow
+def test_save_model_smoke(faker: Faker, tmp_path: Path) -> None:
     """
-    Tests that the model works when we have no tracklets.
+    Tests that a model can correctly be created, saved, and loaded.
 
     Args:
         faker: The fixture to use for generating fake data.
+        tmp_path: The path to the temporary directory to use for this test.
 
     """
     # Arrange.
-    image_shape = (100, 100, 3)
-    batch_size = faker.random_int(min=1, max=16)
-    detections = faker.detected_objects(
-        image_shape=image_shape, batch_size=batch_size
-    )
-    # Create fake geometry features.
-    detections_geometry = faker.ragged_tensor(
-        row_lengths=detections.row_lengths(), inner_shape=(4,)
-    )
-
-    # Create empty tracklet features.
-    tracklets = tf.zeros((batch_size, 0) + image_shape)
-    tracklets_geometry = tf.zeros((batch_size, 0, 4))
-
-    config = faker.model_config(image_shape=image_shape)
-
     # Create the model.
+    config = faker.model_config(image_shape=(100, 100, 3))
     model = gcnn_model.build_model(config)
 
+    save_path = tmp_path / "test_model.h5"
+
     # Act.
-    model_outputs = model.predict(
-        {
-            ModelInputs.TRACKLETS.value: tracklets,
-            ModelInputs.TRACKLET_GEOMETRY.value: tracklets_geometry,
-            ModelInputs.DETECTIONS.value: detections,
-            ModelInputs.DETECTION_GEOMETRY.value: detections_geometry,
-        }
+    # Save and load the model.
+    model.save(save_path, save_format="h5")
+    loaded_model = tf.keras.models.load_model(
+        save_path, custom_objects=CUSTOM_LAYERS
     )
 
     # Assert.
-    # The outputs should be the right shape.
-    sinkhorn_shape = model_outputs[
-        ModelTargets.SINKHORN.value
-    ].bounding_shape()
-    assignment_shape = model_outputs[
-        ModelTargets.ASSIGNMENT.value
-    ].bounding_shape()
-
-    assert sinkhorn_shape[0] == assignment_shape[0] == batch_size
+    for weights, loaded_weights in zip(
+        model.get_weights(), loaded_model.get_weights()
+    ):
+        np.testing.assert_array_equal(weights, loaded_weights)

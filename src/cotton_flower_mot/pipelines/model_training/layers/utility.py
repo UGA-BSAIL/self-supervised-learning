@@ -19,6 +19,7 @@ class _BnActLayer(layers.Layer):
         *args: Any,
         layer: Type[layers.Layer],
         activation: Optional[str] = "relu",
+        name: Optional[str] = None,
         **kwargs: Any
     ):
         """
@@ -26,9 +27,10 @@ class _BnActLayer(layers.Layer):
             *args: Will be forwarded to the layer instance.
             layer: The type of layer to apply after pre-activation.
             activation: Activation to use.
+            name: The name of this layer.
             **kwargs: Will be forwarded to the layer instance.
         """
-        super().__init__()
+        super().__init__(name=name)
 
         self._layer_args = args
         self._layer_kwargs = kwargs
@@ -57,20 +59,18 @@ class _BnActLayer(layers.Layer):
             layer_args=self._layer_args,
             layer_kwargs=self._layer_kwargs,
             activation=self._activation,
+            name=self.name,
         )
 
     SubType = TypeVar("SubType")
 
     @classmethod
-    def _from_config(
-        cls: Type[SubType], layer: Type[layers.Layer], config: Dict[str, Any]
-    ) -> SubType:
+    def from_config(cls: Type[SubType], config: Dict[str, Any]) -> SubType:
         """
         Creates a new layer from a partial configuration.
 
         Args:
             config: The partial configuration.
-            layer: The type of layer to apply.
 
         Returns:
             The created instance.
@@ -78,7 +78,7 @@ class _BnActLayer(layers.Layer):
         """
         layer_args = config.pop("layer_args")
         layer_kwargs = config.pop("layer_kwargs")
-        return cls(*layer_args, layer=layer, **layer_kwargs)
+        return cls(*layer_args, **layer_kwargs, **config)
 
 
 class BnActConv(_BnActLayer):
@@ -95,10 +95,6 @@ class BnActConv(_BnActLayer):
         """
         super().__init__(*args, layer=layers.Conv2D, **kwargs)
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "BnActConv":
-        return cls._from_config(layers.Conv2D, config)
-
 
 class BnActDense(layers.Layer):
     """
@@ -113,7 +109,3 @@ class BnActDense(layers.Layer):
             **kwargs: Will be forwarded to the superclass.
         """
         super().__init__(*args, layer=layers.Dense, **kwargs)
-
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "BnActConv":
-        return cls._from_config(layers.Dense, config)

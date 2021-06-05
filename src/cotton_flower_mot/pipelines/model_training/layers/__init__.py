@@ -13,20 +13,24 @@ from .mlp_conv import MlpConv
 from .utility import BnActConv, BnActDense
 
 # Make sure that Kedro is aware of custom layers.
+CUSTOM_LAYERS = {
+    layer_class.__name__: layer_class
+    for layer_class in (
+        MlpConv,
+        DenseBlock,
+        TransitionLayer,
+        AssociationLayer,
+        BnActConv,
+        BnActDense,
+        DynamicEdgeGcn,
+        ResidualGcn,
+        AggregationNode,
+        BasicBlock,
+        HdaStage,
+    )
+}
 if "custom_objects" not in TensorFlowModelDataset.DEFAULT_LOAD_ARGS:
     TensorFlowModelDataset.DEFAULT_LOAD_ARGS["custom_objects"] = {}
 TensorFlowModelDataset.DEFAULT_LOAD_ARGS["custom_objects"].update(
-    {
-        "MlpConv": MlpConv,
-        "DenseBlock": DenseBlock,
-        "TransitionLayer": TransitionLayer,
-        "AssociationLayer": AssociationLayer,
-        "BnActConv": BnActConv,
-        "BnActDense": BnActDense,
-        "DynamicEdgeGcn": DynamicEdgeGcn,
-        "ResidualGcn": ResidualGcn,
-        "AggregationNode": AggregationNode,
-        "BasicBlock": BasicBlock,
-        "HdaStage": HdaStage,
-    }
+    CUSTOM_LAYERS
 )
