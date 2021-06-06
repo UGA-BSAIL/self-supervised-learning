@@ -2,15 +2,58 @@
 Custom layers for building DLA networks.
 """
 
+import abc
 import enum
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
+import numpy as np
 import tensorflow as tf
 from loguru import logger
 from tensorflow.keras import layers
 
 from .utility import BnActConv
+
+
+class _BilinearInitializer(tf.keras.initializers.Initializer):
+    """
+    A kernel initializer for deconvolution layers that initially sets them to
+    bilinear up-sampling.
+
+    """
+
+    _BILINEAR_KERNEL = tf.constant(
+        [[0.0, 0.25, 0.0], [0.25, 1.0, 0.25], [0.0, 0.25, 0.0]]
+    )
+    """
+    The basic kernel to use for bilinear up-sampling.
+    """
+
+    def __call__(
+        self, shape: tf.TensorShape, dtype: Optional[Type] = None, **_: Any
+    ) -> tf.Tensor:
+        """
+
+        Args:
+            shape: The shape of the kernel.
+            dtype: The dtype to use.
+
+        Returns:
+            The initial tensor it created.
+
+        """
+        if shape[:2] != (3, 3):
+            raise ValueError(
+                f"Bilinear kernels must be 3x3, but this one is {shape[:2]}"
+            )
+
+        kernel = tf.cast(self._BILINEAR_KERNEL, dtype)
+
+        # If we have additional dimensions, repeat the kernel.
+        num_extra_dims = len(shape) - 2
+        kernel = tf.reshape(kernel, (3, 3) + (1,) * num_extra_dims)
+        tile_multiples = shape[2:]
+        return tf.tile(kernel, (1, 1) + tile_multiples)
 
 
 class AggregationNode(layers.Layer):
@@ -85,6 +128,122 @@ class AggregationNode(layers.Layer):
         conv_args = config.pop("conv_args")
         conv_kwargs = config.pop("conv_kwargs")
         return cls(*conv_args, **conv_kwargs, **config)
+
+
+class AggregationWithUpSample(layers.Layer):
+    """
+    Fused aggregation and up-sampling layer. One of the inputs will be
+    up-sampled.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        *args: Any,
+        name: Optional[str] = None,
+        activation: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        """
+        Args:
+            channels: The number of output channels.
+            *args: Will be forwarded to the aggregation layer.
+            name: The name of this layer.
+            activation: The activation to use.
+            **kwargs: Will be forwarded to the aggregation layer.
+
+        """
+        super().__init__(name=name)
+
+        self._channels = channels
+        self._activation = activation
+        self._agg_args = args
+        self._agg_kwargs = kwargs
+
+        # Create the sub-layers.
+        self._deconv1_1 = None
+        self._pad1_1 = None
+        self._aggregation1_1 = AggregationNode(
+            channels, *args, activation=activation, **kwargs
+        )
+
+    def build(
+        self, input_shape: Tuple[tf.TensorShape, tf.TensorShape]
+    ) -> None:
+        # Sanity-check the inputs.
+        big_input, small_input = input_shape
+        big_input_size = np.array(big_input[1:3])
+        small_input_double_size = np.array(small_input[1:3]) * 2
+
+        if not np.all(big_input_size - small_input_double_size <= 1):
+            # Up-sampling exactly doubles the input size.
+            raise ValueError(
+                f"Up-sampled input must be half the size of the "
+                f"other input, but sizes are {small_input}, "
+                f"{big_input} respectively."
+            )
+
+        # We need both inputs to have the same number of channels.
+        big_input_num_channels = big_input[3]
+        self._deconv1_1 = layers.Conv2DTranspose(
+            big_input_num_channels,
+            3,
+            strides=2,
+            padding="same",
+            activation=self._activation,
+            kernel_initializer=_BilinearInitializer(),
+            bias_initializer=tf.keras.initializers.constant(0.0),
+        )
+
+        # If our input size was not evenly divisible by two, we're going to
+        # have to add some padding to make the sizes come out right.
+        pad_top, pad_left = (
+            np.not_equal(big_input_size, small_input_double_size)
+            .astype(np.int)
+            .tolist()
+        )
+        self._pad1_1 = layers.ZeroPadding2D(
+            padding=((pad_top, 0), (pad_left, 0))
+        )
+
+        super().build(input_shape)
+
+    def call(
+        self,
+        inputs: Tuple[tf.Tensor, tf.Tensor],
+        training: Optional[bool] = None,
+    ) -> tf.Tensor:
+        """
+        Args:
+            inputs: Tensor inputs. The second should be the one that requires
+                up-sampling.
+            training: Whether this layer should be used in training mode.
+
+        Returns:
+            The aggregation output.
+
+        """
+        big_input, small_input = inputs
+
+        up_sampled = self._pad1_1(self._deconv1_1(small_input))
+        return self._aggregation1_1((big_input, up_sampled))
+
+    def get_config(self) -> Dict[str, Any]:
+        return dict(
+            channels=self._channels,
+            agg_args=self._agg_args,
+            agg_kwargs=self._agg_kwargs,
+            activation=self._activation,
+            name=self.name,
+        )
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "AggregationWithUpSample":
+        agg_args = config.pop("agg_args")
+        agg_kwargs = config.pop("agg_kwargs")
+        channels = config.pop("channels")
+
+        return cls(channels, *agg_args, **agg_kwargs, **config)
 
 
 class BasicBlock(layers.Layer):
@@ -166,7 +325,80 @@ class BasicBlock(layers.Layer):
         return cls(channels, *conv_args, **conv_kwargs, **config)
 
 
-class HdaStage(layers.Layer):
+class GraphLayerMixin(abc.ABC):
+    """
+    Mixin for layers that have a lot of sub-layers connected in a complicated
+    and dynamic way. The name derives from the fact that the layer
+    connections are treated as a graph. It has nothing to do with GNNs.
+
+    """
+
+    @property
+    @abc.abstractmethod
+    def _node_to_inputs(self) -> Dict[layers.Layer, List[layers.Layer]]:
+        """
+        Returns:
+            A flattened mapping of node layers to the particular inputs for that
+            node layer.
+
+        """
+
+    def _get_output_tensor(
+        self,
+        layer: layers.Layer,
+        *,
+        layers_to_outputs: Dict[layers.Layer, tf.Tensor],
+        extra_inputs: List[tf.Tensor] = [],
+        layer_kwargs: Dict[str, Any] = {},
+    ) -> tf.Tensor:
+        """
+        Gets the output tensor for a particular layer.
+
+        Args:
+            layer: The layer to get the output for.
+            layers_to_outputs: Dictionary mapping layers to output tensors for
+                that layer. It will essentially be used as a cache and may
+                be modified by this method.
+            extra_inputs: Auxiliary inputs that will be fed into this node,
+                along with the ones we calculated.
+            layer_kwargs: Will be passed as keyword arguments to any layer
+                that we call.
+
+        Returns:
+            The output tensor for this layer.
+
+        """
+        cached_output = layers_to_outputs.get(layer)
+        if cached_output is not None:
+            # We have it cached already.
+            return cached_output
+
+        # Gather the inputs for this layer.
+        layer_inputs = self._node_to_inputs[layer]
+        input_tensors = extra_inputs[:]
+        for input_layer in layer_inputs:
+            # Compute to output tensor for each input.
+            input_tensors.append(
+                self._get_output_tensor(
+                    input_layer,
+                    layers_to_outputs=layers_to_outputs,
+                    layer_kwargs=layer_kwargs,
+                )
+            )
+
+        assert len(input_tensors) > 0, "Expected at least one input."
+        if len(input_tensors) == 1:
+            # Keras is weird about singleton inputs.
+            input_tensors = input_tensors[0]
+        # Apply the layer.
+        output_tensor = layer(input_tensors, **layer_kwargs)
+        # Update the cache.
+        layers_to_outputs[layer] = output_tensor
+
+        return output_tensor
+
+
+class HdaStage(layers.Layer, GraphLayerMixin):
     """
     A stage that performs Hierarchical Deep Aggregation.
     """
@@ -390,12 +622,6 @@ class HdaStage(layers.Layer):
 
     @cached_property
     def _node_to_inputs(self) -> Dict[layers.Layer, List[layers.Layer]]:
-        """
-        Returns:
-            A flattened mapping of node layers to the particular inputs for that
-            node layer.
-
-        """
         node_to_inputs = {}
         for layer_i, layer in enumerate(self._nodes):
             for i, node in layer.items():
@@ -408,60 +634,6 @@ class HdaStage(layers.Layer):
             ), f"Backbone node {node.name} has more than one input."
 
         return node_to_inputs
-
-    def _get_output_tensor(
-        self,
-        layer: layers.Layer,
-        *,
-        layers_to_outputs: Dict[layers.Layer, tf.Tensor],
-        extra_inputs: List[tf.Tensor] = [],
-        layer_kwargs: Dict[str, Any] = {},
-    ) -> tf.Tensor:
-        """
-        Gets the output tensor for a particular layer.
-
-        Args:
-            layer: The layer to get the output for.
-            layers_to_outputs: Dictionary mapping layers to output tensors for
-                that layer. It will essentially be used as a cache and may
-                be modified by this method.
-            extra_inputs: Auxiliary inputs that will be fed into this node,
-                along with the ones we calculated.
-            layer_kwargs: Will be passed as keyword arguments to any layer
-                that we call.
-
-        Returns:
-            The output tensor for this layer.
-
-        """
-        cached_output = layers_to_outputs.get(layer)
-        if cached_output is not None:
-            # We have it cached already.
-            return cached_output
-
-        # Gather the inputs for this layer.
-        layer_inputs = self._node_to_inputs[layer]
-        input_tensors = extra_inputs[:]
-        for input_layer in layer_inputs:
-            # Compute to output tensor for each input.
-            input_tensors.append(
-                self._get_output_tensor(
-                    input_layer,
-                    layers_to_outputs=layers_to_outputs,
-                    layer_kwargs=layer_kwargs,
-                )
-            )
-
-        assert len(input_tensors) > 0, "Expected at least one input."
-        if len(input_tensors) == 1:
-            # Keras is weird about singleton inputs.
-            input_tensors = input_tensors[0]
-        # Apply the layer.
-        output_tensor = layer(input_tensors, **layer_kwargs)
-        # Update the cache.
-        layers_to_outputs[layer] = output_tensor
-
-        return output_tensor
 
     @property
     def _input_node(self) -> layers.Layer:
@@ -524,3 +696,160 @@ class HdaStage(layers.Layer):
     def from_config(cls, config: Dict[str, Any]) -> "HdaStage":
         block_type = cls.Block[config.pop("block_type")]
         return cls(block_type=block_type, **config)
+
+
+class UpSamplingIda(layers.Layer, GraphLayerMixin):
+    """
+    Adds the special IDA nodes that are used for up-sampling the model output.
+    """
+
+    def __init__(
+        self,
+        agg_filter_size: Union[Tuple[int, int], int] = 1,
+        activation: Optional[str] = None,
+        name: Optional[str] = None,
+    ):
+        """
+        Args:
+            agg_filter_size: The size of the filters to use in the
+                aggregation nodes.
+            activation: The activation function.
+            name: The name of this stage.
+
+        """
+        super().__init__(name=name)
+
+        self._agg_filter_size = agg_filter_size
+        self._activation = activation
+
+        # List of all the aggregation nodes, organized by (level, horizontal
+        # index). Levels start from 0 at the bottom and go up. Horizontal
+        # indices start from 0 at the left and go right.
+        self._agg_nodes: Optional[List[Dict[int, layers.Layer]]] = None
+        # Number of output channels of the first stage. This will be the
+        # number of channels in the overall output.
+        self._num_first_stage_channels = None
+
+    def _create_agg_nodes(
+        self, num_stages: int
+    ) -> List[Dict[int, layers.Layer]]:
+        """
+        Creates all the aggregation nodes.
+
+        Args:
+            num_stages: The total number of stages we are aggregating.
+
+        Returns:
+            The aggregation nodes that it created, indexed by level and then
+            horizontal position.
+
+        """
+        # Overall structure will form an isosceles triangle pattern.
+        num_levels = num_stages
+
+        agg_nodes = []
+        # Level 0 is the input stages, so we start at 1.
+        for level in range(1, num_levels):
+            num_nodes_in_level = num_levels - level
+            start_index = level
+            end_index = start_index + num_nodes_in_level
+
+            agg_nodes.append(
+                {
+                    i: AggregationWithUpSample(
+                        self._num_first_stage_channels * i,
+                        self._agg_filter_size,
+                        activation=self._activation,
+                        padding="same",
+                        name=f"level_{level}_up_sample_agg_{i}",
+                    )
+                    for i in range(start_index, end_index)
+                }
+            )
+
+        return agg_nodes
+
+    @cached_property
+    def _node_to_inputs(self) -> Dict[layers.Layer, List[layers.Layer]]:
+        nodes_to_inputs = {}
+
+        # We don't add connections for the first level, because these come
+        # directly from the input stages. Since these inputs are already
+        # provided in tensor form, there's nothing we need to do about them.
+        for level_i_1, level in enumerate(self._agg_nodes[1:]):
+            # Actual level index will be one more since we exclude the input
+            # stages.
+            level_i = level_i_1 + 1
+
+            for pos, node in level.items():
+                # Get the inputs.
+                agg_node_input = self._agg_nodes[level_i - 1][pos - 1]
+                up_sampling_input = self._agg_nodes[level_i - 1][pos]
+
+                # Note: These should be in the right order.
+                nodes_to_inputs[node] = [agg_node_input, up_sampling_input]
+
+        return nodes_to_inputs
+
+    @property
+    def _output_node(self) -> layers.Layer:
+        """
+        Returns:
+            The highest-level aggregation node.
+
+        """
+        return self._agg_nodes[-1][len(self._agg_nodes)]
+
+    def build(self, input_shape: Tuple[tf.Tensor, ...]) -> None:
+        # Do some sanity checks on the input.
+        current_stage_channels = input_shape[0][3]
+        self._num_first_stage_channels = current_stage_channels
+        for shape in input_shape[1:]:
+            next_stage_channels = shape[3]
+            if next_stage_channels != current_stage_channels * 2:
+                raise ValueError(
+                    f"Number of channels should double every "
+                    f"stage, but it instead goes from "
+                    f"{current_stage_channels} to "
+                    f"{next_stage_channels}."
+                )
+            current_stage_channels = next_stage_channels
+
+        # The number of input tensors is the number of stages that we need.
+        num_stages = len(input_shape)
+        # Build the aggregation nodes.
+        self._agg_nodes = self._create_agg_nodes(num_stages)
+
+        super().build(input_shape)
+
+    def call(self, inputs: Tuple[tf.Tensor, ...], **kwargs: Any) -> tf.Tensor:
+        """
+        Args:
+            inputs: The tensors from each input stage, in order.
+            **kwargs: Will be forwarded to the sub-layers.
+
+        Returns:
+            The result from the up-sampling fusion operation.
+
+        """
+        # Mapping from layers to their output tensors.
+        layers_to_outputs = {}
+        # Compute the initial level of aggregation on the inputs.
+        for pos, node in self._agg_nodes[0].items():
+            big_input = inputs[pos - 1]
+            small_input = inputs[pos]
+            layers_to_outputs[node] = node((big_input, small_input), **kwargs)
+
+        # Compute the final output tensor.
+        return self._get_output_tensor(
+            self._output_node,
+            layers_to_outputs=layers_to_outputs,
+            layer_kwargs=kwargs,
+        )
+
+    def get_config(self) -> Dict[str, Any]:
+        return dict(
+            agg_filter_size=self._agg_filter_size,
+            activation=self._activation,
+            name=self.name,
+        )

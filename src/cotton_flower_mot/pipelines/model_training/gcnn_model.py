@@ -18,6 +18,7 @@ from .layers import (
     HdaStage,
     ResidualGcn,
     TransitionLayer,
+    UpSamplingIda,
 )
 from .similarity_utils import (
     aspect_ratio_penalty,
@@ -50,16 +51,16 @@ def _build_appearance_feature_extractor(
     )
 
     stage1 = HdaStage(
-        agg_depth=1, num_channels=64, activation="relu", name="hda_stage_3"
+        agg_depth=1, num_channels=64, activation="relu", name="hda_stage_1"
     )
     stage2 = HdaStage(
-        agg_depth=2, num_channels=128, activation="relu", name="hda_stage_4"
+        agg_depth=2, num_channels=128, activation="relu", name="hda_stage_2"
     )
     stage3 = HdaStage(
-        agg_depth=2, num_channels=256, activation="relu", name="hda_stage_5"
+        agg_depth=2, num_channels=256, activation="relu", name="hda_stage_3"
     )
     stage4 = HdaStage(
-        agg_depth=1, num_channels=512, activation="relu", name="hda_stage_6"
+        agg_depth=1, num_channels=512, activation="relu", name="hda_stage_4"
     )
 
     hda1 = stage1(normalized_input)
