@@ -383,7 +383,7 @@ def _make_heat_map_and_offsets(
     """
     image_size = image_shape[:2][::-1]
     center_points = geometric_features[:, :2]
-    down_sample_factor = tf.constant(config.detection_down_sample_factor)
+    down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
 
     # Figure out the size of the heat maps.
     heat_map_size = image_size // down_sample_factor

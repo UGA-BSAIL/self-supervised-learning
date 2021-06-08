@@ -11,8 +11,9 @@ class ModelConfig:
     Attributes:
         image_input_shape: The shape of the detections and tracklets being
             input to the appearance feature extractor.
-        detection_down_sample_factor: The factor by which the output heatmaps
-            from the detection model will be down-sampled.
+        num_reduction_stages: How many initial reduction stages to add to the
+            detector. Every stage will reduce the size of the heatmap output
+            by a factor of 2.
         detection_sigma: Sigma to use for detection heatmaps.
 
         num_appearance_features: The number of appearance features to extract
@@ -24,7 +25,7 @@ class ModelConfig:
     """
 
     image_input_shape: Tuple[int, int, int]
-    detection_down_sample_factor: int
+    num_reduction_stages: int
     detection_sigma: float
 
     num_appearance_features: int
