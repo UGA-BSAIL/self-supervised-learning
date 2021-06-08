@@ -97,7 +97,8 @@ def compute_ious(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
     total_size = boxes1_sizes + boxes2_sizes
     is_disjoint = enclosing > total_size
     # If they are disjoint, the intersection is zero.
-    intersection = tf.where(is_disjoint, 0.0, intersection)
+    zero = tf.constant(0.0, dtype=intersection.dtype)
+    intersection = tf.where(is_disjoint, zero, intersection)
 
     # Figure out the intersection area.
     intersection_area = tf.reduce_prod(intersection, axis=1)
@@ -107,7 +108,8 @@ def compute_ious(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
     box2_area = tf.reduce_prod(boxes2_sizes, axis=1)
     union_area = box1_area + box2_area - intersection_area
 
-    return intersection_area / tf.maximum(union_area, _EPSILON)
+    epsilon = tf.cast(_EPSILON, union_area.dtype)
+    return intersection_area / tf.maximum(union_area, epsilon)
 
 
 def distance_penalty(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
@@ -139,8 +141,9 @@ def distance_penalty(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
     boxes2_centers = boxes2[:, :2]
     center_distance = tf.norm(boxes2_centers - boxes1_centers, axis=1)
 
+    epsilon = tf.cast(_EPSILON, diagonal_length.dtype)
     return tf.square(center_distance) / tf.maximum(
-        tf.square(diagonal_length), _EPSILON
+        tf.square(diagonal_length), epsilon
     )
 
 
@@ -164,6 +167,12 @@ def aspect_ratio_penalty(
         penalty for each pair of bounding boxes.
 
     """
+    # Tensorflow doesn't support atan2 on 16-bit floats, so everything has to
+    # be 32-bit here.
+    original_dtype = boxes_pred.dtype
+    boxes_pred = tf.cast(boxes_pred, tf.float32)
+    boxes_gt = tf.cast(boxes_gt, tf.float32)
+
     widths_pred = boxes_pred[:, 2]
     widths_gt = boxes_gt[:, 2]
     heights_pred = boxes_pred[:, 3]
@@ -205,7 +214,7 @@ def aspect_ratio_penalty(
         _EPSILON,
     )
 
-    return alpha * v
+    return tf.cast(alpha * v, original_dtype)
 
 
 def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
@@ -227,4 +236,5 @@ def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
     feature1_mag = tf.sqrt(tf.reduce_sum(tf.square(features1), axis=-1))
     feature2_mag = tf.sqrt(tf.reduce_sum(tf.square(features2), axis=-1))
 
-    return feature_dot / (feature1_mag * feature2_mag + _EPSILON)
+    epsilon = tf.cast(_EPSILON, dtype=feature1_mag.dtype)
+    return feature_dot / (feature1_mag * feature2_mag + epsilon)

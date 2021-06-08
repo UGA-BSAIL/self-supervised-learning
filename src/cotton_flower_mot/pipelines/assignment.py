@@ -61,6 +61,7 @@ def solve_optimal_transport(
     """
     lamb = _maybe_float_to_tensor(lamb)
     epsilon = _maybe_float_to_tensor(epsilon)
+    cost = tf.cast(cost, tf.float32)
 
     cost_3d = tf.assert_rank(cost, 3)
 

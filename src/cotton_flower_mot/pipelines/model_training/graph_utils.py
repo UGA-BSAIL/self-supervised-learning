@@ -242,7 +242,7 @@ def gcn_filter(adjacency: tf.Tensor, symmetric: bool = True) -> tf.Tensor:
         num_nodes = tf.shape(adjacency)[1]
 
     # Add self-connections.
-    adjacency_hat = adjacency + tf.eye(num_nodes)
+    adjacency_hat = adjacency + tf.eye(num_nodes, dtype=adjacency.dtype)
 
     return normalized_adjacency(adjacency_hat, symmetric=symmetric)
 
