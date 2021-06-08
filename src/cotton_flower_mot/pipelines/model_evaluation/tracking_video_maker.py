@@ -181,7 +181,7 @@ def draw_tracks(
 
     """
     for frame_num, feature_dict in enumerate(inputs):
-        frame = feature_dict[ModelInputs.FRAME.value].numpy()
+        frame = feature_dict[ModelInputs.DETECTIONS_FRAME.value].numpy()
         geometry = feature_dict[ModelInputs.DETECTION_GEOMETRY.value].numpy()
 
         # Flip the frame, because the input data is upside-down.

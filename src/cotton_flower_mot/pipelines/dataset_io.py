@@ -1,7 +1,7 @@
 import enum
 from functools import partial
 from multiprocessing import cpu_count
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -9,6 +9,7 @@ from pydantic.dataclasses import dataclass
 
 from .assignment import construct_gt_sinkhorn_matrix
 from .config import ModelConfig
+from .heat_maps import make_heat_map
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
 
@@ -42,18 +43,53 @@ RaggedFeature = Dict[str, tf.RaggedTensor]
 """
 Feature dictionary that contains only ragged tensors.
 """
-MaybeRaggedFeature = Dict[str, Union[tf.Tensor, tf.RaggedTensor]]
+MaybeRagged = Union[tf.Tensor, tf.RaggedTensor]
+"""
+Possibly a normal tensor or a ragged one.
+"""
+MaybeRaggedFeature = Dict[str, MaybeRagged]
 """
 Feature dictionary that may contain normal or ragged tensors.
 """
+
 _RANDOM_SEED = 2021
 """
 Seed to use for random number generation.
 """
 
+_RAGGED_INPUTS = {
+    ModelInputs.DETECTIONS.value,
+    ModelInputs.TRACKLETS.value,
+    ModelInputs.DETECTION_GEOMETRY.value,
+    ModelInputs.TRACKLET_GEOMETRY.value,
+    ModelInputs.DETECTIONS_OFFSETS.value,
+}
+"""
+Input features that the model expects to be `RaggedTensor`s.
+"""
+_NON_RAGGED_INPUTS = {
+    ModelInputs.SEQUENCE_ID.value,
+    ModelInputs.DETECTIONS_FRAME.value,
+    ModelInputs.DETECTIONS_HEATMAP.value,
+}
+"""
+Input features that the model expects to be normal tensors.
+"""
+_RAGGED_TARGETS = set()
+"""
+Target features that the model expects to be `RaggedTensor`s.
+"""
+_NON_RAGGED_TARGETS = {
+    ModelTargets.SINKHORN.value,
+    ModelTargets.ASSIGNMENT.value,
+}
+"""
+Target features that the model expects to be normal tensors.
+"""
+
 
 @enum.unique
-class FeatureNames(enum.Enum):
+class FeatureName(enum.Enum):
     """
     Standard key names for processed features.
     """
@@ -61,6 +97,14 @@ class FeatureNames(enum.Enum):
     FRAME_IMAGE = "frame_image"
     """
     Full frame image.
+    """
+    HEAT_MAP = "heat_map"
+    """
+    Corresponding detection heatmap.
+    """
+    DETECTIONS_OFFSETS = "detections_offsets"
+    """
+    Pixel offsets for the detections in the heatmap.
     """
     DETECTIONS = "detections"
     """
@@ -83,11 +127,6 @@ class FeatureNames(enum.Enum):
     The sequence ID of the clip.
     """
 
-
-_INPUT_FEATURES = [Otf.IMAGE_ENCODED.value]
-"""
-The features that will be used as input to the model.
-"""
 
 _NUM_THREADS = cpu_count()
 """
@@ -288,20 +327,98 @@ def _extract_detection_images(
     return tf.cast(extracted, tf.uint8)
 
 
+def _extract_bbox_coords(feature_dict: Feature) -> tf.Tensor:
+    """
+    Extracts bounding box coordinates from a feature dictionary.
+
+    Args:
+        feature_dict: The raw (combined) feature dictionary for one image.
+
+    Returns:
+        The bounding boxes of the detections, in the form
+        `[y_min, x_min, y_max, x_max]`.
+
+    """
+    x_min = feature_dict[Otf.OBJECT_BBOX_X_MIN.value]
+    x_max = feature_dict[Otf.OBJECT_BBOX_X_MAX.value]
+    y_min = feature_dict[Otf.OBJECT_BBOX_Y_MIN.value]
+    y_max = feature_dict[Otf.OBJECT_BBOX_Y_MAX.value]
+    return tf.stack([y_min, x_min, y_max, x_max], axis=1)
+
+
+def _decode_image(feature_dict: Feature) -> tf.Tensor:
+    """
+    Decodes an image from a feature dictionary.
+
+    Args:
+        feature_dict: The raw (combined) feature dictionary for one image.
+
+    Returns:
+        The raw decoded image.
+
+    """
+    image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
+    return tf.io.decode_jpeg(image_encoded[0])
+
+
+def _make_heat_map_and_offsets(
+    geometric_features: tf.Tensor,
+    *,
+    config: ModelConfig,
+    image_shape: tf.Tensor,
+) -> Tuple[tf.Tensor, tf.Tensor]:
+    """
+    Creates the detection heatmap and offsets tensor.
+
+    Args:
+        geometric_features: The geometric features for the image. Should have
+            the form `[center_x, center_y, width, height]`.
+        config: The model configuration.
+        image_shape: The shape of the input image.
+
+    Returns:
+        The corresponding detection heatmap, and offset tensor. The latter will
+        have the shape `[num_detections, width_offset, height_offset]`.
+
+    """
+    image_size = image_shape[:2][::-1]
+    center_points = geometric_features[:, :2]
+    down_sample_factor = tf.constant(config.detection_down_sample_factor)
+
+    # Figure out the size of the heat maps.
+    heat_map_size = image_size // down_sample_factor
+    # Create the heat map.
+    heat_map = make_heat_map(
+        center_points,
+        map_size=heat_map_size,
+        sigma=config.detection_sigma,
+    )
+
+    # Compute the offset.
+    center_points_px = center_points * tf.cast(image_size, tf.float32)
+    offsets = (
+        tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
+    )
+
+    return heat_map, offsets
+
+
 def _load_single_image_features(
     features: tf.data.Dataset,
     *,
     config: ModelConfig,
     include_frame: bool = False,
+    include_heat_map: bool = False,
     augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
 
     Args:
-        features: The raw (combined) feature dictionary for one image.
+        features: The dataset of feature dictionaries for each image.
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
+        include_heat_map: Whether to include a detection heatmap.
         augmentation_config: Configuration for data augmentation.
 
     Returns:
@@ -310,19 +427,9 @@ def _load_single_image_features(
 
     """
 
-    def _process_image(
-        feature_dict: Dict[str, tf.Tensor]
-    ) -> Dict[str, tf.Tensor]:
-        # Get bounding box coordinates as a single tensor.
-        x_min = feature_dict[Otf.OBJECT_BBOX_X_MIN.value]
-        x_max = feature_dict[Otf.OBJECT_BBOX_X_MAX.value]
-        y_min = feature_dict[Otf.OBJECT_BBOX_Y_MIN.value]
-        y_max = feature_dict[Otf.OBJECT_BBOX_Y_MAX.value]
-        bbox_coords = tf.stack([y_min, x_min, y_max, x_max], axis=1)
-
-        # Decode the image.
-        image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
-        image = tf.io.decode_jpeg(image_encoded[0])
+    def _process_image(feature_dict: Feature) -> Feature:
+        bbox_coords = _extract_bbox_coords(feature_dict)
+        image = _decode_image(feature_dict)
 
         # Add random jitter.
         bbox_coords = _add_bbox_jitter(
@@ -348,14 +455,23 @@ def _load_single_image_features(
         sequence_id = feature_dict[Otf.IMAGE_SEQUENCE_ID.value][0]
 
         loaded_features = {
-            FeatureNames.DETECTIONS.value: detections,
-            FeatureNames.GEOMETRY.value: geometric_features,
-            FeatureNames.OBJECT_IDS.value: object_ids,
-            FeatureNames.FRAME_NUM.value: frame_num,
-            FeatureNames.SEQUENCE_ID.value: sequence_id,
+            FeatureName.DETECTIONS.value: detections,
+            FeatureName.GEOMETRY.value: geometric_features,
+            FeatureName.OBJECT_IDS.value: object_ids,
+            FeatureName.FRAME_NUM.value: frame_num,
+            FeatureName.SEQUENCE_ID.value: sequence_id,
         }
         if include_frame:
-            loaded_features[FeatureNames.FRAME_IMAGE.value] = image
+            loaded_features[FeatureName.FRAME_IMAGE.value] = image
+
+        if include_heat_map:
+            # Compute the detection heatmap and offsets.
+            heatmap, offsets = _make_heat_map_and_offsets(
+                geometric_features, config=config, image_shape=tf.shape(image)
+            )
+            loaded_features[FeatureName.HEAT_MAP.value] = heatmap
+            loaded_features[FeatureName.DETECTIONS_OFFSETS.value] = offsets
+
         return loaded_features
 
     return features.map(_process_image, num_parallel_calls=_NUM_THREADS)
@@ -415,11 +531,13 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     def _process_pair(
         pair_features: Feature,
     ) -> Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
-        object_ids = pair_features[FeatureNames.OBJECT_IDS.value]
-        detections = pair_features[FeatureNames.DETECTIONS.value]
-        geometry = pair_features[FeatureNames.GEOMETRY.value]
-        sequence_ids = pair_features[FeatureNames.SEQUENCE_ID.value]
-        frame_images = pair_features.get(FeatureNames.FRAME_IMAGE.value, None)
+        object_ids = pair_features[FeatureName.OBJECT_IDS.value]
+        detections = pair_features[FeatureName.DETECTIONS.value]
+        geometry = pair_features[FeatureName.GEOMETRY.value]
+        sequence_ids = pair_features[FeatureName.SEQUENCE_ID.value]
+        frame_images = pair_features.get(FeatureName.FRAME_IMAGE.value, None)
+        heat_maps = pair_features.get(FeatureName.HEAT_MAP.value, None)
+        offsets = pair_features.get(FeatureName.DETECTIONS_OFFSETS.value, None)
 
         # Compute the ground-truth Sinkhorn matrix.
         tracklet_ids = object_ids[0]
@@ -447,8 +565,12 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
             ModelInputs.SEQUENCE_ID.value: sequence_ids,
         }
         if frame_images is not None:
-            # Frame images should both be identical.
-            inputs[ModelInputs.FRAME.value] = frame_images[0]
+            # We only provide the current frame image.
+            inputs[ModelInputs.DETECTIONS_FRAME.value] = frame_images[0]
+        if heat_maps is not None:
+            inputs[ModelInputs.DETECTIONS_HEATMAP.value] = heat_maps[0]
+            inputs[ModelInputs.DETECTIONS_OFFSETS.value] = offsets[0]
+
         targets = {
             ModelTargets.SINKHORN.value: sinkhorn,
             ModelTargets.ASSIGNMENT.value: assignment,
@@ -507,7 +629,7 @@ def _filter_out_of_order(pair_features: tf.data.Dataset) -> tf.data.Dataset:
     """
 
     def _is_ordered(_pair_features: Feature) -> bool:
-        frame_nums = _pair_features[FeatureNames.FRAME_NUM.value]
+        frame_nums = _pair_features[FeatureName.FRAME_NUM.value]
         # Compare frame numbers to ensure that these frames are ordered.
         first_frame_num = frame_nums[0]
         next_frame_num = frame_nums[1]
@@ -597,18 +719,55 @@ def _randomize_example_spacing(
     return filtered.map(lambda e, _: e, num_parallel_calls=_NUM_THREADS)
 
 
-def _ensure_ragged(
+def _ensure_ragged(feature: MaybeRagged) -> tf.RaggedTensor:
+    """
+    Ensures that a tensor is ragged.
+
+    Args:
+        feature: The feature to check.
+
+    Returns:
+        The ragged feature.
+
+    """
+    if isinstance(feature, tf.RaggedTensor):
+        # Already ragged.
+        return feature
+    # Otherwise, make it ragged.
+    return tf.RaggedTensor.from_tensor(feature)
+
+
+def _ensure_not_ragged(feature: MaybeRagged) -> tf.Tensor:
+    """
+    Ensures that a tensor is not ragged.
+
+    Args:
+        feature: The feature to check.
+
+    Returns:
+        The feature as a normal tensor, padded with zeros if necessary.
+
+    """
+    if isinstance(feature, tf.Tensor):
+        # Already not ragged.
+        return feature
+    # Otherwise, make it ragged.
+    return feature.to_tensor()
+
+
+def _transform_features(
     features: tf.data.Dataset,
+    *,
+    transformer: Callable[[MaybeRagged], MaybeRagged],
     input_keys: Iterable[str] = (),
     target_keys: Iterable[str] = (),
 ) -> tf.data.Dataset:
     """
-    `Dataset.map()` does not guarantee that the output will be a `RaggedTensor`.
-    Since downstream code expects `RaggedTensor` inputs, this function ensures
-    that the proper features are ragged.
+    Selectively transforms certain features in a dataset.
 
     Args:
         features: Dataset containing input and target feature dictionaries.
+        transformer: Function that transforms a given tensor.
         input_keys: The keys in the input that we want to make ragged.
         target_keys: The keys in the targets that we want to make ragged.
 
@@ -621,69 +780,19 @@ def _ensure_ragged(
     def _ensure_element_ragged(
         inputs: MaybeRaggedFeature, targets: MaybeRaggedFeature
     ) -> Tuple[MaybeRaggedFeature, MaybeRaggedFeature]:
-        def _validate_feature(
-            feature: Union[tf.Tensor, tf.RaggedTensor]
-        ) -> tf.RaggedTensor:
-            if isinstance(feature, tf.RaggedTensor):
-                # Already ragged.
-                return feature
-            # Otherwise, make it ragged.
-            return tf.RaggedTensor.from_tensor(feature)
+        # Select only keys that exist in the data.
+        existing_input_keys = frozenset(input_keys) & inputs.keys()
+        existing_target_keys = frozenset(target_keys) & targets.keys()
 
-        for key in input_keys:
-            inputs[key] = _validate_feature(inputs[key])
-        for key in target_keys:
-            targets[key] = _validate_feature(targets[key])
+        for key in existing_input_keys:
+            inputs[key] = transformer(inputs[key])
+        for key in existing_target_keys:
+            targets[key] = transformer(targets[key])
 
         return inputs, targets
 
     return features.map(
         _ensure_element_ragged, num_parallel_calls=_NUM_THREADS
-    )
-
-
-def _ensure_not_ragged(
-    features: tf.data.Dataset,
-    input_keys: Iterable[str] = (),
-    target_keys: Iterable[str] = (),
-) -> tf.data.Dataset:
-    """
-    `Dataset.map()` does not guarantee that the output will be a `RaggedTensor`.
-    Some code can't handle `RaggedTensors`, so we convert to normal dense
-    Tensors.
-
-    Args:
-        features: Dataset containing input and target feature dictionaries.
-        input_keys: The keys in the input that we want to make dense.
-        target_keys: The keys in the targets that we want to make dense.
-
-    Returns:
-        Dataset with the same features, but ensuring that the specified ones
-        are ragged.
-
-    """
-
-    def _ensure_element_not_ragged(
-        inputs: MaybeRaggedFeature, targets: MaybeRaggedFeature
-    ) -> Tuple[MaybeRaggedFeature, MaybeRaggedFeature]:
-        def _validate_feature(
-            feature: Union[tf.Tensor, tf.RaggedTensor]
-        ) -> tf.Tensor:
-            if isinstance(feature, tf.Tensor):
-                # Already not ragged.
-                return feature
-            # Otherwise, make it ragged.
-            return feature.to_tensor()
-
-        for key in input_keys:
-            inputs[key] = _validate_feature(inputs[key])
-        for key in target_keys:
-            targets[key] = _validate_feature(targets[key])
-
-        return inputs, targets
-
-    return features.map(
-        _ensure_element_not_ragged, num_parallel_calls=_NUM_THREADS
     )
 
 
@@ -693,6 +802,7 @@ def _inputs_and_targets_from_dataset(
     config: ModelConfig,
     include_empty: bool = False,
     include_frame: bool = False,
+    include_heat_map: bool = False,
     drop_probability: float = 0.0,
     repeats: int = 1,
     augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
@@ -708,6 +818,7 @@ def _inputs_and_targets_from_dataset(
             or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
+        include_heat_map: Whether to include a detection heatmap.
         drop_probability: Probability to drop a particular example.
         repeats: Number of times to repeat the dataset to make up for dropped
             examples.
@@ -733,6 +844,7 @@ def _inputs_and_targets_from_dataset(
         deserialized,
         config=config,
         include_frame=include_frame,
+        include_heat_map=include_heat_map,
         augmentation_config=augmentation_config,
     )
     # Break into pairs.
@@ -752,7 +864,6 @@ def _inputs_and_targets_from_dataset(
 def _batch_and_prefetch(
     dataset: tf.data.Dataset,
     *,
-    include_frame: bool = False,
     batch_size: int = 32,
     num_prefetch_batches: int = 5,
 ) -> tf.data.Dataset:
@@ -761,8 +872,6 @@ def _batch_and_prefetch(
 
     Args:
         dataset: The dataset to process.
-        include_frame: If true, will include the full frame image as well
-            as the detection crops.
         batch_size: The batch size to use.
         num_prefetch_batches: The number of batches to prefetch.
 
@@ -774,27 +883,21 @@ def _batch_and_prefetch(
     batched = dataset.apply(
         tf.data.experimental.dense_to_ragged_batch(batch_size)
     )
-    ragged = _ensure_ragged(
-        batched,
-        input_keys=[
-            ModelInputs.DETECTIONS.value,
-            ModelInputs.TRACKLETS.value,
-            ModelInputs.DETECTION_GEOMETRY.value,
-            ModelInputs.TRACKLET_GEOMETRY.value,
-        ],
-        target_keys=[],
-    )
 
-    input_keys_not_ragged = [ModelInputs.SEQUENCE_ID.value]
-    if include_frame:
-        input_keys_not_ragged.append(ModelInputs.FRAME.value)
-    ragged = _ensure_not_ragged(
+    # `Dataset.map()` doesn't always correctly figure out which features
+    # should be ragged, and which shouldn't be, so we ensure ourselves that
+    # they are correct.
+    ragged = _transform_features(
+        batched,
+        input_keys=_RAGGED_INPUTS,
+        target_keys=_RAGGED_TARGETS,
+        transformer=_ensure_ragged,
+    )
+    ragged = _transform_features(
         ragged,
-        input_keys=input_keys_not_ragged,
-        target_keys=[
-            ModelTargets.SINKHORN.value,
-            ModelTargets.ASSIGNMENT.value,
-        ],
+        input_keys=_NON_RAGGED_INPUTS,
+        target_keys=_NON_RAGGED_TARGETS,
+        transformer=_ensure_not_ragged,
     )
 
     return ragged.prefetch(num_prefetch_batches)
@@ -803,7 +906,6 @@ def _batch_and_prefetch(
 def inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
-    include_frame: bool = False,
     batch_size: int = 32,
     num_prefetch_batches: int = 5,
     **kwargs: Any,
@@ -814,8 +916,6 @@ def inputs_and_targets_from_dataset(
 
     Args:
         raw_dataset: The raw dataset, containing serialized data.
-        include_frame: If true, will include the full frame image as well
-            as the detection crops.
         batch_size: The batch size to use.
         num_prefetch_batches: The number of batches to prefetch.
         kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
@@ -825,11 +925,10 @@ def inputs_and_targets_from_dataset(
 
     """
     inputs_and_targets = _inputs_and_targets_from_dataset(
-        raw_dataset, include_frame=include_frame, **kwargs
+        raw_dataset, **kwargs
     )
     return _batch_and_prefetch(
         inputs_and_targets,
-        include_frame=include_frame,
         batch_size=batch_size,
         num_prefetch_batches=num_prefetch_batches,
     )
@@ -839,7 +938,6 @@ def inputs_and_targets_from_datasets(
     raw_datasets: Iterable[tf.data.Dataset],
     *,
     interleave: bool = True,
-    include_frame: bool = False,
     batch_size: int = 32,
     num_prefetch_batches: int = 5,
     **kwargs: Any,
@@ -853,8 +951,6 @@ def inputs_and_targets_from_datasets(
         interleave: Allows frames from multiple datasets to be interleaved
             with each-other if true. Set to false if you want to keep
             individual clips intact.
-        include_frame: If true, will include the full frame image as well
-            as the detection crops.
         batch_size: The batch size to use.
         num_prefetch_batches: The number of batches to prefetch.
         **kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
@@ -867,9 +963,7 @@ def inputs_and_targets_from_datasets(
     parsed_datasets = []
     for raw_dataset in raw_datasets:
         parsed_datasets.append(
-            _inputs_and_targets_from_dataset(
-                raw_dataset, include_frame=include_frame, **kwargs
-            )
+            _inputs_and_targets_from_dataset(raw_dataset, **kwargs)
         )
 
     if interleave:
@@ -887,7 +981,6 @@ def inputs_and_targets_from_datasets(
 
     return _batch_and_prefetch(
         maybe_interleaved,
-        include_frame=include_frame,
         batch_size=batch_size,
         num_prefetch_batches=num_prefetch_batches,
     )

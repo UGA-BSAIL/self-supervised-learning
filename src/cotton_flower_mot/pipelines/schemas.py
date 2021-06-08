@@ -174,9 +174,17 @@ class ModelInputs(enum.Enum):
     """
     Extracted tracklet crops.
     """
-    FRAME = "frame"
+    DETECTIONS_FRAME = "frame"
     """
-    The raw frame image.
+    The raw frame image associated with the detections.
+    """
+    DETECTIONS_HEATMAP = "detections_heatmap"
+    """
+    The heatmap for the detections.
+    """
+    DETECTIONS_OFFSETS = "detections_offsets"
+    """
+    The pixel offsets for the detections.
     """
 
     DETECTION_GEOMETRY = "detection_geometry"

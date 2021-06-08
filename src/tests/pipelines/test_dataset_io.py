@@ -20,14 +20,21 @@ Number of elements that are in the test dataset.
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "include_frame", (True, False), ids=["include_frame", "no_frame"]
 )
 @pytest.mark.parametrize(
     "random_drop", (True, False), ids=["random_drop", "no_random_drop"]
 )
+@pytest.mark.parametrize(
+    "include_heat_map", (True, False), ids=["heatmap", "no_heatmap"]
+)
 def test_inputs_and_targets_from_dataset_smoke(
-    faker: Faker, include_frame: bool, random_drop: bool
+    faker: Faker,
+    include_frame: bool,
+    random_drop: bool,
+    include_heat_map: bool,
 ) -> None:
     """
     Attempts to load actual data and makes sure that it works.
@@ -36,6 +43,7 @@ def test_inputs_and_targets_from_dataset_smoke(
         faker: The fixture to use for generating fake data.
         include_frame: Whether to test including the full frame.
         random_drop: Whether to test dropping random examples.
+        include_heat_map: Whether to test including the detection heat map.
 
     """
     # Arrange.
@@ -53,6 +61,7 @@ def test_inputs_and_targets_from_dataset_smoke(
         raw_dataset,
         config=config,
         include_frame=include_frame,
+        include_heat_map=include_heat_map,
         batch_size=8,
         **drop_kwargs
     )
@@ -67,7 +76,10 @@ def test_inputs_and_targets_from_dataset_smoke(
     expected_inputs = set(ModelInputs)
     if not include_frame:
         # We won't have a frame input in this case.
-        expected_inputs -= {ModelInputs.FRAME}
+        expected_inputs -= {ModelInputs.DETECTIONS_FRAME}
+    if not include_heat_map:
+        expected_inputs -= {ModelInputs.DETECTIONS_HEATMAP}
+        expected_inputs -= {ModelInputs.DETECTIONS_OFFSETS}
     for element in expected_inputs:
         assert element.value in inputs
     for element in ModelTargets:
@@ -87,7 +99,9 @@ def test_inputs_and_targets_from_dataset_smoke(
 
     if include_frame:
         # Check the frame shape.
-        frame_shape = tf.shape(inputs[ModelInputs.FRAME.value]).numpy()
+        frame_shape = tf.shape(
+            inputs[ModelInputs.DETECTIONS_FRAME.value]
+        ).numpy()
         assert len(frame_shape) == 4
         assert frame_shape[0] == expected_batch_size
 

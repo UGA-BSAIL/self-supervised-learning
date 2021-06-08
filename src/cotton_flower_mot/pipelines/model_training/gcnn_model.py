@@ -18,7 +18,6 @@ from .layers import (
     HdaStage,
     ResidualGcn,
     TransitionLayer,
-    UpSamplingIda,
 )
 from .similarity_utils import (
     aspect_ratio_penalty,
