@@ -136,6 +136,6 @@ class TensorProvider(BaseProvider):
             num_appearance_features=self.random_int(min=1, max=256),
             num_gcn_channels=self.random_int(min=1, max=256),
             sinkhorn_lambda=self.__faker.pyfloat(min_value=1, max_value=1000),
-            detection_down_sample_factor=self.random_element([4, 8, 16]),
+            num_reduction_stages=self.random_element([2, 3, 4]),
             detection_sigma=self.random_element([1, 3, 5]),
         )

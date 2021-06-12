@@ -4,7 +4,7 @@ keypoint-based detectors.
 """
 
 
-from typing import Tuple
+from typing import Optional
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -12,19 +12,27 @@ from loguru import logger
 
 
 def make_point_annotation_map(
-    points: tf.Tensor, *, map_size: tf.Tensor
+    points: tf.Tensor,
+    *,
+    map_size: tf.Tensor,
+    point_values: Optional[tf.Tensor] = None
 ) -> tf.Tensor:
     """
     Creates dense point maps given a set of point locations. Each point
-    corresponds to a pixel in the map that will be set to 1, while the rest
-    will be set to zero.
+    corresponds to a pixel in the map that will be set to a non-zero value,
+    while the rest will be set to zero.
 
     Args:
         points: The points to add to the map. Should be in the form (x, y).
         map_size: The size of the map, in the form (width, height).
+        point_values: If specified, these are the corresponding values which
+            will be set at the location of each point. Should be a 1D tensor
+            with the same length as `points`. If not specified, all values will
+            be set to one.
 
     Returns:
-        The point annotation map that it created.
+        The point annotation map that it created. It will have the shape
+        specified by `map_size`.
 
     """
     points = tf.ensure_shape(points, (None, 2))
@@ -37,12 +45,16 @@ def make_point_annotation_map(
     pixel_points = tf.cast(tf.round(pixel_points), tf.int64)
 
     # Generate the output maps.
-    num_non_zero_values = tf.shape(pixel_points)[0]
-    non_zeros = tf.ones((num_non_zero_values,), dtype=tf.float32)
+    if point_values is None:
+        # Use ones for all the values.
+        num_non_zero_values = tf.shape(pixel_points)[0]
+        point_values = tf.ones((num_non_zero_values,), dtype=tf.float32)
     sparse_maps = tf.SparseTensor(
         indices=pixel_points[:, ::-1],
-        values=non_zeros,
-        dense_shape=tf.cast(map_size[::-1], dtype=tf.int64),
+        values=point_values,
+        # See https://github.com/tensorflow/tensorrt/issues/118 for
+        # explanation of indexing.
+        dense_shape=tf.cast(map_size[..., ::-1], dtype=tf.int64),
     )
     # Reorder indices to conform with sparse tensor conventions.
     sparse_maps = tf.sparse.reorder(sparse_maps)
@@ -53,8 +65,7 @@ def make_point_annotation_map(
         # There might be duplicate indices, which we want to ignore.
         validate_indices=False,
     )
-    # Add a dummy channel dimension.
-    return tf.expand_dims(dense, 2)
+    return dense
 
 
 def make_heat_map(
@@ -82,6 +93,8 @@ def make_heat_map(
 
     # Obtain initial point annotations.
     dense_annotations = make_point_annotation_map(points, map_size=map_size)
+    # Add a dummy channel dimension.
+    dense_annotations = tf.expand_dims(dense_annotations, 2)
 
     return tfa.image.gaussian_filter2d(
         dense_annotations,

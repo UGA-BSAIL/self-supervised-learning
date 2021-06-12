@@ -104,7 +104,7 @@ def _build_appearance_model(*, config: ModelConfig) -> tf.keras.Model:
         float_images = tf.cast(_images, tf.keras.backend.floatx())
         return tf.image.per_image_standardization(float_images)
 
-    normalized = layers.Lambda(_normalize)(images)
+    normalized = layers.Lambda(_normalize, name="normalize")(images)
 
     # Apply the model layers.
     features = _build_appearance_feature_extractor(normalized, config=config)

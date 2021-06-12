@@ -178,22 +178,16 @@ class ModelInputs(enum.Enum):
     """
     The raw frame image associated with the detections.
     """
-    DETECTIONS_HEATMAP = "detections_heatmap"
-    """
-    The heatmap for the detections.
-    """
-    DETECTIONS_OFFSETS = "detections_offsets"
-    """
-    The pixel offsets for the detections.
-    """
 
     DETECTION_GEOMETRY = "detection_geometry"
     """
-    Corresponding geometric features for the detection crops.
+    Corresponding geometric features for the detection crops. Should have the
+    form `[center_x, center_y, width, height]`.
     """
     TRACKLET_GEOMETRY = "tracklet_geometry"
     """
-    Corresponding geometric features for the tracklet crops.
+    Corresponding geometric features for the tracklet crops. Should have the
+    form `[center_x, center_y, width, height]`.
     """
 
     SEQUENCE_ID = "sequence_id"
@@ -215,4 +209,18 @@ class ModelTargets(enum.Enum):
     ASSIGNMENT = "assignment"
     """
     The hard assignment matrix.
+    """
+
+    HEATMAP = "heatmap"
+    """
+    The heatmap indicating the location of the detection centers.
+    """
+    GEOMETRY = "geometry"
+    """
+    The geometric features that specify the detection targets. Each feature
+    should have the form
+    `[center_x, center_y, width, height, offset_x, offset_y]` in the
+    ground-truth data. In the predictions, these will instead be in dense
+    form, with a vector of `[width, height, offset_x, offset_y]` at each
+    pixel location.
     """

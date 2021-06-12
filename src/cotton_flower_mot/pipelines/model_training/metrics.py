@@ -82,4 +82,5 @@ def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
         The metrics that it created.
 
     """
-    return {ModelTargets.ASSIGNMENT.value: IdSwitches()}
+    # return {ModelTargets.ASSIGNMENT.value: IdSwitches()}
+    return {}

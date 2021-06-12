@@ -33,6 +33,7 @@ def create_pipeline(**kwargs):
                     training_data="training_data",
                     testing_data="validation_data",
                     learning_phases="params:learning_phases",
+                    loss_params="params:loss_params",
                     callbacks="callbacks",
                 ),
                 "trained_model",

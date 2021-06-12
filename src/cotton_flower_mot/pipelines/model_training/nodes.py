@@ -12,7 +12,7 @@ import tensorflow.keras.optimizers.schedules as schedules
 from loguru import logger
 
 from ..config import ModelConfig
-from .gcnn_model import build_model
+from .centernet_model import build_model
 from .losses import make_losses
 from .metrics import make_metrics
 
@@ -118,6 +118,7 @@ def train_model(
     learning_phases: List[Dict[str, Any]],
     callbacks: List[tf.keras.callbacks.Callback] = [],
     validation_frequency: int = 1,
+    loss_params: Dict[str, Any],
 ) -> tf.keras.Model:
     """
     Trains a model.
@@ -131,6 +132,7 @@ def train_model(
         callbacks: The callbacks to use when training.
         validation_frequency: Number of training epochs after which to run
             validation.
+        loss_params: Parameters to pass to the loss functions.
 
     Returns:
         The trained model.
@@ -147,7 +149,7 @@ def train_model(
         )
         model.compile(
             optimizer=optimizer,
-            loss=make_losses(),
+            loss=make_losses(**loss_params),
             metrics=make_metrics(),
         )
         model.fit(

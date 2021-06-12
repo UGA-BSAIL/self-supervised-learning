@@ -72,17 +72,18 @@ def test_inputs_and_targets_from_dataset_smoke(
     # It should have made one batch.
     inputs, targets = batch
 
-    # Make sure we have the right inputs.
+    # Make sure we have the right inputs and targets.
     expected_inputs = set(ModelInputs)
+    expected_targets = set(ModelTargets)
     if not include_frame:
         # We won't have a frame input in this case.
         expected_inputs -= {ModelInputs.DETECTIONS_FRAME}
     if not include_heat_map:
-        expected_inputs -= {ModelInputs.DETECTIONS_HEATMAP}
-        expected_inputs -= {ModelInputs.DETECTIONS_OFFSETS}
+        expected_targets -= {ModelTargets.HEATMAP}
+        expected_targets -= {ModelTargets.GEOMETRY}
     for element in expected_inputs:
         assert element.value in inputs
-    for element in ModelTargets:
+    for element in expected_targets:
         assert element.value in targets
 
     # Check the shapes of things.

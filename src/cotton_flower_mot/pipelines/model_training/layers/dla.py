@@ -96,7 +96,10 @@ class AggregationNode(layers.Layer):
         super().build(input_shape)
 
     def call(
-        self, inputs: Tuple[tf.Tensor, ...], training: Optional[bool] = None
+        self,
+        inputs: Tuple[tf.Tensor, ...],
+        training: Optional[bool] = None,
+        **_,
     ) -> tf.Tensor:
         """
 
@@ -212,6 +215,7 @@ class AggregationWithUpSample(layers.Layer):
         self,
         inputs: Tuple[tf.Tensor, tf.Tensor],
         training: Optional[bool] = None,
+        **_,
     ) -> tf.Tensor:
         """
         Args:

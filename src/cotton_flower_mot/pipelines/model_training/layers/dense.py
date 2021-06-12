@@ -185,7 +185,10 @@ class TransitionLayer(layers.Layer):
         super().build(input_shape)
 
     def call(
-        self, inputs: tf.Tensor, training: Optional[bool] = None
+        self,
+        inputs: tf.Tensor,
+        training: Optional[bool] = None,
+        **_,
     ) -> tf.Tensor:
         normalized = self._norm(inputs, training=training)
         compressed = self._conv(normalized)

@@ -11,6 +11,16 @@ update_period: 100
 # slows down training a lot.
 enable_numeric_checks: false
 
+loss_params:
+  # Alpha constant for heatmap focal loss.
+  alpha: 2.0
+  # Beta constant for heatmap focal loss.
+  beta: 4.0
+  # Weight to use for size regression loss.
+  size_weight: 1.0
+  # Weight to use for offset regression loss.
+  offset_weight: 0.1
+
 # Learning phases to use for training the model.
 learning_phases:
   # The initial learning rate to use for the phase.

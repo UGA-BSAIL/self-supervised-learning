@@ -62,7 +62,6 @@ _RAGGED_INPUTS = {
     ModelInputs.TRACKLETS.value,
     ModelInputs.DETECTION_GEOMETRY.value,
     ModelInputs.TRACKLET_GEOMETRY.value,
-    ModelInputs.DETECTIONS_OFFSETS.value,
 }
 """
 Input features that the model expects to be `RaggedTensor`s.
@@ -70,18 +69,18 @@ Input features that the model expects to be `RaggedTensor`s.
 _NON_RAGGED_INPUTS = {
     ModelInputs.SEQUENCE_ID.value,
     ModelInputs.DETECTIONS_FRAME.value,
-    ModelInputs.DETECTIONS_HEATMAP.value,
 }
 """
 Input features that the model expects to be normal tensors.
 """
-_RAGGED_TARGETS = set()
+_RAGGED_TARGETS = {ModelTargets.GEOMETRY.value}
 """
 Target features that the model expects to be `RaggedTensor`s.
 """
 _NON_RAGGED_TARGETS = {
     ModelTargets.SINKHORN.value,
     ModelTargets.ASSIGNMENT.value,
+    ModelTargets.HEATMAP.value,
 }
 """
 Target features that the model expects to be normal tensors.
@@ -128,7 +127,7 @@ class FeatureName(enum.Enum):
     """
 
 
-_NUM_THREADS = cpu_count()
+_NUM_THREADS = 1
 """
 Number of threads to use for multi-threaded operations.
 """
@@ -236,7 +235,10 @@ def _augment_images(
 
 
 def _get_geometric_features(
-    bbox_coords: tf.Tensor, *, image_shape: tf.Tensor
+    bbox_coords: tf.Tensor,
+    *,
+    image_shape: tf.Tensor,
+    config: ModelConfig,
 ) -> tf.Tensor:
     """
     Converts a batch of bounding boxes from the format in TFRecords to the
@@ -248,11 +250,14 @@ def _get_geometric_features(
             `[min_y, min_x, max_y, max_x]`, in pixels.
         image_shape: A 1D vector describing the shape of the corresponding
             image.
+        config: The model configuration.
 
     Returns:
         A tensor of shape [N, 4], where N is the total number of bounding
         boxes in the input. The ith row specifies the normalized coordinates of
-        the ith bounding box in the form [center_x, center_y, width, height].
+        the ith bounding box in the form
+        `[center_x, center_y, width, height, offset_x, offset_y]`. Offsets are
+        the calculated offsets for detection.
 
     """
     bbox_coords = tf.ensure_shape(bbox_coords, (None, 4))
@@ -268,19 +273,27 @@ def _get_geometric_features(
         center_x = x_min + width_x / tf.constant(2.0)
         center_y = y_min + width_y / tf.constant(2.0)
 
-        geometry = tf.stack([center_x, center_y, width_x, width_y], axis=1)
-
-        # Convert from pixel to normalized coordinates.
         image_width_height = image_shape[:2][::-1]
         image_width_height = tf.cast(image_width_height, tf.float32)
-        image_width_height = tf.tile(image_width_height, (2,))
-        return geometry / image_width_height
+
+        # Compute the offset.
+        center_points_px = tf.stack([center_x, center_y], axis=1)
+        down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
+        offsets = (
+            tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
+        )
+        offsets = tf.cast(offsets, tf.float32)
+
+        width_px = tf.stack([width_x, width_y], axis=1)
+        geometry = tf.concat([center_points_px, width_px, offsets], axis=1)
+        image_width_height_tiled = tf.tile(image_width_height, (3,))
+        return geometry / image_width_height_tiled
 
     # Handle the case where we have no detections.
     return tf.cond(
         tf.shape(bbox_coords)[0] > 0,
         _extract_features,
-        lambda: tf.zeros((0, 4), dtype=tf.float32),
+        lambda: tf.zeros((0, 6), dtype=tf.float32),
     )
 
 
@@ -361,12 +374,12 @@ def _decode_image(feature_dict: Feature) -> tf.Tensor:
     return tf.io.decode_jpeg(image_encoded[0])
 
 
-def _make_heat_map_and_offsets(
+def _make_heat_map(
     geometric_features: tf.Tensor,
     *,
     config: ModelConfig,
     image_shape: tf.Tensor,
-) -> Tuple[tf.Tensor, tf.Tensor]:
+) -> tf.Tensor:
     """
     Creates the detection heatmap and offsets tensor.
 
@@ -377,8 +390,7 @@ def _make_heat_map_and_offsets(
         image_shape: The shape of the input image.
 
     Returns:
-        The corresponding detection heatmap, and offset tensor. The latter will
-        have the shape `[num_detections, width_offset, height_offset]`.
+        The corresponding detection heatmap, and offset tensor.
 
     """
     image_size = image_shape[:2][::-1]
@@ -394,13 +406,7 @@ def _make_heat_map_and_offsets(
         sigma=config.detection_sigma,
     )
 
-    # Compute the offset.
-    center_points_px = center_points * tf.cast(image_size, tf.float32)
-    offsets = (
-        tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
-    )
-
-    return heat_map, offsets
+    return heat_map
 
 
 def _load_single_image_features(
@@ -447,7 +453,7 @@ def _load_single_image_features(
 
         # Compute the geometric features.
         geometric_features = _get_geometric_features(
-            bbox_coords, image_shape=tf.shape(image)
+            bbox_coords, image_shape=tf.shape(image), config=config
         )
 
         object_ids = feature_dict[Otf.OBJECT_ID.value]
@@ -466,11 +472,10 @@ def _load_single_image_features(
 
         if include_heat_map:
             # Compute the detection heatmap and offsets.
-            heatmap, offsets = _make_heat_map_and_offsets(
+            heatmap = _make_heat_map(
                 geometric_features, config=config, image_shape=tf.shape(image)
             )
             loaded_features[FeatureName.HEAT_MAP.value] = heatmap
-            loaded_features[FeatureName.DETECTIONS_OFFSETS.value] = offsets
 
         return loaded_features
 
@@ -537,7 +542,6 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         sequence_ids = pair_features[FeatureName.SEQUENCE_ID.value]
         frame_images = pair_features.get(FeatureName.FRAME_IMAGE.value, None)
         heat_maps = pair_features.get(FeatureName.HEAT_MAP.value, None)
-        offsets = pair_features.get(FeatureName.DETECTIONS_OFFSETS.value, None)
 
         # Compute the ground-truth Sinkhorn matrix.
         tracklet_ids = object_ids[0]
@@ -549,7 +553,7 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         sinkhorn = tf.reshape(sinkhorn, (-1,))
         # Assignment target is the same as the sinkhorn matrix, just not a
         # float.
-        assignment = tf.cast(sinkhorn, tf.bool)
+        # assignment = tf.cast(sinkhorn, tf.bool)
 
         tracklets = detections[0]
         detections = detections[1]
@@ -560,21 +564,23 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         inputs = {
             ModelInputs.DETECTIONS.value: detections,
             ModelInputs.TRACKLETS.value: tracklets,
-            ModelInputs.DETECTION_GEOMETRY.value: detection_geometry,
-            ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry,
+            # For tracking, we don't need the offsets in the geometric features.
+            ModelInputs.DETECTION_GEOMETRY.value: detection_geometry[:, :4],
+            ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry[:, :4],
             ModelInputs.SEQUENCE_ID.value: sequence_ids,
         }
         if frame_images is not None:
             # We only provide the current frame image.
             inputs[ModelInputs.DETECTIONS_FRAME.value] = frame_images[0]
-        if heat_maps is not None:
-            inputs[ModelInputs.DETECTIONS_HEATMAP.value] = heat_maps[0]
-            inputs[ModelInputs.DETECTIONS_OFFSETS.value] = offsets[0]
 
         targets = {
-            ModelTargets.SINKHORN.value: sinkhorn,
-            ModelTargets.ASSIGNMENT.value: assignment,
+            # ModelTargets.SINKHORN.value: sinkhorn,
+            # ModelTargets.ASSIGNMENT.value: assignment,
         }
+        if heat_maps is not None:
+            # We only provide the current frame heatmap.
+            targets[ModelTargets.HEATMAP.value] = heat_maps[0]
+            targets[ModelTargets.GEOMETRY.value] = detection_geometry
 
         return inputs, targets
 
@@ -602,8 +608,8 @@ def _filter_empty(features: tf.data.Dataset) -> tf.data.Dataset:
     def _is_not_empty(inputs: MaybeRaggedFeature, _) -> tf.Tensor:
         # Check both detections and tracklets, and eliminate examples where
         # either is empty.
-        detections = inputs[ModelInputs.DETECTIONS.value]
-        tracklets = inputs[ModelInputs.TRACKLETS.value]
+        detections = inputs[ModelInputs.DETECTION_GEOMETRY.value]
+        tracklets = inputs[ModelInputs.TRACKLET_GEOMETRY.value]
 
         # Get the shape.
         detections_shape = _dense_shape(detections)

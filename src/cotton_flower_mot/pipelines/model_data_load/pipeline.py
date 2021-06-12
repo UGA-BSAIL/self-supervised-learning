@@ -14,6 +14,12 @@ from .nodes import make_model_config
 
 
 def create_pipeline(**kwargs):
+    # Preset for loading training data.
+    load_datasets = partial(
+        inputs_and_targets_from_datasets,
+        include_frame=True,
+        include_heat_map=True,
+    )
     # Preset for loading testing and validation data that doesn't randomize
     # or interleave clips.
     load_clips = partial(
@@ -40,6 +46,8 @@ def create_pipeline(**kwargs):
                     num_appearance_features="params:num_appearance_features",
                     num_gcn_channels="params:num_gcn_channels",
                     sinkhorn_lambda="params:sinkhorn_lambda",
+                    num_reduction_stages="params:num_reduction_stages",
+                    detection_sigma="params:detection_sigma",
                 ),
                 "model_config",
             ),
@@ -58,7 +66,7 @@ def create_pipeline(**kwargs):
             ),
             # Load the datasets.
             node(
-                inputs_and_targets_from_datasets,
+                load_datasets,
                 dict(
                     raw_datasets="tfrecord_train",
                     augmentation_config="data_augmentation_config",
@@ -67,12 +75,12 @@ def create_pipeline(**kwargs):
                 "training_data",
             ),
             node(
-                inputs_and_targets_from_datasets,
+                load_datasets,
                 dict(raw_datasets="tfrecord_test", **loading_config),
                 "testing_data",
             ),
             node(
-                inputs_and_targets_from_datasets,
+                load_datasets,
                 dict(raw_datasets="tfrecord_valid", **loading_config),
                 "validation_data",
             ),

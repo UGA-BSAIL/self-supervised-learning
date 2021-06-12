@@ -45,6 +45,7 @@ class AssociationLayer(tf.keras.layers.Layer):
         self,
         inputs: Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
         training: Optional[bool] = None,
+        **_,
     ) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
         """
 
