@@ -20,8 +20,9 @@ from src.cotton_flower_mot.pipelines import heat_maps
             np.array([[0, 0, 1], [1, 0, 0], [0, 0, 0]]),
         ),
         (np.reshape(np.array([]), (0, 2)), np.zeros((3, 3))),
+        (np.array([[1.1, 0.2], [-0.1, 0.5]]), np.zeros((3, 3))),
     ],
-    ids=["single_point", "two_points", "no_points"],
+    ids=["single_point", "two_points", "no_points", "invalid_points"],
 )
 def test_make_point_annotation_map(
     points: np.ndarray, expected_map: np.ndarray
@@ -40,8 +41,6 @@ def test_make_point_annotation_map(
     ).numpy()
 
     # Assert.
-    # An extra channel dimension will be added.
-    got_heat_map = got_heat_map[:, :, 0]
     np.testing.assert_array_equal(expected_map, got_heat_map)
 
 
@@ -67,7 +66,7 @@ def test_make_point_annotation_map_values(faker: Faker) -> None:
         np.int32
     )
     for i in range(values.shape[0]):
-        got_value = got_heat_map[pixel_points[i][1], pixel_points[i][0], 0]
+        got_value = got_heat_map[pixel_points[i][1], pixel_points[i][0]]
         assert got_value == values[i].numpy()
 
 

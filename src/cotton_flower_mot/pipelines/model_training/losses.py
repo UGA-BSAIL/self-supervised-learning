@@ -7,7 +7,7 @@ from typing import Dict
 
 import tensorflow as tf
 
-from ..heat_maps import make_point_annotation_map
+from ..heat_maps import make_point_annotation_map, trim_out_of_bounds
 from ..schemas import ModelTargets
 from .loss_metric_utilities import MaybeRagged, correct_ragged_mismatch
 from .ragged_utils import ragged_map_fn
@@ -66,8 +66,9 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
         negative_weights = tf.expand_dims(negative_weights, axis=-1)
 
         positive_samples = y_true * tf.math.log(y_pred + self._EPSILON)
-        negative_samples = (1.0 - y_true) * tf.math.log(
-            1.0 - y_pred + self._EPSILON
+        one = tf.constant(1.0)
+        negative_samples = (one - y_true) * tf.math.log(
+            one - y_pred + self._EPSILON
         )
 
         weighted_losses = (
@@ -164,6 +165,10 @@ class GeometryL1Loss(tf.keras.losses.Loss):
 
         """
         sparse_truth = tf.ensure_shape(sparse_truth, (None, 3))
+
+        # Trim out-of-bounds points manually since we subtract directly from
+        # the ground-truth later.
+        sparse_truth = trim_out_of_bounds(sparse_truth)
 
         # Create the point mask.
         center_points = sparse_truth[:, :2]

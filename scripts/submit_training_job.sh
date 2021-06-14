@@ -52,8 +52,8 @@ prepare_environment
 
 # Load needed modules.
 ml Python/3.8.2-GCCcore-8.3.0
-ml CUDA/11.0.2-GCC-8.3.0
-ml cuDNN/8.0.5.39-CUDA-11.0.2
+ml CUDA/11.2.1-GCC-8.3.0
+ml cuDNN/8.1.0.77-CUDA-11.2.1
 
 # Set this for deterministic runs. For more info, see
 # https://keras.io/getting_started/faq/#how-can-i-obtain-reproducible-results-using-keras-during-development

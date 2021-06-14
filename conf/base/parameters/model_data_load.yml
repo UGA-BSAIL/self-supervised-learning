@@ -28,6 +28,6 @@ min_saturation: 0.9
 max_saturation: 1.1
 
 # Probability of dropping a particular example to use.
-drop_probability: 0.75
+drop_probability: 0.0
 # Number of times to repeat the dataset to make up for dropped examples.
-repeats: 4
+repeats: 1

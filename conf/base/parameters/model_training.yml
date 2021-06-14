@@ -26,7 +26,7 @@ learning_phases:
   # The initial learning rate to use for the phase.
   - learning_rate:
       # Initial learning rate value.
-      initial: 0.004
+      initial: 0.002
       # Specify that we want to decay over time.
       decay: true
       # Number of steps to decay over.

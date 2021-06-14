@@ -11,6 +11,27 @@ import tensorflow_addons as tfa
 from loguru import logger
 
 
+def trim_out_of_bounds(points: tf.Tensor) -> tf.Tensor:
+    """
+    Convenience function to trim points that are not within `[0, 1]`. It is
+    invoked automatically when creating heatmaps.
+
+    Args:
+        points: The points to trim, as a matrix of shape
+            `[num_points, num_dims]`. It will assume that the first two
+            dimensions are the x and y coordinates.
+
+    Returns:
+        The trimmed points.
+
+    """
+    x_valid = tf.logical_and(points[:, 0] >= 0.0, points[:, 0] <= 1.0)
+    y_valid = tf.logical_and(points[:, 1] >= 0.0, points[:, 1] <= 1.0)
+    # Both coordinates of a point must be valid to keep that point.
+    point_valid = tf.logical_and(x_valid, y_valid)
+    return tf.boolean_mask(points, point_valid)
+
+
 def make_point_annotation_map(
     points: tf.Tensor,
     *,
@@ -38,6 +59,9 @@ def make_point_annotation_map(
     points = tf.ensure_shape(points, (None, 2))
     map_size = tf.ensure_shape(map_size, (2,))
     points = tf.cast(points, tf.float32)
+
+    # Eliminate any points that are out-of-bounds.
+    points = trim_out_of_bounds(points)
 
     # Quantize the annotations to convert from frame fractions to actual
     # pixel values.
