@@ -11,7 +11,13 @@ from tensorflow.keras import layers
 
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
-from .layers import BnActConv, HdaStage, TransitionLayer, UpSamplingIda
+from .layers import (
+    BnActConv,
+    HdaStage,
+    PeakLayer,
+    TransitionLayer,
+    UpSamplingIda,
+)
 
 # Use mixed precision to speed up training.
 tf.keras.mixed_precision.set_global_policy("mixed_float16")
@@ -35,7 +41,7 @@ def _build_backbone(
 
     # Create initial reduction stages.
     reduced_input = normalized_input
-    num_channels = 3
+    num_channels = 4
     for i in range(config.num_reduction_stages):
         reduced_input = hda_stage(
             agg_depth=0,
@@ -97,6 +103,73 @@ def _build_prediction_head(
     return BnActConv(output_channels, 1, padding="same", name=name)(conv1_2)
 
 
+def compute_sparse_predictions(
+    *, confidence_masks: tf.Tensor, sizes: tf.Tensor, offsets: tf.Tensor
+) -> tf.RaggedTensor:
+    """
+    Computes sparse predictions given the estimated dense heatmap, sizes,
+    and offsets. This is very useful for inference.
+
+    Args:
+        confidence_masks: The estimated center point masks, with a positive
+            confidence score at the locations of objects and 0 everywhere else,
+            with the shape `[batch, height, width, 1]`.
+        sizes: The estimated size features, of the form
+            `[batch, height, width, 2]`.
+        offsets: The estimated offset features, of the form
+            `[batch, height, width, 2]`.
+
+    Returns:
+        The computed bounding boxes, with the shape
+        `[batch, num_boxes, 4]`, where the second dimension is ragged, and the
+        third has the form `[center_x, center_y, width, height]`.
+
+    """
+    confidence_masks = tf.ensure_shape(confidence_masks, (None, None, None, 1))
+    confidence_masks = confidence_masks[..., 0]
+    confidence_masks = tf.cast(confidence_masks, tf.float32)
+    center_masks = tf.greater(confidence_masks, 0.0)
+    sizes = tf.ensure_shape(sizes, (None, None, None, 2))
+    offsets = tf.ensure_shape(offsets, (None, None, None, 2))
+    mask_shape = tf.shape(confidence_masks)[1:3]
+
+    # Mask the offsets and sizes.
+    sparse_sizes = tf.boolean_mask(sizes, center_masks)
+    sparse_offsets = tf.boolean_mask(offsets, center_masks)
+    sparse_confidence = tf.boolean_mask(confidence_masks, center_masks)
+    sparse_confidence = tf.expand_dims(sparse_confidence, 1)
+
+    # Figure out the sparse center points.
+    sparse_centers = tf.where(center_masks)
+    center_points = sparse_centers[:, 1:]
+    # Convert to normalized coordinates.
+    center_points = tf.cast(center_points, tf.float32) / tf.cast(
+        mask_shape, tf.float32
+    )
+
+    # Coerce all attributes into a ragged tensor by batch.
+    batch_index = sparse_centers[:, 0]
+    _, _, row_lengths = tf.unique_with_counts(batch_index)
+    row_lengths = tf.cast(row_lengths, tf.int64)
+    ragged_center_points = tf.RaggedTensor.from_row_lengths(
+        center_points[..., ::-1], row_lengths
+    )
+    ragged_sizes = tf.RaggedTensor.from_row_lengths(sparse_sizes, row_lengths)
+    ragged_offsets = tf.RaggedTensor.from_row_lengths(
+        sparse_offsets, row_lengths
+    )
+    ragged_confidence = tf.RaggedTensor.from_row_lengths(
+        sparse_confidence, row_lengths
+    )
+
+    # Nudge them by the offsets.
+    ragged_center_points += ragged_offsets
+    # Add the size.
+    return tf.concat(
+        (ragged_center_points, ragged_sizes, ragged_confidence), axis=2
+    )
+
+
 def build_model(config: ModelConfig) -> tf.keras.Model:
     """
     Builds the detection model.
@@ -127,7 +200,7 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
 
     # The loss expects sizes and offsets to be merged.
     geometry = layers.Concatenate(
-        name=ModelTargets.GEOMETRY.value, dtype=tf.float32
+        name=ModelTargets.GEOMETRY_DENSE_PRED.value, dtype=tf.float32
     )((sizes, offsets))
     # Since we treat heatmaps like a pixel-wise classification problem,
     # apply sigmoid activation.
@@ -135,4 +208,15 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
         "sigmoid", name=ModelTargets.HEATMAP.value, dtype=tf.float32
     )(heatmap)
 
-    return tf.keras.Model(inputs=images, outputs=[heatmap, geometry])
+    # Compute sparse bounding boxes for convenience.
+    confidence_mask = PeakLayer(with_confidence=True)(heatmap)
+    bounding_boxes = layers.Lambda(
+        lambda f: compute_sparse_predictions(
+            confidence_masks=f[0], sizes=f[1], offsets=f[2]
+        ),
+        name=ModelTargets.GEOMETRY_SPARSE_PRED.name,
+    )((confidence_mask, sizes, offsets))
+
+    return tf.keras.Model(
+        inputs=images, outputs=[heatmap, geometry, bounding_boxes]
+    )

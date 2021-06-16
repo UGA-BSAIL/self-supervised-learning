@@ -11,7 +11,11 @@ from tensorflow.keras import layers
 
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
-from .graph_utils import compute_bipartite_edge_features, make_adjacency_matrix
+from .graph_utils import (
+    compute_bipartite_edge_features,
+    compute_pairwise_similarities,
+    make_adjacency_matrix,
+)
 from .layers import (
     AssociationLayer,
     BnActConv,
@@ -174,55 +178,6 @@ def _build_edge_mlp(
     return BnActConv(1, 1)(all_features)
 
 
-def _compute_pairwise_similarities(
-    similarity_function: Callable[[tf.Tensor, tf.Tensor], tf.Tensor],
-    *,
-    detection_features: tf.Tensor,
-    tracklet_features: tf.Tensor,
-) -> tf.Tensor:
-    """
-    Computes some similarity metric between every possible combination of
-    detection and tracklet features.
-
-    Args:
-        similarity_function: A function that computes a similarity metric
-            between two batches of feature vectors. Should return a batch
-            of scalar similarity values.
-        detection_features: The padded detection features,
-            with shape `[batch_size, max_n_detections, n_features]`.
-        tracklet_features: The padded tracklet features,
-            with shape `[batch_size, max_n_tracklets, n_features]`.
-
-    Returns:
-        The similarities computed between every combination of detections and
-        tracklets. Will have shape `[batch_size, max_n_tracklets,
-        max_n_detections]`.
-
-    """
-    # Compute all possible combinations.
-    combinations = compute_bipartite_edge_features(
-        tracklet_features, detection_features
-    )
-
-    combinations_shape = tf.shape(combinations)
-    combinations_outer_shape = combinations_shape[:3]
-    num_features = combinations_shape[-1]
-
-    # Reshape so we can compute similarities in one pass.
-    flat_shape = tf.stack((-1, 2, num_features), axis=0)
-    combinations = tf.reshape(combinations, flat_shape)
-    tracklet_features_flat = combinations[:, 0, :]
-    detection_features_flat = combinations[:, 1, :]
-
-    # Compute similarities.
-    similarities = similarity_function(
-        tracklet_features_flat, detection_features_flat
-    )
-
-    # Add the other dimensions back.
-    return tf.reshape(similarities, combinations_outer_shape)
-
-
 def _build_affinity_mlp(
     *,
     detection_geom_features: tf.Tensor,
@@ -256,34 +211,34 @@ def _build_affinity_mlp(
     """
     # Compute similarity parameters.
     iou = layers.Lambda(
-        lambda f: _compute_pairwise_similarities(
-            compute_ious, tracklet_features=f[0], detection_features=f[1]
+        lambda f: compute_pairwise_similarities(
+            compute_ious, left_features=f[0], right_features=f[1]
         ),
         name="iou",
     )((tracklet_geom_features, detection_geom_features))
     distance = layers.Lambda(
-        lambda f: _compute_pairwise_similarities(
-            distance_penalty, tracklet_features=f[0], detection_features=f[1]
+        lambda f: compute_pairwise_similarities(
+            distance_penalty, left_features=f[0], right_features=f[1]
         ),
         name="distance_penalty",
     )((tracklet_geom_features, detection_geom_features))
     aspect_ratio = layers.Lambda(
-        lambda f: _compute_pairwise_similarities(
+        lambda f: compute_pairwise_similarities(
             aspect_ratio_penalty,
-            tracklet_features=f[0],
-            detection_features=f[1],
+            left_features=f[0],
+            right_features=f[1],
         ),
         name="aspect_ratio_penalty",
     )((tracklet_geom_features, detection_geom_features))
     interaction_cosine = layers.Lambda(
-        lambda f: _compute_pairwise_similarities(
-            cosine_similarity, tracklet_features=f[0], detection_features=f[1]
+        lambda f: compute_pairwise_similarities(
+            cosine_similarity, left_features=f[0], right_features=f[1]
         ),
         name="interaction_cosine_similarity",
     )((tracklet_inter_features, detection_inter_features))
     appearance_cosine = layers.Lambda(
-        lambda f: _compute_pairwise_similarities(
-            cosine_similarity, tracklet_features=f[0], detection_features=f[1]
+        lambda f: compute_pairwise_similarities(
+            cosine_similarity, left_features=f[0], right_features=f[1]
         ),
         name="appearance_cosine_similarity",
     )((tracklet_app_features, detection_app_features))

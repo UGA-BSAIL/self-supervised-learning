@@ -274,7 +274,7 @@ def make_losses(
     return {
         # ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
         ModelTargets.HEATMAP.value: HeatMapFocalLoss(alpha=alpha, beta=beta),
-        ModelTargets.GEOMETRY.value: GeometryL1Loss(
+        ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
             size_weight=size_weight, offset_weight=offset_weight
         ),
     }

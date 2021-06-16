@@ -3,12 +3,15 @@ Custom metrics for the model.
 """
 
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import tensorflow as tf
 
 from ..schemas import ModelTargets
+from .graph_utils import compute_pairwise_similarities
 from .loss_metric_utilities import MaybeRagged, correct_ragged_mismatch
+from .ragged_utils import ragged_map_fn
+from .similarity_utils import compute_ious
 
 
 def id_switches(
@@ -74,6 +77,133 @@ class IdSwitches(tf.keras.metrics.Metric):
         return self._num_id_switches
 
 
+class AveragePrecision(tf.keras.metrics.Metric):
+    """
+    Calculates the average precision for an object detector.
+    """
+
+    def __init__(
+        self,
+        *,
+        iou_threshold: float = 0.5,
+        name="average_precision",
+        **kwargs: Any
+    ):
+        """
+        Args:
+            iou_threshold: The IOU threshold for considering a detection to
+                be a true positive.
+            name: The name of the metric.
+            **kwargs: Will be forwarded to the base class constructor.
+
+        """
+        super().__init__(name=name, **kwargs)
+
+        self._iou_threshold = tf.constant(iou_threshold)
+
+        # Keep track of performance metrics.
+        self._auc = tf.keras.metrics.AUC(curve="PR")
+
+    def _update_auc_from_image(
+        self, y_true: tf.Tensor, y_pred: tf.Tensor
+    ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+        """
+        Updates the internal AUC metric for a single image and its detections.
+
+        Args:
+            y_true: The true bounding boxes for the detections, with the shape
+                `[num_detections, 6]`, where each row has the same layout as
+                the input to `update_state`.
+            y_pred: The predicted bounding boxes for the detections, with the
+                shape `[num_detections, 5]`, where each row has the same
+                layout as the input to `update_state`.
+
+        Returns:
+            The number of true positives, false positives, and false
+            negatives, in that order.
+
+        """
+        y_true = tf.ensure_shape(y_true, (None, 6))
+        y_pred = tf.ensure_shape(y_pred, (None, 5))
+        confidence = y_pred[:, 4]
+        # We don't need the offsets.
+        y_true = y_true[:, :4]
+
+        # Determine which predictions match up with the truth through IOU.
+        ious = compute_pairwise_similarities(
+            compute_ious, left_features=y_true, right_features=y_pred
+        )
+        # Anything below the threshold doesn't match.
+        iou_matches = tf.greater_equal(ious, self._iou_threshold)
+
+        # Number of predictions that should be positive.
+        num_positive_truth = tf.shape(y_true)[0]
+        # Number of predictions that should be negative.
+        num_negative_truth = tf.shape(y_pred)[0] - num_positive_truth
+
+        matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
+        true_positive_confidence = tf.reduce_max(
+            matches_with_confidence, axis=1
+        )
+
+        # Figure out which predictions are false-positives, and create a mask
+        # for them.
+        true_positive_indices = tf.argmax(matches_with_confidence, axis=1)
+        true_positive_mask = tf.scatter_nd(
+            tf.expand_dims(true_positive_indices, 1),
+            tf.ones_like(true_positive_indices),
+            shape=tf.expand_dims(num_negative_truth),
+        )
+        false_positive_mask = tf.logical_not(
+            tf.cast(true_positive_mask, tf.bool)
+        )
+        # Extract the appropriate confidence scores for the FP predictions.
+        false_positive_confidence = tf.boolean_mask(
+            confidence, false_positive_mask
+        )
+
+        # Create the ground-truth and predictions.
+        positive_gt = tf.ones(
+            tf.expand_dims(num_positive_truth), dtype=tf.float32
+        )
+        negative_gt = tf.zeros(
+            tf.expand_dims(num_negative_truth), dtype=tf.float32
+        )
+        self._auc.update_state(positive_gt, true_positive_confidence)
+        self._auc.update_state(negative_gt, false_positive_confidence)
+
+        # Dummy return value so that map_fn works.
+        return tf.constant(0)
+
+    def update_state(
+        self, y_true: tf.RaggedTensor, y_pred: tf.RaggedTensor
+    ) -> None:
+        """
+        Args:
+            y_true: The true sparse bounding box locations, with a shape of
+                `[batch, num_detections, 6]`. The last dimension is a vector
+                of the form
+                `[center_x, center_y, size_x, size_y, offset_x, offset_y]`.
+            y_pred: The predicted sparse bounding box locations, with a shape
+                of `[batch, num_detections, 5]`. The last dimension is a
+                vector of the form
+                `[center_x, center_y, size_x, size_y, confidence]`.
+
+        """
+        # Compute the metrics.
+        ragged_map_fn(
+            lambda e: self._update_auc_from_image(e[0], e[1]),
+            (y_true, y_pred),
+            fn_output_signature=tf.TensorSpec(shape=[], dtype=tf.int32),
+        )
+
+    def result(self) -> tf.Tensor:
+        return self._auc.result()
+
+    def reset_state(self) -> None:
+        self._auc.reset_state()
+
+
 def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
     """
     Creates the metrics to use for the model.
@@ -83,4 +213,4 @@ def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
 
     """
     # return {ModelTargets.ASSIGNMENT.value: IdSwitches()}
-    return {}
+    return {ModelTargets.GEOMETRY_SPARSE_PRED.value: AveragePrecision()}

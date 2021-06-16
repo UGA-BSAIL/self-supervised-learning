@@ -10,6 +10,7 @@ from .dense import DenseBlock, TransitionLayer
 from .dla import AggregationNode, BasicBlock, HdaStage, UpSamplingIda
 from .gnn import DynamicEdgeGcn, ResidualGcn
 from .mlp_conv import MlpConv
+from .pooling import PeakLayer
 from .utility import BnActConv, BnActDense
 
 # Make sure that Kedro is aware of custom layers.
@@ -28,6 +29,7 @@ CUSTOM_LAYERS = {
         BasicBlock,
         HdaStage,
         UpSamplingIda,
+        PeakLayer,
     )
 }
 if "custom_objects" not in TensorFlowModelDataset.DEFAULT_LOAD_ARGS:

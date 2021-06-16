@@ -3,7 +3,7 @@ Selection of utilities for dealing with graphs.
 """
 
 
-from typing import Union
+from typing import Callable, Union
 
 import tensorflow as tf
 
@@ -83,6 +83,56 @@ def compute_bipartite_edge_features(
         left_features = tf.reshape(left_features, split_feature_shape)
         right_features = tf.reshape(right_features, split_feature_shape)
         return tf.stack([left_features, right_features], axis=3)
+
+
+def compute_pairwise_similarities(
+    similarity_function: Callable[[tf.Tensor, tf.Tensor], tf.Tensor],
+    *,
+    right_features: tf.Tensor,
+    left_features: tf.Tensor,
+) -> tf.Tensor:
+    """
+    Computes some similarity metric between every possible combination of
+    two sets of features. This can be thought of as a bipartite graph
+    problem, where the two inputs are feature sets for the left and right nodes.
+
+    Args:
+        similarity_function: A function that computes a similarity metric
+            between two batches of feature vectors. Should return a batch
+            of scalar similarity values.
+        right_features: The first set of features,
+            with shape `[batch_size, n_nodes, n_features]`.
+        left_features: The second set of features,
+            with shape `[batch_size, n_nodes, n_features]`.
+
+    Returns:
+        The similarities computed between every combination of left and
+        right features. Will have shape
+        `[batch_size, n_left, n_right]`.
+
+    """
+    # Compute all possible combinations.
+    combinations = compute_bipartite_edge_features(
+        left_features, right_features
+    )
+
+    combinations_shape = tf.shape(combinations)
+    combinations_outer_shape = combinations_shape[:3]
+    num_features = combinations_shape[-1]
+
+    # Reshape so we can compute similarities in one pass.
+    flat_shape = tf.stack((-1, 2, num_features), axis=0)
+    combinations = tf.reshape(combinations, flat_shape)
+    tracklet_features_flat = combinations[:, 0, :]
+    detection_features_flat = combinations[:, 1, :]
+
+    # Compute similarities.
+    similarities = similarity_function(
+        tracklet_features_flat, detection_features_flat
+    )
+
+    # Add the other dimensions back.
+    return tf.reshape(similarities, combinations_outer_shape)
 
 
 def make_adjacency_matrix(edge_features: tf.Tensor) -> tf.Tensor:

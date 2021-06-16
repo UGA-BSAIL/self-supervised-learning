@@ -215,7 +215,7 @@ class ModelTargets(enum.Enum):
     """
     The heatmap indicating the location of the detection centers.
     """
-    GEOMETRY = "geometry"
+    GEOMETRY_DENSE_PRED = "geometry_dense_pred"
     """
     The geometric features that specify the detection targets. Each feature
     should have the form
@@ -223,4 +223,11 @@ class ModelTargets(enum.Enum):
     ground-truth data. In the predictions, these will instead be in dense
     form, with a vector of `[width, height, offset_x, offset_y]` at each
     pixel location.
+    """
+    GEOMETRY_SPARSE_PRED = "geometry_sparse_pred"
+    """
+    Contains the same information as `GEOMETRY_DENSE_PRED`. For the
+    ground-truth, these two should be the same. However, for the predictions,
+    this one is in sparse form, i.e. the predictions will have the form
+    `[center_x, center_y, width, height, confidence]`.
     """

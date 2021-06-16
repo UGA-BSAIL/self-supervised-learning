@@ -73,7 +73,10 @@ _NON_RAGGED_INPUTS = {
 """
 Input features that the model expects to be normal tensors.
 """
-_RAGGED_TARGETS = {ModelTargets.GEOMETRY.value}
+_RAGGED_TARGETS = {
+    ModelTargets.GEOMETRY_DENSE_PRED.value,
+    ModelTargets.GEOMETRY_SPARSE_PRED.value,
+}
 """
 Target features that the model expects to be `RaggedTensor`s.
 """
@@ -580,7 +583,12 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         if heat_maps is not None:
             # We only provide the current frame heatmap.
             targets[ModelTargets.HEATMAP.value] = heat_maps[0]
-            targets[ModelTargets.GEOMETRY.value] = detection_geometry
+            targets[
+                ModelTargets.GEOMETRY_DENSE_PRED.value
+            ] = detection_geometry
+            targets[
+                ModelTargets.GEOMETRY_SPARSE_PRED.value
+            ] = detection_geometry
 
         return inputs, targets
 

@@ -25,13 +25,20 @@ class PeakLayer(layers.Layer):
     Dilation kernel to use for peak finding.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any):
+    def __init__(
+        self, *args: Any, with_confidence: bool = False, **kwargs: Any
+    ):
         """
         Args:
             *args:  Will be forwarded to superclass.
+            with_confidence: If true, it will set the positive values in the
+                resulting peak mask to the confidence scores for that peak,
+                instead of merely one.
             **kwargs: Will be forwarded to superclass.
         """
         super().__init__(*args, **kwargs)
+
+        self._with_confidence = with_confidence
 
         # Create the sub-layers.
         self._is_peak = layers.Lambda(self._find_peaks, name="peak_finding")
@@ -49,17 +56,24 @@ class PeakLayer(layers.Layer):
             zero.
 
         """
+        kernel = tf.cast(self._DILATION_KERNEL, image.dtype)
+
         # Custom dilation for finding peaks.
         dilated = tf.nn.dilation2d(
             image,
-            self._DILATION_KERNEL,
+            kernel,
             [1, 1, 1, 1],
             "SAME",
             "NHWC",
             [1, 1, 1, 1],
             name="peak_finding_dilation",
         )
-        return tf.greater(image, dilated)
+        mask = tf.greater(image, dilated)
+
+        if self._with_confidence:
+            # Get the actual confidence at those points.
+            return image * tf.cast(mask, image.dtype)
+        return mask
 
     def call(self, inputs: tf.Tensor, **_: Any) -> tf.Tensor:
         return self._is_peak(inputs)

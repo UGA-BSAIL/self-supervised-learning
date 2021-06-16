@@ -80,7 +80,7 @@ def test_inputs_and_targets_from_dataset_smoke(
         expected_inputs -= {ModelInputs.DETECTIONS_FRAME}
     if not include_heat_map:
         expected_targets -= {ModelTargets.HEATMAP}
-        expected_targets -= {ModelTargets.GEOMETRY}
+        expected_targets -= {ModelTargets.GEOMETRY_DENSE_PRED}
     for element in expected_inputs:
         assert element.value in inputs
     for element in expected_targets:
