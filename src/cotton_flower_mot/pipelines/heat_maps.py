@@ -93,7 +93,11 @@ def make_point_annotation_map(
 
 
 def make_heat_map(
-    points: tf.Tensor, *, map_size: tf.Tensor, sigma: float
+    points: tf.Tensor,
+    *,
+    map_size: tf.Tensor,
+    sigma: float,
+    normalized: bool = True
 ) -> tf.Tensor:
     """
     Creates a gaussian heat map by splatting a set of points.
@@ -104,6 +108,9 @@ def make_heat_map(
         sigma:
             The standard deviation in pixels to use for the applied gaussian
             filter.
+        normalized: If true, the gaussians will be normalized, such that
+            the integral for each adds up to one. Otherwise, they will be
+            un-normalized.
 
     Returns:
         A tensor containing density maps, of the shape
@@ -120,8 +127,19 @@ def make_heat_map(
     # Add a dummy channel dimension.
     dense_annotations = tf.expand_dims(dense_annotations, 2)
 
-    return tfa.image.gaussian_filter2d(
+    blurred = tfa.image.gaussian_filter2d(
         dense_annotations,
         filter_shape=kernel_size,
         sigma=sigma,
     )
+
+    if not normalized:
+        # Get rid of the normalization constant. We should be able to
+        # calculate the coefficient statically based on our sigma value,
+        # but due to quantization error, it's more accurate to calculate it
+        # dynamically.
+        max_value = tf.reduce_max(blurred)
+        blurred = tf.cond(
+            max_value > 0, lambda: blurred / max_value, lambda: blurred
+        )
+    return blurred

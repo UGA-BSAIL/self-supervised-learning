@@ -64,7 +64,11 @@ class TensorProvider(BaseProvider):
         return tensor
 
     def ragged_tensor(
-        self, *, row_lengths: Iterable[int], inner_shape: Iterable[int] = (1,)
+        self,
+        *,
+        row_lengths: Iterable[int],
+        inner_shape: Iterable[int] = (1,),
+        **kwargs: Any
     ) -> tf.RaggedTensor:
         """
         Creates a fake `RaggedTensor` with arbitrary values and the given shape.
@@ -72,6 +76,7 @@ class TensorProvider(BaseProvider):
         Args:
             row_lengths: The lengths to use for each row in the tensor.
             inner_shape: The fixed shape to use for each inner element.
+            kwargs: Will be forwarded to `self.tensor`.
 
         Returns:
             The `RaggedTensor` that it created. The final bounding shape will be
@@ -81,7 +86,7 @@ class TensorProvider(BaseProvider):
         """
         # Create the tensor elements.
         num_elements = np.sum(row_lengths)
-        elements = self.tensor((num_elements,) + tuple(inner_shape))
+        elements = self.tensor((num_elements,) + tuple(inner_shape), **kwargs)
 
         # Convert to a `RaggedTensor`.
         return tf.RaggedTensor.from_row_lengths(elements, row_lengths)

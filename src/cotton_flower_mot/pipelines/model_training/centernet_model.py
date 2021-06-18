@@ -130,7 +130,9 @@ def compute_sparse_predictions(
     confidence_masks = tf.cast(confidence_masks, tf.float32)
     center_masks = tf.greater(confidence_masks, 0.0)
     sizes = tf.ensure_shape(sizes, (None, None, None, 2))
+    sizes = tf.cast(sizes, tf.float32)
     offsets = tf.ensure_shape(offsets, (None, None, None, 2))
+    offsets = tf.cast(offsets, tf.float32)
     mask_shape = tf.shape(confidence_masks)[1:3]
 
     # Mask the offsets and sizes.
@@ -214,7 +216,8 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
         lambda f: compute_sparse_predictions(
             confidence_masks=f[0], sizes=f[1], offsets=f[2]
         ),
-        name=ModelTargets.GEOMETRY_SPARSE_PRED.name,
+        dtype=tf.float32,
+        name=ModelTargets.GEOMETRY_SPARSE_PRED.value,
     )((confidence_mask, sizes, offsets))
 
     return tf.keras.Model(

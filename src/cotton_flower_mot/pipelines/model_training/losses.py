@@ -120,7 +120,16 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         positive_mask = tf.equal(y_true, positive_threshold)
         pixel_wise_loss = tf.where(positive_mask, positive_loss, negative_loss)
 
-        return -tf.reduce_mean(pixel_wise_loss)
+        total_loss = -tf.reduce_sum(pixel_wise_loss)
+        num_points = tf.experimental.numpy.count_nonzero(positive_mask)
+        return (
+            tf.cond(
+                num_points > 0,
+                lambda: total_loss / tf.cast(num_points, tf.float32),
+                lambda: total_loss,
+            )
+            / 1000.0
+        )
 
 
 class GeometryL1Loss(tf.keras.losses.Loss):

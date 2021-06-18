@@ -407,6 +407,7 @@ def _make_heat_map(
         center_points,
         map_size=heat_map_size,
         sigma=config.detection_sigma,
+        normalized=False,
     )
 
     return heat_map

@@ -126,20 +126,21 @@ class AveragePrecision(tf.keras.metrics.Metric):
         y_true = tf.ensure_shape(y_true, (None, 6))
         y_pred = tf.ensure_shape(y_pred, (None, 5))
         confidence = y_pred[:, 4]
+        y_pred = y_pred[:, :4]
         # We don't need the offsets.
         y_true = y_true[:, :4]
 
         # Determine which predictions match up with the truth through IOU.
         ious = compute_pairwise_similarities(
-            compute_ious, left_features=y_true, right_features=y_pred
-        )
+            compute_ious,
+            # It expects there to be a batch dimension.
+            left_features=tf.expand_dims(y_true, 0),
+            right_features=tf.expand_dims(y_pred, 0),
+        )[0]
         # Anything below the threshold doesn't match.
         iou_matches = tf.greater_equal(ious, self._iou_threshold)
-
-        # Number of predictions that should be positive.
-        num_positive_truth = tf.shape(y_true)[0]
-        # Number of predictions that should be negative.
-        num_negative_truth = tf.shape(y_pred)[0] - num_positive_truth
+        # tf.print("num_iou_matches:", tf.shape(tf.where(iou_matches))[0],
+        #          "num_pred:", tf.shape(y_pred)[0])
 
         matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
         true_positive_confidence = tf.reduce_max(
@@ -148,11 +149,13 @@ class AveragePrecision(tf.keras.metrics.Metric):
 
         # Figure out which predictions are false-positives, and create a mask
         # for them.
-        true_positive_indices = tf.argmax(matches_with_confidence, axis=1)
+        true_positive_indices = tf.argmax(
+            matches_with_confidence, axis=1, output_type=tf.int32
+        )
         true_positive_mask = tf.scatter_nd(
             tf.expand_dims(true_positive_indices, 1),
             tf.ones_like(true_positive_indices),
-            shape=tf.expand_dims(num_negative_truth),
+            shape=tf.shape(y_pred)[0:1],
         )
         false_positive_mask = tf.logical_not(
             tf.cast(true_positive_mask, tf.bool)
@@ -163,12 +166,10 @@ class AveragePrecision(tf.keras.metrics.Metric):
         )
 
         # Create the ground-truth and predictions.
-        positive_gt = tf.ones(
-            tf.expand_dims(num_positive_truth), dtype=tf.float32
-        )
-        negative_gt = tf.zeros(
-            tf.expand_dims(num_negative_truth), dtype=tf.float32
-        )
+        positive_gt = tf.ones_like(true_positive_confidence)
+        negative_gt = tf.zeros_like(false_positive_confidence)
+        # tf.print("tp_conf:", true_positive_confidence)
+        # tf.print("fp_conf:", false_positive_confidence)
         self._auc.update_state(positive_gt, true_positive_confidence)
         self._auc.update_state(negative_gt, false_positive_confidence)
 
@@ -176,7 +177,7 @@ class AveragePrecision(tf.keras.metrics.Metric):
         return tf.constant(0)
 
     def update_state(
-        self, y_true: tf.RaggedTensor, y_pred: tf.RaggedTensor
+        self, y_true: tf.RaggedTensor, y_pred: tf.RaggedTensor, **_
     ) -> None:
         """
         Args:

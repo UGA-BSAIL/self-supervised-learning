@@ -70,13 +70,19 @@ def test_make_point_annotation_map_values(faker: Faker) -> None:
         assert got_value == values[i].numpy()
 
 
-@pytest.mark.parametrize("sigma", [3, 5], ids=["small_sigma", "big_sigma"])
-def test_make_heat_map(sigma: int) -> None:
+@pytest.mark.parametrize(
+    "sigma", [1, 3, 5], ids=["small_sigma", "medium_sigma", "big_sigma"]
+)
+@pytest.mark.parametrize(
+    "normalized", [True, False], ids=["normalized", "un-normalized"]
+)
+def test_make_heat_map(sigma: int, normalized: bool) -> None:
     """
     Tests that `make_heat_map` works.
 
     Args:
         sigma: The sigma value to use.
+        normalized: Whether to test with normalized gaussians.
 
     """
     # Arrange.
@@ -85,9 +91,21 @@ def test_make_heat_map(sigma: int) -> None:
 
     # Act.
     got_heat_map = heat_maps.make_heat_map(
-        points, map_size=tf.constant((50, 50)), sigma=sigma
+        points,
+        map_size=tf.constant((100, 100)),
+        sigma=sigma,
+        normalized=normalized,
     ).numpy()
 
     # Assert.
-    # It should have three points overall.
-    assert np.sum(got_heat_map) == pytest.approx(3.0, abs=0.1)
+    if normalized:
+        # It should have three points overall.
+        assert np.sum(got_heat_map) == pytest.approx(3.0, abs=0.1)
+    else:
+        # Maximum value should be one.
+        assert np.max(got_heat_map) == pytest.approx(1.0)
+
+    # There should be a distinct peak for each point.
+    max_value = np.max(got_heat_map)
+    peaks = np.count_nonzero(got_heat_map == max_value)
+    assert peaks == 3
