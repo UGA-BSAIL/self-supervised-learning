@@ -575,21 +575,17 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         }
         if frame_images is not None:
             # We only provide the current frame image.
-            inputs[ModelInputs.DETECTIONS_FRAME.value] = frame_images[0]
+            inputs[ModelInputs.DETECTIONS_FRAME.value] = frame_images[1]
 
         targets = {
             # ModelTargets.SINKHORN.value: sinkhorn,
             # ModelTargets.ASSIGNMENT.value: assignment,
+            ModelTargets.GEOMETRY_DENSE_PRED.value: detection_geometry,
+            ModelTargets.GEOMETRY_SPARSE_PRED.value: detection_geometry,
         }
         if heat_maps is not None:
             # We only provide the current frame heatmap.
-            targets[ModelTargets.HEATMAP.value] = heat_maps[0]
-            targets[
-                ModelTargets.GEOMETRY_DENSE_PRED.value
-            ] = detection_geometry
-            targets[
-                ModelTargets.GEOMETRY_SPARSE_PRED.value
-            ] = detection_geometry
+            targets[ModelTargets.HEATMAP.value] = heat_maps[1]
 
         return inputs, targets
 

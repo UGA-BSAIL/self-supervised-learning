@@ -12,6 +12,7 @@ import tensorflow.keras.optimizers.schedules as schedules
 from loguru import logger
 
 from ..config import ModelConfig
+from ..schemas import ModelTargets
 from .centernet_model import build_model
 from .losses import make_losses
 from .metrics import make_metrics
@@ -150,6 +151,7 @@ def train_model(
         model.compile(
             optimizer=optimizer,
             loss=make_losses(**loss_params),
+            loss_weights={ModelTargets.HEATMAP.value: 1000.0},
             metrics=make_metrics(),
         )
         model.fit(

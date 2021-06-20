@@ -51,12 +51,12 @@ def test_compute_sparse_predictions(
 
     """
     # Arrange.
-    # Add in batch dimension.
-    confidence_mask = tf.constant(np.expand_dims(confidence_mask, 0))
+    # Duplicate along the batch dimension so we can test batching.
+    confidence_mask = tf.constant(np.stack([confidence_mask] * 2, 0))
     confidence_mask = tf.expand_dims(confidence_mask, -1)
-    sizes = tf.constant(np.expand_dims(sizes.astype(np.float32), 0))
-    offsets = tf.constant(np.expand_dims(offsets.astype(np.float32), 0))
-    expected_boxes = tf.constant(np.expand_dims(expected_boxes, 0))
+    sizes = tf.constant(np.stack([sizes.astype(np.float32)] * 2, 0))
+    offsets = tf.constant(np.stack([offsets.astype(np.float32)] * 2, 0))
+    expected_boxes = tf.constant(np.stack([expected_boxes] * 2, 0))
 
     # Act.
     got_boxes = centernet_model.compute_sparse_predictions(

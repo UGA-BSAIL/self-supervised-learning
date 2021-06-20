@@ -106,7 +106,7 @@ class AveragePrecision(tf.keras.metrics.Metric):
 
     def _update_auc_from_image(
         self, y_true: tf.Tensor, y_pred: tf.Tensor
-    ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    ) -> tf.Tensor:
         """
         Updates the internal AUC metric for a single image and its detections.
 
@@ -119,8 +119,7 @@ class AveragePrecision(tf.keras.metrics.Metric):
                 layout as the input to `update_state`.
 
         Returns:
-            The number of true positives, false positives, and false
-            negatives, in that order.
+            A dummy return value, which is just a 0 tensor.
 
         """
         y_true = tf.ensure_shape(y_true, (None, 6))
@@ -139,8 +138,12 @@ class AveragePrecision(tf.keras.metrics.Metric):
         )[0]
         # Anything below the threshold doesn't match.
         iou_matches = tf.greater_equal(ious, self._iou_threshold)
-        # tf.print("num_iou_matches:", tf.shape(tf.where(iou_matches))[0],
-        #          "num_pred:", tf.shape(y_pred)[0])
+        tf.print(
+            "num_iou_matches:",
+            tf.shape(tf.where(iou_matches))[0],
+            "num_pred:",
+            tf.shape(y_pred)[0],
+        )
 
         matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
         true_positive_confidence = tf.reduce_max(
@@ -168,8 +171,8 @@ class AveragePrecision(tf.keras.metrics.Metric):
         # Create the ground-truth and predictions.
         positive_gt = tf.ones_like(true_positive_confidence)
         negative_gt = tf.zeros_like(false_positive_confidence)
-        # tf.print("tp_conf:", true_positive_confidence)
-        # tf.print("fp_conf:", false_positive_confidence)
+        tf.print("tp_conf:", true_positive_confidence)
+        tf.print("fp_conf:", false_positive_confidence)
         self._auc.update_state(positive_gt, true_positive_confidence)
         self._auc.update_state(negative_gt, false_positive_confidence)
 

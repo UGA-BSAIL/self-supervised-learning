@@ -19,7 +19,7 @@ loss_params:
   # Weight to use for size regression loss.
   size_weight: 1.0
   # Weight to use for offset regression loss.
-  offset_weight: 0.1
+  offset_weight: 1.0
 
 # Learning phases to use for training the model.
 learning_phases:

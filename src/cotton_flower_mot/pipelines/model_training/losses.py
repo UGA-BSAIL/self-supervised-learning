@@ -3,14 +3,20 @@ Defines custom losses.
 """
 
 
-from typing import Dict
+from typing import Any, Dict
 
 import tensorflow as tf
 
 from ..heat_maps import make_point_annotation_map, trim_out_of_bounds
 from ..schemas import ModelTargets
+from .graph_utils import compute_pairwise_similarities
 from .loss_metric_utilities import MaybeRagged, correct_ragged_mismatch
 from .ragged_utils import ragged_map_fn
+from .similarity_utils import (
+    aspect_ratio_penalty,
+    compute_ious,
+    distance_penalty,
+)
 
 
 class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
@@ -108,6 +114,7 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         positive_loss = tf.pow(one - y_pred, self._alpha) * tf.math.log(
             y_pred + self._EPSILON
         )
+        positive_loss *= 100.0
         # Loss we use at "negative" locations.
         negative_loss = (
             tf.pow(one - y_true, self._beta)
@@ -120,15 +127,13 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         positive_mask = tf.equal(y_true, positive_threshold)
         pixel_wise_loss = tf.where(positive_mask, positive_loss, negative_loss)
 
-        total_loss = -tf.reduce_sum(pixel_wise_loss)
+        mean_loss = -tf.reduce_mean(pixel_wise_loss)
+        # Normalize by the number of keypoints.
         num_points = tf.experimental.numpy.count_nonzero(positive_mask)
-        return (
-            tf.cond(
-                num_points > 0,
-                lambda: total_loss / tf.cast(num_points, tf.float32),
-                lambda: total_loss,
-            )
-            / 1000.0
+        return tf.cond(
+            num_points > 0,
+            lambda: mean_loss / tf.cast(num_points, tf.float32),
+            lambda: mean_loss,
         )
 
 
@@ -192,9 +197,16 @@ class GeometryL1Loss(tf.keras.losses.Loss):
         # Extract the relevant point values with the mask.
         sparse_predictions = tf.boolean_mask(dense_predictions, point_mask)
 
-        # We should now be able to compare directly to the ground-truth.
+        # We need to make sure the sparse truth is ordered the same way,
+        # which is why we also represent it in dense form.
         truth_values = sparse_truth[:, 2]
-        return tf.norm(truth_values - sparse_predictions, ord=1)
+        dense_truth = make_point_annotation_map(
+            center_points, map_size=map_size, point_values=truth_values
+        )
+        ordered_sparse_truth = tf.boolean_mask(dense_truth, point_mask)
+
+        # We should now be able to compare directly to the ground-truth.
+        return tf.norm(ordered_sparse_truth - sparse_predictions, ord=1)
 
     @classmethod
     def _batch_sparse_l1_loss(
@@ -264,6 +276,211 @@ class GeometryL1Loss(tf.keras.losses.Loss):
         ) * self._offset_weight
 
 
+class CIOULoss(tf.keras.losses.Loss):
+    """
+    Implements cIOU loss.
+    """
+
+    def __init__(
+        self,
+        iou_weight: float = 1.0,
+        distance_weight: float = 1.0,
+        aspect_ratio_weight: float = 1.0,
+        classification_weight: float = 1.0,
+        positive_threshold: float = 0.35,
+        negative_threshold: float = 0.75,
+        **kwargs: Any,
+    ):
+        """
+        Args:
+            iou_weight: Weight to apply to the IOU component of the loss.
+            distance_weight: Weight to apply to the center distance component
+                of the loss.
+            aspect_ratio_weight: Weight to apply to the aspect ratio component
+                of the loss.
+            positive_threshold: cIOU loss threshold below which we consider
+                a box proposal to be positive.
+            negative_threshold: cIOU loss threshold above which we consider a
+                box proposal to be negative.
+            classification_weight: How much we weight the portion of the loss
+                that classifies positive vs. negative bounding boxes.
+            **kwargs: Will be forwarded to superclass.
+
+        """
+        super().__init__(**kwargs)
+
+        self._iou_weight = tf.constant(iou_weight)
+        self._distance_weight = tf.constant(distance_weight)
+        self._aspect_ratio_weight = tf.constant(aspect_ratio_weight)
+        self._classification_weight = tf.constant(classification_weight)
+        self._positive_threshold = tf.constant(positive_threshold)
+        self._negative_threshold = tf.constant(negative_threshold)
+
+    def _compute_loss(
+        self, left_boxes: tf.Tensor, right_boxes: tf.Tensor
+    ) -> tf.Tensor:
+        """
+        Computes the complete losses between two sets of paired bounding boxes.
+
+        Args:
+            left_boxes: The first set of boxes. Should have shape
+                `[num_boxes, 4]`, where each row has the form
+                `[center_x, center_y, size_x, size_y]`.
+            right_boxes: The second set of boxes, in the same form.
+
+        Returns:
+            The calculated cIOU loss between each pair of boxes.
+
+        """
+        ious = compute_ious(left_boxes, right_boxes)
+        distance = distance_penalty(left_boxes, right_boxes)
+        aspect_ratio = aspect_ratio_penalty(left_boxes, right_boxes)
+
+        return (
+            self._iou_weight * (tf.constant(1.0) - ious)
+            + self._distance_weight * distance
+            + self._aspect_ratio_weight * aspect_ratio
+        )
+
+    @staticmethod
+    def _compute_regression_loss(pairwise_losses: tf.Tensor) -> tf.Tensor:
+        """
+        Computes the bounding-box regression component of the loss.
+
+        Args:
+            pairwise_losses: The complete pairwise losses, with shape
+                `[num_truth, num_predictions]`.
+
+        Returns:
+            The computed total bounding box regression loss for positive
+            examples.
+
+        """
+        # Find the best predictions for each ground-truth box.
+        truth_min_loss = tf.reduce_min(pairwise_losses, axis=1)
+        return tf.reduce_mean(truth_min_loss)
+
+    def _compute_classification_loss(
+        self, pairwise_losses: tf.Tensor, confidence: tf.Tensor
+    ) -> tf.Tensor:
+        """
+        Computes the total positive/negative classification component of the
+        loss.
+
+        Args:
+            pairwise_losses: The complete pairwise losses, with shape
+                `[num_truth, num_predictions]`.
+            confidence: The confidence vector, containing corresponding
+                confidences for each prediction.
+
+        Returns:
+            The total classification loss.
+
+        """
+        # Separate predictions into positive and negative examples.
+        prediction_min_loss = tf.reduce_min(pairwise_losses, axis=0)
+        positive_mask = tf.less_equal(
+            prediction_min_loss, self._positive_threshold
+        )
+        negative_mask = tf.greater_equal(
+            prediction_min_loss, self._negative_threshold
+        )
+        positive_confidences = tf.boolean_mask(confidence, positive_mask)
+        negative_confidences = tf.boolean_mask(confidence, negative_mask)
+
+        predictions = tf.concat(
+            (positive_confidences, negative_confidences), 0
+        )
+        truth = tf.concat(
+            (
+                tf.ones_like(positive_confidences),
+                tf.zeros_like(negative_confidences),
+            ),
+            0,
+        )
+        loss = tf.keras.losses.binary_crossentropy(truth, predictions)
+
+        return tf.reduce_mean(loss)
+
+    def _loss_for_image(
+        self, y_true: tf.Tensor, y_pred: tf.Tensor
+    ) -> tf.Tensor:
+        """
+        Computes the total loss for a single training example.
+
+        Args:
+            y_true: The true bounding boxes for the detections, with the shape
+                `[num_detections, 4]`, where each row has the same layout as
+                the input to `_compute_loss`.
+            y_pred: The predicted bounding boxes for the detections, with the
+                shape `[num_detections, 5]`, where each row has the same
+                layout as the input to `_compute_loss` with the addition of a
+                confidence column.
+
+        Returns:
+            The total loss for all bounding boxes in the image.
+
+        """
+        y_true = tf.ensure_shape(y_true, (None, 6))
+        y_pred = tf.ensure_shape(y_pred, (None, 5))
+        # Handle the confidence separately.
+        confidence = y_pred[:, 4]
+        y_pred = y_pred[:, :4]
+        # We don't need the offsets.
+        y_true = y_true[:, :4]
+
+        # Keep only the top-100 predictions.
+        confidence_order = tf.argsort(confidence, direction="DESCENDING")
+        confidence = tf.gather(confidence, confidence_order[:100])
+        y_pred = tf.gather(y_pred, confidence_order[:100])
+
+        # Calculate the cIOU loss between every possible combination of boxes.
+        losses = compute_pairwise_similarities(
+            self._compute_loss,
+            # It expects there to be a batch dimension.
+            left_features=tf.expand_dims(y_true, 0),
+            right_features=tf.expand_dims(y_pred, 0),
+        )[0]
+
+        regression_loss = self._compute_regression_loss(losses)
+        class_loss = self._compute_classification_loss(losses, confidence)
+        return regression_loss + self._classification_weight * class_loss
+
+    def call(
+        self, y_true: tf.RaggedTensor, y_pred: tf.RaggedTensor
+    ) -> tf.Tensor:
+        """
+        Args:
+            y_true: The true sparse bounding box locations, with a shape of
+                `[batch, num_detections, 6]`. The last dimension is a vector
+                of the form
+                `[center_x, center_y, size_x, size_y, offset_x, offset_y]`.
+            y_pred: The predicted sparse bounding box locations, with a shape
+                of `[batch, num_detections, 5]`. The last dimension is a
+                vector of the form
+                `[center_x, center_y, size_x, size_y, confidence]`.
+
+        """
+        image_losses = ragged_map_fn(
+            lambda e: self._loss_for_image(e[0], e[1]),
+            (y_true, y_pred),
+            fn_output_signature=tf.TensorSpec(shape=[], dtype=tf.float32),
+        )
+
+        # Average across all examples.
+        return tf.reduce_mean(image_losses)
+
+    def get_config(self) -> Dict[str, Any]:
+        return dict(
+            iou_weight=self._iou_weight,
+            distance_weight=self._distance_weight,
+            aspect_ratio_weight=self._aspect_ratio_weight,
+            classification_weight=self._classification_weight,
+            positive_threshold=self._positive_threshold,
+            name=self.name,
+        )
+
+
 def make_losses(
     *, alpha: float, beta: float, size_weight: float, offset_weight: float
 ) -> Dict[str, tf.keras.losses.Loss]:
@@ -286,4 +503,7 @@ def make_losses(
         ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
             size_weight=size_weight, offset_weight=offset_weight
         ),
+        # ModelTargets.GEOMETRY_SPARSE_PRED.value: CIOULoss(
+        #     classification_weight=0.1
+        # )
     }

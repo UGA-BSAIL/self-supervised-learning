@@ -3,7 +3,7 @@ Custom pooling layers.
 """
 
 
-from typing import Any
+from typing import Any, Dict
 
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -77,3 +77,6 @@ class PeakLayer(layers.Layer):
 
     def call(self, inputs: tf.Tensor, **_: Any) -> tf.Tensor:
         return self._is_peak(inputs)
+
+    def get_config(self) -> Dict[str, Any]:
+        return {"with_confidence": self._with_confidence, "name": self.name}
