@@ -40,6 +40,7 @@ from .pipelines import (
     convert_annotations,
     data_engineering,
     eda,
+    model_config,
     model_data_load,
     model_evaluation,
     model_training,
@@ -56,23 +57,30 @@ class ProjectHooks:
 
         """
         data_engineering_pipeline = data_engineering.create_pipeline()
-        tfrecord_pipeline = build_tfrecords.create_pipeline()
+        config_pipeline = model_config.create_pipeline()
+        tfrecord_pipeline = (
+            data_engineering_pipeline
+            + config_pipeline
+            + build_tfrecords.create_pipeline()
+        )
         eda_pipeline = eda.create_pipeline()
-        training_pipeline = model_training.create_pipeline()
-        evaluation_pipeline = model_evaluation.create_pipeline()
-        data_load_pipeline = model_data_load.create_pipeline()
+        data_load_pipeline = (
+            config_pipeline + model_data_load.create_pipeline()
+        )
+        training_pipeline = (
+            data_load_pipeline + model_training.create_pipeline()
+        )
+        evaluation_pipeline = (
+            data_load_pipeline + model_evaluation.create_pipeline()
+        )
         conversion_pipeline = convert_annotations.create_pipeline()
 
         return {
-            "__default__": data_engineering_pipeline
-            + data_load_pipeline
-            + tfrecord_pipeline
-            + eda_pipeline
-            + training_pipeline,
-            "build_tfrecords": data_engineering_pipeline + tfrecord_pipeline,
+            "__default__": eda_pipeline + training_pipeline,
+            "build_tfrecords": tfrecord_pipeline,
             "eda": eda_pipeline,
-            "model_training": data_load_pipeline + training_pipeline,
-            "model_evaluation": data_load_pipeline + evaluation_pipeline,
+            "model_training": training_pipeline,
+            "model_evaluation": evaluation_pipeline,
             "convert_annotations": conversion_pipeline,
         }
 

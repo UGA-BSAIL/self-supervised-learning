@@ -75,7 +75,8 @@ class MotAnnotationColumns(enum.Enum):
 @enum.unique
 class ObjectDetectionFeatures(enum.Enum):
     """
-    Standard feature names used by the TF Object Detection API.
+    Standard feature names used by the TF Object Detection API. There are
+    also additional features here that are specific to our tracking problem.
     """
 
     IMAGE_HEIGHT = "image/height"
@@ -125,6 +126,12 @@ class ObjectDetectionFeatures(enum.Enum):
     OBJECT_CLASS_LABEL = "image/object/class/id"
     """
     Object class as a numerical label.
+    """
+
+    HEATMAP_ENCODED = "image/heatmap/encoded"
+    """
+    Encoded image heatmap data. This can be extrapolated easily from existing
+    data, but this process is slow, so it's convenient to pre-generate it.
     """
 
 

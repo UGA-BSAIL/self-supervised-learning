@@ -1,0 +1,14 @@
+# Shape of the input detection crops, in the form of height, width, channels.
+image_input_shape: [100, 100, 3]
+# Shape of the raw video frames, in the form of height, width, channels.
+frame_input_shape: [1080, 1920, 3]
+# Number of appearance features to generate.
+num_appearance_features: 128
+# Number of GCN output channels to use.
+num_gcn_channels: 128
+# Sinkhorn normalization Lambda value.
+sinkhorn_lambda: 10.0
+# Number of reduction stages to include in the detection model.
+num_reduction_stages: 3
+# Sigma to use for density maps.
+detection_sigma: 3

@@ -1,5 +1,5 @@
 import random
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -7,25 +7,28 @@ import tensorflow as tf
 from loguru import logger
 from pycvat import Task
 
+from ..config import ModelConfig
+from ..heat_maps import make_heat_map
 from ..schemas import ObjectTrackingFeatures as Otf
 from ..tfrecords_utils import bytes_feature, float_feature, int_feature
 
 _FEATURES_TO_FACTORIES = {
-    Otf.IMAGE_HEIGHT.value: int_feature,
-    Otf.IMAGE_WIDTH.value: int_feature,
-    Otf.IMAGE_FILENAME.value: bytes_feature,
-    Otf.IMAGE_SOURCE_ID.value: int_feature,
-    Otf.IMAGE_ENCODED.value: bytes_feature,
-    Otf.IMAGE_FORMAT.value: bytes_feature,
-    Otf.OBJECT_BBOX_X_MIN.value: float_feature,
-    Otf.OBJECT_BBOX_X_MAX.value: float_feature,
-    Otf.OBJECT_BBOX_Y_MIN.value: float_feature,
-    Otf.OBJECT_BBOX_Y_MAX.value: float_feature,
-    Otf.OBJECT_CLASS_TEXT.value: bytes_feature,
-    Otf.OBJECT_CLASS_LABEL.value: int_feature,
-    Otf.OBJECT_ID.value: int_feature,
-    Otf.IMAGE_SEQUENCE_ID.value: int_feature,
-    Otf.IMAGE_FRAME_NUM.value: int_feature,
+    Otf.IMAGE_HEIGHT: int_feature,
+    Otf.IMAGE_WIDTH: int_feature,
+    Otf.IMAGE_FILENAME: bytes_feature,
+    Otf.IMAGE_SOURCE_ID: int_feature,
+    Otf.IMAGE_ENCODED: bytes_feature,
+    Otf.IMAGE_FORMAT: bytes_feature,
+    Otf.OBJECT_BBOX_X_MIN: float_feature,
+    Otf.OBJECT_BBOX_X_MAX: float_feature,
+    Otf.OBJECT_BBOX_Y_MIN: float_feature,
+    Otf.OBJECT_BBOX_Y_MAX: float_feature,
+    Otf.OBJECT_CLASS_TEXT: bytes_feature,
+    Otf.OBJECT_CLASS_LABEL: int_feature,
+    Otf.OBJECT_ID: int_feature,
+    Otf.IMAGE_SEQUENCE_ID: int_feature,
+    Otf.IMAGE_FRAME_NUM: int_feature,
+    Otf.HEATMAP_ENCODED: bytes_feature,
 }
 
 
@@ -78,7 +81,7 @@ def split_specific(
     annotations: pd.DataFrame,
     *,
     test_clips: Iterable[int],
-    valid_clips: Iterable[int]
+    valid_clips: Iterable[int],
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Split out specific training, testing, and validation clips.
@@ -128,8 +131,8 @@ def _get_missing_columns(
 
     missing_features = {}
     for column, feature_type in _FEATURES_TO_FACTORIES.items():
-        if column not in frame_annotations:
-            missing_features[column] = feature_type(
+        if column.value not in frame_annotations:
+            missing_features[column.value] = feature_type(
                 default_values[feature_type]
             )
 
@@ -139,15 +142,17 @@ def _get_missing_columns(
 def _make_example(
     *,
     image: np.ndarray,
+    heat_map: np.ndarray,
     frame_annotations: pd.DataFrame,
     frame_num: int,
-    sequence_id: int
+    sequence_id: int,
 ) -> tf.train.Example:
     """
     Creates a TF `Example` for a single frame.
 
     Args:
         image: The compressed image data for the frame.
+        heat_map: Detection heatmap associated with image.
         frame_annotations: The annotations for the frame.
         frame_num: The frame number.
         sequence_id: The sequence ID.
@@ -168,7 +173,7 @@ def _make_example(
     # Create the feature dictionary.
     features = {}
     for column_name, column_data in frame_annotations.items():
-        features[column_name] = _FEATURES_TO_FACTORIES[column_name](
+        features[column_name] = _FEATURES_TO_FACTORIES[Otf(column_name)](
             column_data
         )
 
@@ -177,21 +182,70 @@ def _make_example(
 
     # Add the image data.
     features[Otf.IMAGE_ENCODED.value] = _FEATURES_TO_FACTORIES[
-        Otf.IMAGE_ENCODED.value
+        Otf.IMAGE_ENCODED
     ](image)
+    features[Otf.HEATMAP_ENCODED.value] = _FEATURES_TO_FACTORIES[
+        Otf.HEATMAP_ENCODED
+    ](heat_map)
     # Add the frame number and sequence ID.
     features[Otf.IMAGE_FRAME_NUM.value] = _FEATURES_TO_FACTORIES[
-        Otf.IMAGE_FRAME_NUM.value
+        Otf.IMAGE_FRAME_NUM
     ]((frame_num,))
     features[Otf.IMAGE_SEQUENCE_ID.value] = _FEATURES_TO_FACTORIES[
-        Otf.IMAGE_SEQUENCE_ID.value
+        Otf.IMAGE_SEQUENCE_ID
     ]((sequence_id,))
 
     return tf.train.Example(features=tf.train.Features(feature=features))
 
 
+def _generate_heat_map(
+    frame_annotations: pd.DataFrame, *, config: ModelConfig
+) -> np.ndarray:
+    """
+    Generates a detection heatmap given input annotations.
+
+    Args:
+        frame_annotations: The annotations for this frame.
+        config: The model configuration.
+
+    Returns:
+        The compressed heatmap that it produced.
+
+    """
+    # Calculate the heatmap size.
+    image_height, image_width, _ = config.frame_input_shape
+    frame_size = np.array([image_width, image_height])
+    down_sample_factor = 2 ** config.num_reduction_stages
+    heatmap_size = frame_size // down_sample_factor
+
+    # Extract the detection centers.
+    high_points = frame_annotations[
+        [Otf.OBJECT_BBOX_X_MAX.value, Otf.OBJECT_BBOX_Y_MAX.value]
+    ].values
+    low_points = frame_annotations[
+        [Otf.OBJECT_BBOX_X_MIN.value, Otf.OBJECT_BBOX_Y_MIN.value]
+    ].values
+    sizes = high_points - low_points
+    center_points = low_points + sizes / 2
+    normalized_center_points = center_points / frame_size
+
+    # Create the heatmap.
+    heat_map = make_heat_map(
+        tf.convert_to_tensor(normalized_center_points),
+        map_size=tf.convert_to_tensor(heatmap_size, dtype=tf.int32),
+        sigma=config.detection_sigma,
+        normalized=False,
+    )
+
+    # Encode the heatmap as integers so that we can store it as a PNG.
+    heat_map *= np.iinfo(np.uint16).max
+    heat_map = tf.cast(heat_map, tf.uint16)
+    # Compress the heatmap.
+    return tf.io.encode_png(heat_map).numpy()
+
+
 def _generate_clip_examples(
-    video_frames: Task, annotations: pd.DataFrame
+    video_frames: Task, annotations: pd.DataFrame, *, config: ModelConfig
 ) -> Iterable[tf.train.Example]:
     """
     Generates TFRecord examples from annotations and corresponding video frames.
@@ -199,6 +253,7 @@ def _generate_clip_examples(
     Args:
         video_frames: The CVAT `Task` to source frames from.
         annotations: The loaded annotations, transformed to the TF format.
+        config: The model configuration.
 
     Yields:
         Corresponding TFRecord examples for each frame. The examples are
@@ -227,19 +282,26 @@ def _generate_clip_examples(
             len(frame_annotations),
             frame_num,
         )
+
         # Get the actual frame image.
         frame_image = video_frames.get_image(frame_num, compressed=True)
+        # Get the heatmap.
+        heat_map = _generate_heat_map(frame_annotations, config=config)
 
         yield _make_example(
             image=frame_image,
             frame_annotations=frame_annotations,
             frame_num=frame_num,
+            heat_map=heat_map,
             sequence_id=sequence_id,
         )
 
 
 def generate_examples(
-    video_frames: Iterable[Task], annotations: pd.DataFrame
+    video_frames: Iterable[Task],
+    annotations: pd.DataFrame,
+    *,
+    config: ModelConfig,
 ) -> Iterable[Iterable[tf.train.Example]]:
     """
     Generates TFRecord examples from annotations and corresponding video
@@ -248,6 +310,7 @@ def generate_examples(
     Args:
         video_frames: The CVAT `Task`s to source frames from.
         annotations: The loaded annotations, transformed to the TF format.
+        config: The model configuration.
 
     Yields:
         Iterables of TFRecord examples for each clip.
@@ -275,4 +338,5 @@ def generate_examples(
         yield _generate_clip_examples(
             id_to_task[task_id],
             annotations.iloc[annotations.index == sequence_id],
+            config=config,
         )

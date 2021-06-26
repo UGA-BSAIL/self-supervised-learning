@@ -10,7 +10,9 @@ class ModelConfig:
 
     Attributes:
         image_input_shape: The shape of the detections and tracklets being
-            input to the appearance feature extractor.
+            input to the appearance feature extractor (height, width, channels).
+        frame_input_shape: The shape of the frame images being input to the
+            detector (height, width, channels).
         num_reduction_stages: How many initial reduction stages to add to the
             detector. Every stage will reduce the size of the heatmap output
             by a factor of 2.
@@ -25,6 +27,7 @@ class ModelConfig:
     """
 
     image_input_shape: Tuple[int, int, int]
+    frame_input_shape: Tuple[int, int, int]
     num_reduction_stages: int
     detection_sigma: float
 

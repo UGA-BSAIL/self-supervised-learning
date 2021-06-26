@@ -1,16 +1,3 @@
-# Shape of the input detection crops, in the form of height, width, channels.
-image_input_shape: [100, 100, 3]
-# Number of appearance features to generate.
-num_appearance_features: 128
-# Number of GCN output channels to use.
-num_gcn_channels: 128
-# Sinkhorn normalization Lambda value.
-sinkhorn_lambda: 10.0
-# Number of reduction stages to include in the detection model.
-num_reduction_stages: 3
-# Sigma to use for density maps.
-detection_sigma: 3
-
 # Amount of random jitter to add to the bounding boxes when training, as
 # a fraction of the frame size.
 bbox_jitter_fraction: 0.01

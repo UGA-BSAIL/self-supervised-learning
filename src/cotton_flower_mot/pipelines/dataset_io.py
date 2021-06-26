@@ -1,6 +1,5 @@
 import enum
 from functools import partial
-from multiprocessing import cpu_count
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 
 import numpy as np
@@ -9,7 +8,6 @@ from pydantic.dataclasses import dataclass
 
 from .assignment import construct_gt_sinkhorn_matrix
 from .config import ModelConfig
-from .heat_maps import make_heat_map
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
 
@@ -30,6 +28,7 @@ _FEATURE_DESCRIPTION = {
     Otf.OBJECT_ID.value: tf.io.RaggedFeature(tf.dtypes.int64),
     Otf.IMAGE_SEQUENCE_ID.value: tf.io.RaggedFeature(tf.dtypes.int64),
     Otf.IMAGE_FRAME_NUM.value: tf.io.RaggedFeature(tf.dtypes.int64),
+    Otf.HEATMAP_ENCODED.value: tf.io.FixedLenFeature([1], tf.dtypes.string),
 }
 """
 Descriptions of the features found in the dataset containing flower annotations.
@@ -377,40 +376,21 @@ def _decode_image(feature_dict: Feature) -> tf.Tensor:
     return tf.io.decode_jpeg(image_encoded[0])
 
 
-def _make_heat_map(
-    geometric_features: tf.Tensor,
-    *,
-    config: ModelConfig,
-    image_shape: tf.Tensor,
-) -> tf.Tensor:
+def _decode_heat_map(feature_dict: Feature) -> tf.Tensor:
     """
-    Creates the detection heatmap and offsets tensor.
+    Decodes the heat map from a feature dictionary.
 
     Args:
-        geometric_features: The geometric features for the image. Should have
-            the form `[center_x, center_y, width, height]`.
-        config: The model configuration.
-        image_shape: The shape of the input image.
+        feature_dict: The raw (combined) feature dictionary for one image.
 
     Returns:
-        The corresponding detection heatmap, and offset tensor.
+        The raw decoded heatmap.
 
     """
-    image_size = image_shape[:2][::-1]
-    center_points = geometric_features[:, :2]
-    down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
-
-    # Figure out the size of the heat maps.
-    heat_map_size = image_size // down_sample_factor
-    # Create the heat map.
-    heat_map = make_heat_map(
-        center_points,
-        map_size=heat_map_size,
-        sigma=config.detection_sigma,
-        normalized=False,
-    )
-
-    return heat_map
+    heat_map_encoded = feature_dict[Otf.HEATMAP_ENCODED.value]
+    heat_map = tf.io.decode_png(heat_map_encoded[0], dtype=tf.uint16)
+    # Heat map is stored as ints, but we need it to be normalized floats.
+    return tf.cast(heat_map, tf.float32) / np.iinfo(np.uint16).max
 
 
 def _load_single_image_features(
@@ -476,9 +456,7 @@ def _load_single_image_features(
 
         if include_heat_map:
             # Compute the detection heatmap and offsets.
-            heatmap = _make_heat_map(
-                geometric_features, config=config, image_shape=tf.shape(image)
-            )
+            heatmap = _decode_heat_map(feature_dict)
             loaded_features[FeatureName.HEAT_MAP.value] = heatmap
 
         return loaded_features
@@ -540,7 +518,7 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     def _process_pair(
         pair_features: Feature,
     ) -> Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
-        object_ids = pair_features[FeatureName.OBJECT_IDS.value]
+        # object_ids = pair_features[FeatureName.OBJECT_IDS.value]
         detections = pair_features[FeatureName.DETECTIONS.value]
         geometry = pair_features[FeatureName.GEOMETRY.value]
         sequence_ids = pair_features[FeatureName.SEQUENCE_ID.value]
@@ -548,15 +526,15 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         heat_maps = pair_features.get(FeatureName.HEAT_MAP.value, None)
 
         # Compute the ground-truth Sinkhorn matrix.
-        tracklet_ids = object_ids[0]
-        detection_ids = object_ids[1]
-        sinkhorn = construct_gt_sinkhorn_matrix(
-            detection_ids=detection_ids, tracklet_ids=tracklet_ids
-        )
-        # The sinkhorn matrix produced by the model is flattened.
-        sinkhorn = tf.reshape(sinkhorn, (-1,))
-        # Assignment target is the same as the sinkhorn matrix, just not a
-        # float.
+        # tracklet_ids = object_ids[0]
+        # detection_ids = object_ids[1]
+        # sinkhorn = construct_gt_sinkhorn_matrix(
+        #     detection_ids=detection_ids, tracklet_ids=tracklet_ids
+        # )
+        # # The sinkhorn matrix produced by the model is flattened.
+        # sinkhorn = tf.reshape(sinkhorn, (-1,))
+        # # Assignment target is the same as the sinkhorn matrix, just not a
+        # # float.
         # assignment = tf.cast(sinkhorn, tf.bool)
 
         tracklets = detections[0]

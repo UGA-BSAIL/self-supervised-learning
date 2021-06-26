@@ -104,6 +104,7 @@ def make_heat_map(
 
     Args:
         points: The points to add to the map. Should be in the form (x, y).
+            They should be normalized to [0.0, 1.0]
         map_size: The size of the map, in the form (width, height).
         sigma:
             The standard deviation in pixels to use for the applied gaussian

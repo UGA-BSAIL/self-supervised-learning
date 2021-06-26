@@ -40,6 +40,7 @@ def create_pipeline(**kwargs):
                 dict(
                     video_frames="cotton_videos",
                     annotations="annotations_tf_test",
+                    config="model_config",
                 ),
                 "tfrecord_test",
             ),
@@ -48,6 +49,7 @@ def create_pipeline(**kwargs):
                 dict(
                     video_frames="cotton_videos",
                     annotations="annotations_tf_valid",
+                    config="model_config",
                 ),
                 "tfrecord_valid",
             ),
@@ -56,6 +58,7 @@ def create_pipeline(**kwargs):
                 dict(
                     video_frames="cotton_videos",
                     annotations="annotations_tf_train",
+                    config="model_config",
                 ),
                 "tfrecord_train",
             ),
