@@ -41,13 +41,13 @@ def create_pipeline(**kwargs):
             node(
                 DataAugmentationConfig,
                 dict(
-                    max_bbox_jitter="params:bbox_jitter_fraction",
                     max_brightness_delta="params:max_brightness_delta",
                     max_hue_delta="params:max_hue_delta",
                     min_contrast="params:min_contrast",
                     max_contrast="params:max_contrast",
                     min_saturation="params:min_saturation",
                     max_saturation="params:max_saturation",
+                    flip="params:flip",
                 ),
                 "data_augmentation_config",
             ),

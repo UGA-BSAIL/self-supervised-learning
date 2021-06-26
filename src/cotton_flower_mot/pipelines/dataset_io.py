@@ -141,8 +141,6 @@ class DataAugmentationConfig:
     Configuration to use for data augmentation.
 
     Attributes:
-        max_bbox_jitter: Maximum amount of jitter to add to the bounding boxes,
-            as a fraction of the frame size.
         max_brightness_delta: Maximum amount to adjust the brightness by.
         max_hue_delta: Maximum amount to adjust the hue by.
 
@@ -151,9 +149,10 @@ class DataAugmentationConfig:
 
         min_saturation: Minimum saturation factor to use.
         max_saturation: Maximum saturation factor to use.
+
+        flip: Whether to allow horizontal and vertical flipping.
     """
 
-    max_bbox_jitter: float = 0.0
     max_brightness_delta: float = 0.0
     max_hue_delta: float = 0.0
 
@@ -163,77 +162,145 @@ class DataAugmentationConfig:
     min_saturation: Optional[float] = None
     max_saturation: Optional[float] = None
 
+    flip: bool = False
 
-def _add_bbox_jitter(
-    bbox_coords: tf.Tensor,
-    *,
-    max_fractional_change: float = 0.05,
-    image_shape: tf.Tensor,
+
+def _flip_geometry(
+    geometry: tf.Tensor, *, left_right: tf.Tensor, up_down: tf.Tensor
 ) -> tf.Tensor:
     """
-    Adds uniform random jitter to bounding box coordinates.
+    Flips the bounding box geometry about the central axes of an image.
 
     Args:
-        bbox_coords: The bounding box coordinates. Should have the shape
-            `[N, 4]`, where each row takes the form
-            `[min_y, min_x, max_y, max_x]`, in pixels.
-        max_fractional_change: The maximum absolute amount that a coordinate
-            can change, as a fraction of the original coordinate value.
-        image_shape: A 1D vector describing the shape of the corresponding
-            image.
+        geometry: The bounding box geometry, in the form
+            `[center_x, center_y, width, height, offset_x, offset_y]`.
+        left_right: 0D bool tensor, whether to flip horizontally.
+        up_down: 0D bool tensor, whether to flip vertically.
 
     Returns:
-        The bounding box coordinates with jitter.
+        The flipped geometry.
 
     """
-    # Calculate maximum change in pixels.
-    image_height_width = tf.cast(image_shape[:2], tf.float32)
-    max_absolute_change = image_height_width * max_fractional_change
-    # Expand it so it aligns with both the corner points.
-    max_absolute_change = tf.tile(max_absolute_change, (2,))
+    geometry = tf.ensure_shape(geometry, (None, 6))
+    left_right = tf.ensure_shape(left_right, ())
+    up_down = tf.ensure_shape(up_down, ())
 
-    # Generate random jitters.
-    jitter_magnitude = tf.random.uniform(
-        tf.shape(bbox_coords),
-        minval=-max_absolute_change,
-        maxval=max_absolute_change,
+    center_points = geometry[:, :2]
+    other_attributes = geometry[:, 2:]
+
+    def flip_up_down() -> tf.Tensor:
+        center_distance = center_points - tf.constant([0.0, 0.5])
+        flipped_distance = center_distance * tf.constant([1.0, -1.0])
+        return flipped_distance + tf.constant([0.0, 0.5])
+
+    def flip_left_right() -> tf.Tensor:
+        center_distance = center_points - tf.constant([0.5, 0.0])
+        flipped_distance = center_distance * tf.constant([-1.0, 1.0])
+        return flipped_distance + tf.constant([0.5, 0.0])
+
+    # Geometry should be normalized, so we can just flip about 0.5.
+    center_points = tf.cond(up_down, flip_up_down, lambda: center_points)
+    center_points = tf.cond(left_right, flip_left_right, lambda: center_points)
+    return tf.concat((center_points, other_attributes), axis=1)
+
+
+def _random_flip(
+    *, image: tf.Tensor, heatmap: Optional[tf.Tensor], geometry: tf.Tensor
+) -> Tuple[tf.Tensor, Optional[tf.Tensor], tf.Tensor]:
+    """
+    Randomly flips input images vertically and horizontally,
+    also transforming the corresponding geometry.
+
+    Args:
+        image: The 3D image to possibly flip.
+        heatmap: The corresponding heatmap, or None if there is no heatmap.
+        geometry: Bounding box geometry for the image, of the form
+            `[center_x, center_y, width, height, offset_x, offset_y]`.
+
+    Returns:
+        The same image, heatmap, and geometry, possibly flipped.
+
+    """
+    # Determine if we should do the flipping.
+    should_flip = tf.random.uniform((2,), maxval=2, dtype=tf.int32)
+    should_flip = tf.cast(should_flip, tf.bool)
+    should_flip_lr = should_flip[0]
+    should_flip_ud = should_flip[1]
+
+    # Flip the image and heatmap.
+    image = tf.cond(
+        should_flip_lr, lambda: tf.image.flip_left_right(image), lambda: image
+    )
+    image = tf.cond(
+        should_flip_ud, lambda: tf.image.flip_up_down(image), lambda: image
     )
 
-    # Apply the jitters.
-    return bbox_coords + jitter_magnitude
+    if heatmap is not None:
+        heatmap = tf.cond(
+            should_flip_lr,
+            lambda: tf.image.flip_left_right(heatmap),
+            lambda: heatmap,
+        )
+        heatmap = tf.cond(
+            should_flip_ud,
+            lambda: tf.image.flip_up_down(heatmap),
+            lambda: heatmap,
+        )
+
+    # Flip the bounding boxes.
+    geometry = _flip_geometry(
+        geometry, left_right=should_flip_lr, up_down=should_flip_ud
+    )
+
+    return image, heatmap, geometry
 
 
-def _augment_images(
-    images: tf.Tensor, config: DataAugmentationConfig
-) -> tf.Tensor:
+def _augment_inputs(
+    *,
+    image: tf.Tensor,
+    heatmap: Optional[tf.Tensor],
+    geometry: tf.Tensor,
+    config: DataAugmentationConfig,
+) -> Tuple[tf.Tensor, Optional[tf.Tensor], tf.Tensor]:
     """
     Applies data augmentation to images.
 
     Args:
-        images: The images to augment.
+        image: The image to augment.
+        heatmap: The corresponding heatmap, or None if there is no heatmap.
+        geometry: Bounding box geometry, of the form
+            `[center_x, center_y, width, height, offset_x, offset_y]`.
         config: Configuration for data augmentation.
 
     Returns:
-        The augmented images.
+        The augmented image, heatmap, and geometry.
 
     """
     # Convert to floats once so we're not doing many redundant conversions.
-    images = tf.cast(images, tf.float32)
+    image = tf.cast(image, tf.float32)
 
-    images = tf.image.random_brightness(images, config.max_brightness_delta)
-    images = tf.image.random_hue(images, config.max_hue_delta)
+    image = tf.image.random_brightness(image, config.max_brightness_delta)
+    image = tf.image.random_hue(image, config.max_hue_delta)
 
     if config.min_contrast is not None and config.max_contrast is not None:
-        images = tf.image.random_contrast(
-            images, config.min_contrast, config.max_contrast
+        image = tf.image.random_contrast(
+            image, config.min_contrast, config.max_contrast
         )
     if config.min_saturation is not None and config.max_saturation is not None:
-        images = tf.image.random_saturation(
-            images, config.min_saturation, config.max_saturation
+        image = tf.image.random_saturation(
+            image, config.min_saturation, config.max_saturation
         )
 
-    images = tf.clip_by_value(images, 0.0, 255.0)
-    return tf.cast(images, tf.uint8)
+    image = tf.clip_by_value(image, 0.0, 255.0)
+    image = tf.cast(image, tf.uint8)
+
+    # Perform flipping.
+    if config.flip:
+        image, heatmap, geometry = _random_flip(
+            image=image, heatmap=heatmap, geometry=geometry
+        )
+
+    return image, heatmap, geometry
 
 
 def _get_geometric_features(
@@ -421,23 +488,27 @@ def _load_single_image_features(
         bbox_coords = _extract_bbox_coords(feature_dict)
         image = _decode_image(feature_dict)
 
-        # Add random jitter.
-        bbox_coords = _add_bbox_jitter(
-            bbox_coords,
-            image_shape=tf.shape(image),
-            max_fractional_change=augmentation_config.max_bbox_jitter,
+        # Compute the geometric features.
+        geometric_features = _get_geometric_features(
+            bbox_coords, image_shape=tf.shape(image), config=config
+        )
+
+        # Extract the heatmap.
+        heatmap = None
+        if include_heat_map:
+            heatmap = _decode_heat_map(feature_dict)
+
+        # Perform data augmentation.
+        image, heatmap, geometric_features = _augment_inputs(
+            image=image,
+            heatmap=heatmap,
+            geometry=geometric_features,
+            config=augmentation_config,
         )
 
         # Extract the detection crops.
         detections = _extract_detection_images(
             bbox_coords=bbox_coords, image=image, config=config
-        )
-        # Augment the crops.
-        detections = _augment_images(detections, augmentation_config)
-
-        # Compute the geometric features.
-        geometric_features = _get_geometric_features(
-            bbox_coords, image_shape=tf.shape(image), config=config
         )
 
         object_ids = feature_dict[Otf.OBJECT_ID.value]
@@ -453,10 +524,7 @@ def _load_single_image_features(
         }
         if include_frame:
             loaded_features[FeatureName.FRAME_IMAGE.value] = image
-
-        if include_heat_map:
-            # Compute the detection heatmap and offsets.
-            heatmap = _decode_heat_map(feature_dict)
+        if heatmap is not None:
             loaded_features[FeatureName.HEAT_MAP.value] = heatmap
 
         return loaded_features

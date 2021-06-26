@@ -1,6 +1,3 @@
-# Amount of random jitter to add to the bounding boxes when training, as
-# a fraction of the frame size.
-bbox_jitter_fraction: 0.01
 # Maximum amount to adjust brightness by.
 max_brightness_delta: 0.1
 # Minimum contrast factor to use.
@@ -13,6 +10,8 @@ max_hue_delta: 0.1
 min_saturation: 0.9
 # Maximum saturation factor to use.
 max_saturation: 1.1
+# Whether to allow random flipping.
+flip: true
 
 # Probability of dropping a particular example to use.
 drop_probability: 0.0
