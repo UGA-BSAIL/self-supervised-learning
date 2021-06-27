@@ -7,7 +7,13 @@ from kedro.extras.datasets.tensorflow import TensorFlowModelDataset
 
 from .association import AssociationLayer
 from .dense import DenseBlock, TransitionLayer
-from .dla import AggregationNode, BasicBlock, HdaStage, UpSamplingIda
+from .dla import (
+    AggregationNode,
+    BasicBlock,
+    BottleneckBlock,
+    HdaStage,
+    UpSamplingIda,
+)
 from .gnn import DynamicEdgeGcn, ResidualGcn
 from .mlp_conv import MlpConv
 from .pooling import PeakLayer
@@ -30,6 +36,7 @@ CUSTOM_LAYERS = {
         HdaStage,
         UpSamplingIda,
         PeakLayer,
+        BottleneckBlock,
     )
 }
 if "custom_objects" not in TensorFlowModelDataset.DEFAULT_LOAD_ARGS:

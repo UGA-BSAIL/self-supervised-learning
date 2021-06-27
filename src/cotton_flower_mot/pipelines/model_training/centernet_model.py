@@ -37,11 +37,16 @@ def _build_backbone(
         The batch of extracted features.
 
     """
-    hda_stage = partial(HdaStage, agg_filter_size=3, activation="relu")
+    hda_stage = partial(
+        HdaStage,
+        agg_filter_size=3,
+        activation="relu",
+        block_type=HdaStage.Block.BOTTLENECK,
+    )
 
     # Create initial reduction stages.
     reduced_input = normalized_input
-    num_channels = 4
+    num_channels = 8
     for i in range(config.num_reduction_stages):
         reduced_input = hda_stage(
             agg_depth=0,

@@ -250,7 +250,65 @@ class AggregationWithUpSample(layers.Layer):
         return cls(channels, *agg_args, **agg_kwargs, **config)
 
 
-class BasicBlock(layers.Layer):
+class _ResidualBlock(layers.Layer):
+    """
+    Common superclass for all residual blocks.
+    """
+
+    def __init__(self, channels: int, *args: Any, **kwargs: Any):
+        """
+        Args:
+            channels: The number of output channels.
+            *args: Will be forwarded to the superclass.
+            **kwargs: Will be forwarded to the superclass.
+
+        """
+        super().__init__(*args, **kwargs)
+
+        self._num_channels = channels
+        # Possible extra convolution that could be needed to make the output
+        # channels match.
+        self._projection_layer = None
+
+    def build(self, input_shape: tf.TensorShape) -> None:
+        # Add the additional convolution layer if the output channels don't
+        # match.
+        num_input_channels = input_shape[-1]
+        if num_input_channels != self._num_channels:
+            logger.debug(
+                "Adding extra convolution to {} to "
+                "convert from {} channels to {}.",
+                self.name,
+                num_input_channels,
+                self._num_channels,
+            )
+            self._projection_layer = BnActConv(
+                1, 1, padding="same", name="adapt_outputs", activation=None
+            )
+
+        super().build(input_shape)
+
+    @property
+    def _channel_projection(self) -> Optional[layers.Layer]:
+        """
+        Gets the extra 1x1 convolution used for making the number of channels
+        compatible between the input and the output, if necessary.
+
+        Returns:
+            The 1x1 convolutional layer, if needed. Otherwise, just returns
+            None.
+
+        """
+        return self._projection_layer
+
+    def get_config(self) -> Dict[str, Any]:
+        return dict(
+            channels=self._num_channels,
+            name=self.name,
+        )
+
+
+class BasicBlock(_ResidualBlock):
     """
     A basic residual block for building the backbone of DLA networks.
     """
@@ -269,37 +327,15 @@ class BasicBlock(layers.Layer):
             name: The name of the layer.
             **kwargs: Will be forwarded to the internal `BnActConv` layer.
         """
-        super().__init__(name=name)
+        super().__init__(channels, name=name)
 
         self._conv_args = args
         self._conv_kwargs = kwargs
-        self._num_channels = channels
 
         # Create the sub-layers.
         self._conv1_1 = BnActConv(channels, *args, **kwargs)
         self._conv1_2 = BnActConv(channels, *args, **kwargs)
-        # Possible extra convolution that could be needed to make the output
-        # channels match.
-        self._channel_projection = None
         self._add1_1 = layers.Add()
-
-    def build(self, input_shape: tf.TensorShape) -> None:
-        # Add the additional convolution layer if the output channels don't
-        # match.
-        num_input_channels = input_shape[-1]
-        if num_input_channels != self._num_channels:
-            logger.debug(
-                "Adding extra convolution to {} to "
-                "convert from {} channels to {}.",
-                self.name,
-                num_input_channels,
-                self._num_channels,
-            )
-            self._channel_projection = BnActConv(
-                1, 1, padding="same", name="adapt_outputs", activation=None
-            )
-
-        super().build(input_shape)
 
     def call(self, inputs: tf.Tensor, **kwargs: Any) -> tf.Tensor:
         # Compute the residuals.
@@ -316,12 +352,78 @@ class BasicBlock(layers.Layer):
         return dict(
             conv_args=self._conv_args,
             conv_kwargs=self._conv_kwargs,
-            channels=self._num_channels,
-            name=self.name,
+            **super().get_config(),
         )
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "BasicBlock":
+        conv_args = config.pop("conv_args")
+        conv_kwargs = config.pop("conv_kwargs")
+        channels = config.pop("channels")
+
+        return cls(channels, *conv_args, **conv_kwargs, **config)
+
+
+class BottleneckBlock(_ResidualBlock):
+    """
+    A residual block that uses a bottleneck architecture for reducing the
+    number of parameters.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        *args: Any,
+        reduction_factor: float = 0.25,
+        name: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        """
+        Args:
+            channels: The number of output channels for the convolution.
+            *args: Will be forwarded to the internal `BnActConv` layer.
+            reduction_factor: Factor by which to reduce the number of
+                features in the bottleneck.
+            name: The name of the layer.
+            **kwargs: Will be forwarded to the internal `BnActConv` layer.
+
+        """
+        super().__init__(channels, name=name)
+
+        self._conv_args = args
+        self._conv_kwargs = kwargs
+        self._reduction_factor = reduction_factor
+
+        # Create the sub-layers.
+        num_reduced_features = int(channels * reduction_factor)
+        logger.debug("Bottleneck will have {} channels.", num_reduced_features)
+        self._reduction_conv = BnActConv(num_reduced_features, *args, **kwargs)
+        self._main_conv = BnActConv(num_reduced_features, *args, **kwargs)
+        self._expansion_conv = BnActConv(channels, *args, **kwargs)
+        self._add1_1 = layers.Add()
+
+    def call(self, inputs: tf.Tensor, **kwargs: Any) -> tf.Tensor:
+        # Compute the residuals.
+        residuals = self._reduction_conv(inputs)
+        residuals = self._main_conv(residuals)
+        residuals = self._expansion_conv(residuals)
+
+        if self._channel_projection is not None:
+            # Adapt the size so it matches up.
+            inputs = self._channel_projection(inputs)
+
+        return self._add1_1((residuals, inputs))
+
+    def get_config(self) -> Dict[str, Any]:
+        return dict(
+            conv_args=self._conv_args,
+            conv_kwargs=self._conv_kwargs,
+            reduction_factor=self._reduction_factor,
+            **super().get_config(),
+        )
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "BottleneckBlock":
         conv_args = config.pop("conv_args")
         conv_kwargs = config.pop("conv_kwargs")
         channels = config.pop("channels")
@@ -414,6 +516,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
         """
 
         BASIC = BasicBlock
+        BOTTLENECK = BottleneckBlock
 
     def __init__(
         self,
