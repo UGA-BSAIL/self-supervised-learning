@@ -201,6 +201,11 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
     sizes = _build_prediction_head(features, output_channels=2)
     offsets = _build_prediction_head(features, output_channels=2)
 
+    # Center the sizes around an average value.
+    nominal_detection_size = tf.constant(config.nominal_detection_size)
+    nominal_detection_size = tf.reshape(nominal_detection_size, (1, 1, 1, -1))
+    sizes = layers.Add()((sizes, nominal_detection_size))
+
     # The loss expects sizes and offsets to be merged.
     geometry = layers.Concatenate(
         name=ModelTargets.GEOMETRY_DENSE_PRED.value, dtype=tf.float32

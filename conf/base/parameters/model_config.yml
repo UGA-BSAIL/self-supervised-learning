@@ -12,3 +12,5 @@ sinkhorn_lambda: 10.0
 num_reduction_stages: 3
 # Sigma to use for density maps.
 detection_sigma: 3
+# Average size of detections, in fractions of a frame, in the form (width, height).
+nominal_detection_size: [0.052, 0.093]

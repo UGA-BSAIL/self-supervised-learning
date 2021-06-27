@@ -24,6 +24,10 @@ class ModelConfig:
 
         sinkhorn_lambda: The lambda parameter to use for Sinkhorn normalization.
 
+        nominal_detection_size: The average size of a detection, in fractions
+            of a frame. This will be used as a baseline when predicting bounding
+            box sizes. In the form `(width, height)`.
+
     """
 
     image_input_shape: Tuple[int, int, int]
@@ -35,3 +39,5 @@ class ModelConfig:
     num_gcn_channels: int
 
     sinkhorn_lambda: float
+
+    nominal_detection_size: Tuple[float, float]

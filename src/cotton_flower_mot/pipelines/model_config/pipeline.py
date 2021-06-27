@@ -20,6 +20,7 @@ def create_pipeline(**kwargs):
                     sinkhorn_lambda="params:sinkhorn_lambda",
                     num_reduction_stages="params:num_reduction_stages",
                     detection_sigma="params:detection_sigma",
+                    nominal_detection_size="params:nominal_detection_size",
                 ),
                 "model_config",
             ),
