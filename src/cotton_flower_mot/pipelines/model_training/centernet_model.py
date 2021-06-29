@@ -20,7 +20,7 @@ from .layers import (
 )
 
 # Use mixed precision to speed up training.
-# tf.keras.mixed_precision.set_global_policy("mixed_float16")
+tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
 
 def _build_backbone(
@@ -125,8 +125,8 @@ def compute_sparse_predictions(
 
     Returns:
         The computed bounding boxes, with the shape
-        `[batch, num_boxes, 4]`, where the second dimension is ragged, and the
-        third has the form `[center_x, center_y, width, height]`.
+        `[batch, num_boxes, 5]`, where the second dimension is ragged, and the
+        third has the form `[center_x, center_y, width, height, confidence]`.
 
     """
     confidence_masks = tf.ensure_shape(confidence_masks, (None, None, None, 1))

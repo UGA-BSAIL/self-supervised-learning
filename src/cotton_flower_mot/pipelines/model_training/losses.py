@@ -123,8 +123,7 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         )
 
         # Figure out which locations are positive and which are negative.
-        positive_threshold = tf.reduce_max(y_true)
-        positive_mask = tf.equal(y_true, positive_threshold)
+        positive_mask = tf.greater(y_true, 0.99)
         pixel_wise_loss = tf.where(positive_mask, positive_loss, negative_loss)
 
         mean_loss = -tf.reduce_mean(pixel_wise_loss)

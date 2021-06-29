@@ -337,10 +337,10 @@ def _get_geometric_features(
         y_min = bbox_coords[:, 0]
         y_max = bbox_coords[:, 2]
 
-        width_x = x_max - x_min
-        width_y = y_max - y_min
-        center_x = x_min + width_x / tf.constant(2.0)
-        center_y = y_min + width_y / tf.constant(2.0)
+        size_x = x_max - x_min
+        size_y = y_max - y_min
+        center_x = x_min + size_x / tf.constant(2.0)
+        center_y = y_min + size_y / tf.constant(2.0)
 
         image_width_height = image_shape[:2][::-1]
         image_width_height = tf.cast(image_width_height, tf.float32)
@@ -353,7 +353,7 @@ def _get_geometric_features(
         )
         offsets = tf.cast(offsets, tf.float32)
 
-        width_px = tf.stack([width_x, width_y], axis=1)
+        width_px = tf.stack([size_x, size_y], axis=1)
         geometry = tf.concat([center_points_px, width_px, offsets], axis=1)
         image_width_height_tiled = tf.tile(image_width_height, (3,))
         return geometry / image_width_height_tiled
