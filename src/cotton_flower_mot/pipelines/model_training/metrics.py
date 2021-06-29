@@ -86,6 +86,7 @@ class AveragePrecision(tf.keras.metrics.Metric):
         self,
         *,
         iou_threshold: float = 0.5,
+        use_top_predictions: Optional[int] = 100,
         name="average_precision",
         **kwargs: Any
     ):
@@ -94,15 +95,39 @@ class AveragePrecision(tf.keras.metrics.Metric):
             iou_threshold: The IOU threshold for considering a detection to
                 be a true positive.
             name: The name of the metric.
+            use_top_predictions: The number of top predictions to consider when
+                computing the AP. If None, it will consider all of them.
             **kwargs: Will be forwarded to the base class constructor.
 
         """
         super().__init__(name=name, **kwargs)
 
         self._iou_threshold = tf.constant(iou_threshold)
+        self._use_top_predictions = use_top_predictions
 
         # Keep track of performance metrics.
         self._auc = tf.keras.metrics.AUC(curve="PR")
+
+    @staticmethod
+    def _take_top_predictions(
+        predictions: tf.Tensor, num_to_take: int
+    ) -> tf.Tensor:
+        """
+        Takes only the N predictions with the highest confidence.
+
+        Args:
+            predictions: The predictions to filter, in the same format as
+                `_update_auc_from_image`.
+            num_to_take: The number of top predictions to take.
+
+        Returns:
+            The filtered predictions.
+
+        """
+        confidence = predictions[:, 4]
+
+        confidence_order = tf.argsort(confidence, direction="DESCENDING")
+        return tf.gather(predictions, confidence_order[:num_to_take])
 
     def _update_auc_from_image(
         self, y_true: tf.Tensor, y_pred: tf.Tensor
@@ -124,6 +149,11 @@ class AveragePrecision(tf.keras.metrics.Metric):
         """
         y_true = tf.ensure_shape(y_true, (None, 6))
         y_pred = tf.ensure_shape(y_pred, (None, 5))
+        if self._use_top_predictions is not None:
+            # Filter to top predictions.
+            y_pred = self._take_top_predictions(
+                y_pred, self._use_top_predictions
+            )
         confidence = y_pred[:, 4]
         y_pred = y_pred[:, :4]
         # We don't need the offsets.
