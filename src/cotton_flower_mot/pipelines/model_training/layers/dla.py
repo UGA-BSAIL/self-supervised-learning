@@ -583,8 +583,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
         Creates the set of aggregation nodes at a particular depth.
 
         Args:
-            depth: The depth, where level 0 is the top-most level in the
-                hierarchy, having only one aggregation node.
+            depth: The depth, where level 0 is the backbone.
 
         Returns:
             The aggregation nodes at this depth.
@@ -672,22 +671,18 @@ class HdaStage(layers.Layer, GraphLayerMixin):
             this node is the last one and has no child.
 
         """
-        # The child node will be one level up, and the closest node to
+        # The child node will be at least one level up, and the closest node to
         # the right.
-        child_level = level + 1
-        if child_level > self._agg_depth:
-            # This must be the output node.
-            assert (
-                index == self.num_backbone_blocks - 1
-            ), f"Output node has unexpected index {index}."
-            return None, None
+        for child_level in range(level + 1, self._agg_depth + 1):
+            for child_index in range(index, self.num_backbone_blocks):
+                if child_index in self._nodes[child_level]:
+                    return child_level, child_index
 
-        for child_index in range(index, self.num_backbone_blocks):
-            if child_index in self._nodes[child_level]:
-                return child_level, child_index
-
-        # We should never get here, because only the output has no child.
-        raise AssertionError(f"Node at {level}, {index} has no children.")
+        # This must be the output node.
+        assert (
+            index == self.num_backbone_blocks - 1
+        ), f"Output node has unexpected index {index}."
+        return None, None
 
     @cached_property
     def _node_pos_to_inputs(

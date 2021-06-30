@@ -41,6 +41,7 @@ def _build_backbone(
         HdaStage,
         agg_filter_size=3,
         activation="relu",
+        block_type=HdaStage.Block.BOTTLENECK,
     )
 
     # Create initial reduction stages.
@@ -60,6 +61,7 @@ def _build_backbone(
     hda1 = hda_stage(
         agg_depth=1,
         num_channels=64,
+        add_ida_skip=False,
         name="hda_stage_1",
     )(reduced_input)
     transition1 = TransitionLayer()(hda1)
@@ -70,7 +72,7 @@ def _build_backbone(
     )(transition1)
     transition2 = TransitionLayer()(hda2)
     hda3 = hda_stage(
-        agg_depth=2,
+        agg_depth=3,
         num_channels=256,
         name="hda_stage_3",
     )(transition2)
