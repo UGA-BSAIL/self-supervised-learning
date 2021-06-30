@@ -18,7 +18,6 @@ def create_pipeline(**kwargs):
         inputs_and_targets_from_datasets,
         include_frame=True,
         include_heat_map=True,
-        include_empty=True,
     )
     # Preset for loading testing and validation data that doesn't randomize
     # or interleave clips.
