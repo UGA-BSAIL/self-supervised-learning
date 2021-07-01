@@ -58,7 +58,7 @@ class _CompositeFunction(layers.Layer):
         self._bottleneck_conv = layers.Conv2D(self._num_bottleneck_filters, 1)
         self._conv = layers.Conv2D(self._growth_rate, 3, padding="same")
 
-    def call(self, inputs: tf.Tensor, training: Optional[bool] = None):
+    def call(self, inputs: tf.Tensor, training: Optional[bool] = None, **_):
         def _apply_layer(_inputs: tf.Tensor) -> tf.Tensor:
             # Add the layer operations.
             if self._use_bottleneck:
@@ -113,7 +113,10 @@ class DenseBlock(layers.Layer):
         ]
 
     def call(
-        self, inputs: tf.Tensor, training: Optional[bool] = None
+        self,
+        inputs: tf.Tensor,
+        training: Optional[bool] = None,
+        **_,
     ) -> tf.Tensor:
         # Create the dense connections.
         next_input = inputs

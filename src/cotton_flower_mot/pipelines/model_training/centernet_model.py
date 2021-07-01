@@ -4,7 +4,7 @@ Implementation of the CenterNet detector model.
 
 
 from functools import partial
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -15,12 +15,13 @@ from .layers import (
     BnActConv,
     HdaStage,
     PeakLayer,
+    ReductionStages,
     TransitionLayer,
     UpSamplingIda,
 )
 
 # Use mixed precision to speed up training.
-tf.keras.mixed_precision.set_global_policy("mixed_float16")
+# tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
 
 def _build_backbone(
@@ -45,17 +46,10 @@ def _build_backbone(
     )
 
     # Create initial reduction stages.
-    reduced_input = normalized_input
-    num_channels = 8
-    for i in range(config.num_reduction_stages):
-        reduced_input = hda_stage(
-            agg_depth=0,
-            num_channels=num_channels,
-            name=f"reduction_stage_{i}",
-        )(reduced_input)
-        reduced_input = layers.MaxPool2D()(reduced_input)
-
-        num_channels *= 2
+    reduced_input = ReductionStages(
+        num_reduction_stages=config.num_reduction_stages,
+        initial_num_channels=16,
+    )(normalized_input)
 
     # Create the main stages of the model.
     hda1 = hda_stage(

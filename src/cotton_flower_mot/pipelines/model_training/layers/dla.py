@@ -526,6 +526,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
         num_channels: int,
         agg_filter_size: Union[Tuple[int, int], int] = 1,
         activation: Optional[str] = None,
+        dilation_rate: Union[Tuple[int, int], int] = 1,
         add_ida_skip: bool = True,
         name: Optional[str] = None,
     ):
@@ -539,6 +540,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
             agg_filter_size: The size of the filters to use in the
                 aggregation nodes.
             activation: The activation function.
+            dilation_rate: The dilation rate to use in the backbone.
             add_ida_skip: If true, it will add a skip connection from the input
                 to the top-level aggregation node, implementing IDA.
             name: The name of this stage.
@@ -551,6 +553,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
         self._num_channels = num_channels
         self._agg_filter_size = agg_filter_size
         self._activation = activation
+        self._dilation_rate = dilation_rate
         self._add_ida_skip = add_ida_skip
 
         # Create the backbone blocks. We use a grid system to index nodes,
@@ -567,6 +570,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
                 num_channels,
                 3,
                 activation=activation,
+                dilation_rate=dilation_rate,
                 padding="same",
                 name=f"backbone_{i}",
             )
@@ -791,6 +795,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
             agg_filter_size=self._agg_filter_size,
             activation=self._activation,
             add_ida_skip=self._add_ida_skip,
+            dilation_rate=self._dilation_rate,
             name=self.name,
         )
 

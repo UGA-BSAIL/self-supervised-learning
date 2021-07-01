@@ -6,6 +6,7 @@ Custom Keras layers used by this pipeline.
 from kedro.extras.datasets.tensorflow import TensorFlowModelDataset
 
 from .association import AssociationLayer
+from .centernet import ReductionStages
 from .dense import DenseBlock, TransitionLayer
 from .dla import (
     AggregationNode,
@@ -37,6 +38,7 @@ CUSTOM_LAYERS = {
         UpSamplingIda,
         PeakLayer,
         BottleneckBlock,
+        ReductionStages,
     )
 }
 if "custom_objects" not in TensorFlowModelDataset.DEFAULT_LOAD_ARGS:
