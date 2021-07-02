@@ -10,7 +10,7 @@ from typing import Any, Dict
 import tensorflow as tf
 from tensorflow.keras import layers
 
-from . import HdaStage
+from .dla import HdaStage
 
 
 class ReductionStages(layers.Layer):
