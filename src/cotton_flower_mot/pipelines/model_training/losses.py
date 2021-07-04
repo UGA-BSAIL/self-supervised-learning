@@ -257,22 +257,23 @@ class GeometryL1Loss(tf.keras.losses.Loss):
         center_points = y_true[..., :2]
         true_width = tf.concat((center_points, y_true[..., 2:3]), 2)
         true_height = tf.concat((center_points, y_true[..., 3:4]), 2)
-        true_offset_x = tf.concat((center_points, y_true[..., 4:5]), 2)
-        true_offset_y = tf.concat((center_points, y_true[..., 5:6]), 2)
+        # true_offset_x = tf.concat((center_points, y_true[..., 4:5]), 2)
+        # true_offset_y = tf.concat((center_points, y_true[..., 5:6]), 2)
 
         # Compute the loss for each element individually.
         width_loss = self._batch_sparse_l1_loss(y_pred[..., 0], true_width)
         height_loss = self._batch_sparse_l1_loss(y_pred[..., 1], true_height)
-        offset_x_loss = self._batch_sparse_l1_loss(
-            y_pred[..., 2], true_offset_x
-        )
-        offset_y_loss = self._batch_sparse_l1_loss(
-            y_pred[..., 3], true_offset_y
-        )
+        # offset_x_loss = self._batch_sparse_l1_loss(
+        #     y_pred[..., 2], true_offset_x
+        # )
+        # offset_y_loss = self._batch_sparse_l1_loss(
+        #     y_pred[..., 3], true_offset_y
+        # )
 
-        return (width_loss + height_loss) * self._size_weight + (
-            offset_x_loss + offset_y_loss
-        ) * self._offset_weight
+        # return (width_loss + height_loss) * self._size_weight + (
+        #     offset_x_loss + offset_y_loss
+        # ) * self._offset_weight
+        return (width_loss + height_loss) * self._size_weight
 
 
 class CIOULoss(tf.keras.losses.Loss):

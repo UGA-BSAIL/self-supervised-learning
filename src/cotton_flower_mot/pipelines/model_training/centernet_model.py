@@ -59,13 +59,13 @@ def _build_backbone(
     )(reduced_input)
     transition1 = TransitionLayer()(hda1)
     hda2 = hda_stage(
-        agg_depth=3,
+        agg_depth=2,
         num_channels=128,
         name="hda_stage_2",
     )(transition1)
     transition2 = TransitionLayer()(hda2)
     hda3 = hda_stage(
-        agg_depth=4,
+        agg_depth=2,
         num_channels=256,
         name="hda_stage_3",
     )(transition2)
@@ -97,9 +97,8 @@ def _build_prediction_head(
         The prediction maps.
 
     """
-    conv1_1 = BnActConv(64, 3, activation="relu", padding="same")(features)
-    conv1_2 = BnActConv(64, 1, activation="relu", padding="same")(conv1_1)
-    return BnActConv(output_channels, 1, padding="same", name=name)(conv1_2)
+    conv1_1 = BnActConv(256, 3, activation="relu", padding="same")(features)
+    return BnActConv(output_channels, 1, padding="same", name=name)(conv1_1)
 
 
 def compute_sparse_predictions(
@@ -130,13 +129,13 @@ def compute_sparse_predictions(
     center_masks = tf.greater(confidence_masks, 0.0)
     sizes = tf.ensure_shape(sizes, (None, None, None, 2))
     sizes = tf.cast(sizes, tf.float32)
-    offsets = tf.ensure_shape(offsets, (None, None, None, 2))
-    offsets = tf.cast(offsets, tf.float32)
+    # offsets = tf.ensure_shape(offsets, (None, None, None, 2))
+    # offsets = tf.cast(offsets, tf.float32)
     mask_shape = tf.shape(confidence_masks)[1:3]
 
     # Mask the offsets and sizes.
     sparse_sizes = tf.boolean_mask(sizes, center_masks)
-    sparse_offsets = tf.boolean_mask(offsets, center_masks)
+    # sparse_offsets = tf.boolean_mask(offsets, center_masks)
     sparse_confidence = tf.boolean_mask(confidence_masks, center_masks)
     sparse_confidence = tf.expand_dims(sparse_confidence, 1)
     tf.print("max local maximum:", tf.reduce_max(sparse_confidence))
@@ -157,15 +156,15 @@ def compute_sparse_predictions(
         center_points[..., ::-1], row_lengths
     )
     ragged_sizes = tf.RaggedTensor.from_row_lengths(sparse_sizes, row_lengths)
-    ragged_offsets = tf.RaggedTensor.from_row_lengths(
-        sparse_offsets, row_lengths
-    )
+    # ragged_offsets = tf.RaggedTensor.from_row_lengths(
+    #     sparse_offsets, row_lengths
+    # )
     ragged_confidence = tf.RaggedTensor.from_row_lengths(
         sparse_confidence, row_lengths
     )
 
     # Nudge them by the offsets.
-    ragged_center_points += ragged_offsets
+    # ragged_center_points += ragged_offsets
     # Add the size.
     return tf.concat(
         (ragged_center_points, ragged_sizes, ragged_confidence), axis=2
