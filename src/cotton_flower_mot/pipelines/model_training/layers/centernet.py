@@ -5,7 +5,7 @@ Custom layers for the CenterNet model.
 
 import itertools
 from functools import partial
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -81,3 +81,32 @@ class ReductionStages(layers.Layer):
             initial_num_channels=self._initial_num_channels,
             name=self.name,
         )
+
+
+class CenterSizes(layers.Layer):
+    """
+    Custom layer for centering the size predictions around the expected size
+    value.
+    """
+
+    def __init__(
+        self, *, mean_box_size: Tuple[float, float], name: Optional[str] = None
+    ):
+        """
+        Args:
+            mean_box_size: The average size of a bounding box in our data. In
+                the form (width, height). Should be normalized.
+        """
+        super().__init__(name=name)
+
+        self._mean_box_size = mean_box_size
+
+    def call(self, inputs: tf.Tensor, **_) -> tf.Tensor:
+        mean_size = tf.constant(self._mean_box_size, dtype=inputs.dtype)
+        # Expand it so we can add easily.
+        mean_size = tf.reshape(mean_size, (1, 1, 1, -1))
+
+        return inputs + mean_size
+
+    def get_config(self) -> Dict[str, Any]:
+        return dict(mean_box_size=self._mean_box_size, name=self.name)

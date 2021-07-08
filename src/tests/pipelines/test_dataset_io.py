@@ -87,17 +87,6 @@ def test_inputs_and_targets_from_dataset_smoke(
         assert element.value in targets
 
     # Check the shapes of things.
-    detections_shape = (
-        inputs[ModelInputs.DETECTIONS.value].bounding_shape().numpy()
-    )
-    tracklets_shape = (
-        inputs[ModelInputs.TRACKLETS.value].bounding_shape().numpy()
-    )
-    assert len(detections_shape) == len(tracklets_shape) == 5
-    assert detections_shape[0] == tracklets_shape[0] == expected_batch_size
-    assert np.all(detections_shape[2:] == (100, 100, 3))
-    assert np.all(tracklets_shape[2:] == (100, 100, 3))
-
     if include_frame:
         # Check the frame shape.
         frame_shape = tf.shape(
@@ -105,6 +94,12 @@ def test_inputs_and_targets_from_dataset_smoke(
         ).numpy()
         assert len(frame_shape) == 4
         assert frame_shape[0] == expected_batch_size
+
+    if include_heat_map:
+        # Check the heatmap shape.
+        heatmap_shape = tf.shape(targets[ModelTargets.HEATMAP.value]).numpy()
+        assert len(heatmap_shape) == 4
+        assert heatmap_shape[0] == expected_batch_size
 
     detection_geometry = inputs[ModelInputs.DETECTION_GEOMETRY.value]
     tracklet_geometry = inputs[ModelInputs.TRACKLET_GEOMETRY.value]
@@ -124,10 +119,6 @@ def test_inputs_and_targets_from_dataset_smoke(
     assert np.all(tracklet_geometry.to_tensor().numpy() >= 0.0)
     assert np.all(tracklet_geometry.to_tensor().numpy() <= 1.0)
 
-    # The number of nodes should be consistent.
-    assert detections_shape[1] == detection_geometry_shape[1]
-    assert tracklets_shape[1] == tracklet_geometry_shape[1]
-
     # It should have specified the sequence ID.
     sequence_id_shape = tf.shape(inputs[ModelInputs.SEQUENCE_ID.value]).numpy()
     np.testing.assert_array_equal(sequence_id_shape, (expected_batch_size, 2))
@@ -136,7 +127,10 @@ def test_inputs_and_targets_from_dataset_smoke(
     assert len(sinkhorn_shape) == 2
     assert sinkhorn_shape[0] == expected_batch_size
     # Sinkhorn matrix should have an entry for each detection/tracklet pair.
-    assert sinkhorn_shape[1] == detections_shape[1] * tracklets_shape[1]
+    assert (
+        sinkhorn_shape[1]
+        == detection_geometry_shape[1] * tracklet_geometry_shape[1]
+    )
 
     # Hard assignment matrix should be equivalent to the Sinkhorn matrix.
     sinkhorn = targets[ModelTargets.SINKHORN.value].numpy()

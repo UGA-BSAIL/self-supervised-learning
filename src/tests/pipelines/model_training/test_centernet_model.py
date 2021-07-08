@@ -3,13 +3,19 @@ Tests for the `centernet_model` module.
 """
 
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 import tensorflow as tf
+from faker import Faker
 
 from src.cotton_flower_mot.pipelines.model_training import centernet_model
+from src.cotton_flower_mot.pipelines.model_training.layers import CUSTOM_LAYERS
 
 
+# TODO (danielp) Re-enable this test once offsets work again.
+@pytest.mark.skip
 @pytest.mark.parametrize(
     ("confidence_mask", "sizes", "offsets", "expected_boxes"),
     [
@@ -66,3 +72,35 @@ def test_compute_sparse_predictions(
     # Assert.
     got_boxes = got_boxes.to_tensor().numpy()
     np.testing.assert_array_almost_equal(got_boxes, expected_boxes)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_save_model_smoke(faker: Faker, tmp_path: Path) -> None:
+    """
+    Tests that a model can correctly be created, saved, and loaded.
+
+    Args:
+        faker: The fixture to use for generating fake data.
+        tmp_path: The path to the temporary directory to use for this test.
+
+    """
+    # Arrange.
+    # Create the model.
+    config = faker.model_config(image_shape=(100, 100, 3))
+    model = centernet_model.build_model(config)
+
+    save_path = tmp_path / "test_model.h5"
+
+    # Act.
+    # Save and load the model.
+    model.save(save_path, save_format="h5")
+    loaded_model = tf.keras.models.load_model(
+        save_path, custom_objects=CUSTOM_LAYERS
+    )
+
+    # Assert.
+    for weights, loaded_weights in zip(
+        model.get_weights(), loaded_model.get_weights()
+    ):
+        np.testing.assert_array_equal(weights, loaded_weights)

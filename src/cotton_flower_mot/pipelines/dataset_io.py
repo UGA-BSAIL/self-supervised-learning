@@ -57,8 +57,6 @@ Seed to use for random number generation.
 """
 
 _RAGGED_INPUTS = {
-    ModelInputs.DETECTIONS.value,
-    ModelInputs.TRACKLETS.value,
     ModelInputs.DETECTION_GEOMETRY.value,
     ModelInputs.TRACKLET_GEOMETRY.value,
 }
@@ -106,10 +104,6 @@ class FeatureName(enum.Enum):
     DETECTIONS_OFFSETS = "detections_offsets"
     """
     Pixel offsets for the detections in the heatmap.
-    """
-    DETECTIONS = "detections"
-    """
-    Extracted detection crops.
     """
     GEOMETRY = "geometry"
     """
@@ -506,17 +500,11 @@ def _load_single_image_features(
             config=augmentation_config,
         )
 
-        # Extract the detection crops.
-        detections = _extract_detection_images(
-            bbox_coords=bbox_coords, image=image, config=config
-        )
-
         object_ids = feature_dict[Otf.OBJECT_ID.value]
         frame_num = feature_dict[Otf.IMAGE_FRAME_NUM.value][0]
         sequence_id = feature_dict[Otf.IMAGE_SEQUENCE_ID.value][0]
 
         loaded_features = {
-            FeatureName.DETECTIONS.value: detections,
             FeatureName.GEOMETRY.value: geometric_features,
             FeatureName.OBJECT_IDS.value: object_ids,
             FeatureName.FRAME_NUM.value: frame_num,
@@ -586,34 +574,29 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
     def _process_pair(
         pair_features: Feature,
     ) -> Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
-        # object_ids = pair_features[FeatureName.OBJECT_IDS.value]
-        detections = pair_features[FeatureName.DETECTIONS.value]
+        object_ids = pair_features[FeatureName.OBJECT_IDS.value]
         geometry = pair_features[FeatureName.GEOMETRY.value]
         sequence_ids = pair_features[FeatureName.SEQUENCE_ID.value]
         frame_images = pair_features.get(FeatureName.FRAME_IMAGE.value, None)
         heat_maps = pair_features.get(FeatureName.HEAT_MAP.value, None)
 
         # Compute the ground-truth Sinkhorn matrix.
-        # tracklet_ids = object_ids[0]
-        # detection_ids = object_ids[1]
-        # sinkhorn = construct_gt_sinkhorn_matrix(
-        #     detection_ids=detection_ids, tracklet_ids=tracklet_ids
-        # )
-        # # The sinkhorn matrix produced by the model is flattened.
-        # sinkhorn = tf.reshape(sinkhorn, (-1,))
-        # # Assignment target is the same as the sinkhorn matrix, just not a
-        # # float.
-        # assignment = tf.cast(sinkhorn, tf.bool)
+        tracklet_ids = object_ids[0]
+        detection_ids = object_ids[1]
+        sinkhorn = construct_gt_sinkhorn_matrix(
+            detection_ids=detection_ids, tracklet_ids=tracklet_ids
+        )
+        # The sinkhorn matrix produced by the model is flattened.
+        sinkhorn = tf.reshape(sinkhorn, (-1,))
+        # Assignment target is the same as the sinkhorn matrix, just not a
+        # float.
+        assignment = tf.cast(sinkhorn, tf.bool)
 
-        tracklets = detections[0]
-        detections = detections[1]
         tracklet_geometry = geometry[0]
         detection_geometry = geometry[1]
 
         # Merge everything into input and target feature dictionaries.
         inputs = {
-            ModelInputs.DETECTIONS.value: detections,
-            ModelInputs.TRACKLETS.value: tracklets,
             # For tracking, we don't need the offsets in the geometric features.
             ModelInputs.DETECTION_GEOMETRY.value: detection_geometry[:, :4],
             ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry[:, :4],
@@ -624,8 +607,8 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
             inputs[ModelInputs.DETECTIONS_FRAME.value] = frame_images[1]
 
         targets = {
-            # ModelTargets.SINKHORN.value: sinkhorn,
-            # ModelTargets.ASSIGNMENT.value: assignment,
+            ModelTargets.SINKHORN.value: sinkhorn,
+            ModelTargets.ASSIGNMENT.value: assignment,
             ModelTargets.GEOMETRY_DENSE_PRED.value: detection_geometry,
             ModelTargets.GEOMETRY_SPARSE_PRED.value: detection_geometry,
         }

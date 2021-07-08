@@ -13,6 +13,7 @@ from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
 from .layers import (
     BnActConv,
+    CenterSizes,
     HdaStage,
     PeakLayer,
     ReductionStages,
@@ -200,9 +201,9 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
     offsets = _build_prediction_head(features, output_channels=2)
 
     # Center the sizes around an average value.
-    nominal_detection_size = tf.constant(config.nominal_detection_size)
-    nominal_detection_size = tf.reshape(nominal_detection_size, (1, 1, 1, -1))
-    sizes = layers.Add()((sizes, nominal_detection_size))
+    sizes = CenterSizes(
+        name="size_centering", mean_box_size=config.nominal_detection_size
+    )(sizes)
 
     # The loss expects sizes and offsets to be merged.
     geometry = layers.Concatenate(

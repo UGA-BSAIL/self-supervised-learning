@@ -136,11 +136,25 @@ class TensorProvider(BaseProvider):
             The configuration that it created.
 
         """
+        # Our frame shape will be some multiple of the input shape.
+        frame_shape_multiple = self.random_int(min=1, max=10)
+        image_height, image_width, image_channels = image_shape
+        frame_shape = (
+            image_height * frame_shape_multiple,
+            image_width * frame_shape_multiple,
+            image_channels,
+        )
+
         return ModelConfig(
             image_input_shape=image_shape,
+            frame_input_shape=frame_shape,
             num_appearance_features=self.random_int(min=1, max=256),
             num_gcn_channels=self.random_int(min=1, max=256),
             sinkhorn_lambda=self.__faker.pyfloat(min_value=1, max_value=1000),
             num_reduction_stages=self.random_element([2, 3, 4]),
             detection_sigma=self.random_element([1, 3, 5]),
+            nominal_detection_size=(
+                self.__faker.pyfloat(min_value=0, max_value=1),
+                self.__faker.pyfloat(min_value=0, max_value=1),
+            ),
         )

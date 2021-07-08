@@ -5,7 +5,7 @@ Nodes for the model training pipeline.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 
 import tensorflow as tf
 import tensorflow.keras.optimizers.schedules as schedules
@@ -111,6 +111,27 @@ def make_callbacks(
     return [tensorboard_callback, nan_termination]
 
 
+def _remove_unused_targets(dataset: tf.data.Dataset) -> tf.data.Dataset:
+    """
+    Removes unused targets from a dataset.
+
+    Args:
+        dataset: The dataset to remove targets from.
+
+    Returns:
+        The modified dataset.
+
+    """
+
+    def _remove_targets(inputs: Dict, targets: Dict) -> Tuple[Dict, Dict]:
+        targets.pop(ModelTargets.SINKHORN.value)
+        targets.pop(ModelTargets.ASSIGNMENT.value)
+
+        return inputs, targets
+
+    return dataset.map(_remove_targets)
+
+
 def train_model(
     model: tf.keras.Model,
     *,
@@ -139,6 +160,10 @@ def train_model(
         The trained model.
 
     """
+    # Clear unused tracking targets.
+    training_data = _remove_unused_targets(training_data)
+    testing_data = _remove_unused_targets(testing_data)
+
     for phase in learning_phases:
         logger.info("Starting new training phase.")
         logger.debug("Using phase parameters: {}", phase)
