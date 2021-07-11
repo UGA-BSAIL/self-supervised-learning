@@ -1,0 +1,2 @@
+# Any detections below this confidence level will be ignored.
+min_confidence: 0.75

@@ -36,6 +36,7 @@ from kedro.pipeline import Pipeline
 from kedro.versioning import Journal
 
 from .pipelines import (
+    auto_annotation,
     build_tfrecords,
     convert_annotations,
     data_engineering,
@@ -74,6 +75,7 @@ class ProjectHooks:
             data_load_pipeline + model_evaluation.create_pipeline()
         )
         conversion_pipeline = convert_annotations.create_pipeline()
+        annotation_pipeline = auto_annotation.create_pipeline()
 
         return {
             "__default__": eda_pipeline + training_pipeline,
@@ -82,6 +84,7 @@ class ProjectHooks:
             "model_training": training_pipeline,
             "model_evaluation": evaluation_pipeline,
             "convert_annotations": conversion_pipeline,
+            "auto_annotation": annotation_pipeline,
         }
 
     @hook_impl
