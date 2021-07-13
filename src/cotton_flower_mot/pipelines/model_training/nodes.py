@@ -141,6 +141,9 @@ def train_model(
     callbacks: List[tf.keras.callbacks.Callback] = [],
     validation_frequency: int = 1,
     loss_params: Dict[str, Any],
+    heatmap_loss_weight: float = 1.0,
+    geometry_loss_weight: float = 1.0,
+    ciou_loss_weight: float = 1.0,
 ) -> tf.keras.Model:
     """
     Trains a model.
@@ -155,6 +158,9 @@ def train_model(
         validation_frequency: Number of training epochs after which to run
             validation.
         loss_params: Parameters to pass to the loss functions.
+        heatmap_loss_weight: The loss weight for the heatmap focal loss.
+        geometry_loss_weight: The loss weight for the L1 geometry loss.
+        ciou_loss_weight: The loss weight for the cIOU loss.
 
     Returns:
         The trained model.
@@ -176,7 +182,11 @@ def train_model(
         model.compile(
             optimizer=optimizer,
             loss=make_losses(**loss_params),
-            loss_weights={ModelTargets.HEATMAP.value: 1000.0},
+            loss_weights={
+                ModelTargets.HEATMAP.value: heatmap_loss_weight,
+                ModelTargets.GEOMETRY_DENSE_PRED.value: geometry_loss_weight,
+                ModelTargets.GEOMETRY_SPARSE_PRED.value: ciou_loss_weight,
+            },
             metrics=make_metrics(),
         )
         model.fit(

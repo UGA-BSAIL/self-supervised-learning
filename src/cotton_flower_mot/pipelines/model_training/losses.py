@@ -95,14 +95,15 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
     Small constant value to avoid log(0).
     """
 
-    def __init__(self, *, alpha: float, beta: float):
+    def __init__(self, *, alpha: float, beta: float, **kwargs: Any):
         """
         Args:
             alpha: Alpha parameter for the focal loss.
             beta: Beta parameter for the focal loss.
+            **kwargs: Will be forwarded to superclass constructor.
 
         """
-        super().__init__()
+        super().__init__(**kwargs)
 
         self._alpha = tf.constant(alpha)
         self._beta = tf.constant(beta)
@@ -144,14 +145,17 @@ class GeometryL1Loss(tf.keras.losses.Loss):
     ground-truth comes in the form of a sparse vector.
     """
 
-    def __init__(self, *, size_weight: float, offset_weight: float):
+    def __init__(
+        self, *, size_weight: float, offset_weight: float, **kwargs: Any
+    ):
         """
         Args:
             size_weight: The weight to use for the size loss.
             offset_weight: The weight to use for the offset loss.
+            **kwargs: Will be forwarded to superclass constructor.
 
         """
-        super().__init__()
+        super().__init__(**kwargs)
 
         self._size_weight = tf.constant(size_weight)
         self._offset_weight = tf.constant(offset_weight)
@@ -499,11 +503,15 @@ def make_losses(
     """
     return {
         # ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
-        ModelTargets.HEATMAP.value: HeatMapFocalLoss(alpha=alpha, beta=beta),
-        ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
-            size_weight=size_weight, offset_weight=offset_weight
+        ModelTargets.HEATMAP.value: HeatMapFocalLoss(
+            alpha=alpha, beta=beta, name="heatmap_loss"
         ),
-        # ModelTargets.GEOMETRY_SPARSE_PRED.value: CIOULoss(
-        #     classification_weight=0.1
-        # )
+        ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
+            size_weight=size_weight,
+            offset_weight=offset_weight,
+            name="geometry_loss",
+        ),
+        ModelTargets.GEOMETRY_SPARSE_PRED.value: CIOULoss(
+            classification_weight=0.1, name="ciou_loss"
+        ),
     }
