@@ -48,6 +48,95 @@ class DetectionColumns(enum.Enum):
     """
 
 
+def _non_max_suppression(
+    boxes: np.ndarray, iou_threshold: float = 0.5
+) -> np.ndarray:
+    """
+    Performs non-maximum suppression on a set of bounding boxes.
+
+    Args:
+        boxes: The bounding boxes to perform NMS on, in the form
+            `[center_x, center_y, width, height, confidence]`.
+
+    Returns:
+        The filtered bounding boxes.
+
+    """
+    # Convert to the form used by TensorFlow.
+    center_x = boxes[:, 0]
+    center_y = boxes[:, 1]
+    width = boxes[:, 2]
+    height = boxes[:, 3]
+    confidence = boxes[:, 4]
+
+    min_x = center_x - width / 2.0
+    min_y = center_y - height / 2.0
+    max_x = center_x + width / 2.0
+    max_y = center_y + height / 2.0
+    tf_boxes = np.stack((min_x, min_y, max_x, max_y), axis=1)
+
+    # Run NMS.
+    filtered_indices = tf.image.non_max_suppression(
+        tf_boxes, confidence, len(confidence), iou_threshold=iou_threshold
+    ).numpy()
+
+    # Get the original boxes.
+    return boxes[filtered_indices]
+
+
+def _filter_all_overlapping(
+    detections: pd.DataFrame, iou_threshold: float = 0.5
+) -> pd.DataFrame:
+    """
+    Filters all overlapping boxes from a dataframe of detections, based on an
+    IOU threshold.
+
+    Args:
+        detections: The dataframe containing the raw detections.
+        iou_threshold: The IOU threshold.
+
+    Returns:
+        The filtered detections.
+
+    """
+    frames = detections[DetectionColumns.FRAME.value].unique()
+
+    all_filtered_detections = []
+    detection_columns = [
+        DetectionColumns.CENTER_X.value,
+        DetectionColumns.CENTER_Y.value,
+        DetectionColumns.WIDTH.value,
+        DetectionColumns.HEIGHT.value,
+        DetectionColumns.CONFIDENCE.value,
+    ]
+    for frame_num in frames:
+        # Find all detections for this frame.
+        frame_detections = detections[
+            detections[DetectionColumns.FRAME.value] == frame_num
+        ]
+
+        detections_array = frame_detections[detection_columns].to_numpy()
+        filtered_detections = _non_max_suppression(
+            detections_array, iou_threshold=iou_threshold
+        )
+
+        # Add the frame column back.
+        filtered_detections = pd.DataFrame(
+            filtered_detections, columns=detection_columns
+        )
+        filtered_detections[DetectionColumns.FRAME.value] = frame_num
+        all_filtered_detections.append(filtered_detections)
+
+    all_filtered_detections = pd.concat(
+        all_filtered_detections, ignore_index=True
+    )
+    logger.debug(
+        "Filtered {} redundant boxes.",
+        len(detections) - len(all_filtered_detections),
+    )
+    return all_filtered_detections
+
+
 def _to_mot_format(
     detections: pd.DataFrame, *, frame_size: Tuple[int, int]
 ) -> pd.DataFrame:
@@ -141,6 +230,7 @@ def convert_to_mot(
     *,
     video: Task,
     min_confidence: float = 0.5,
+    iou_threshold: float = 0.5,
 ) -> pd.DataFrame:
     """
     Takes the raw detections, post-processes them, and converts them to the
@@ -150,6 +240,7 @@ def convert_to_mot(
         detections: The raw detections.
         min_confidence: Any predictions that are below this confidence
             threshold will be discarded.
+        iou_threshold: The IOU threshold to use for NMS.
         video: The corresponding video that these data are from.
 
     Returns:
@@ -160,6 +251,11 @@ def convert_to_mot(
     confidence = detections[DetectionColumns.CONFIDENCE.value]
     detections = detections[confidence >= min_confidence]
     logger.debug("Got {} object detections.", len(detections))
+
+    # Filter overlapping detections.
+    detections = _filter_all_overlapping(
+        detections, iou_threshold=iou_threshold
+    )
 
     # Get the size of the video frames.
     frame_size = video.get_image_size(0)

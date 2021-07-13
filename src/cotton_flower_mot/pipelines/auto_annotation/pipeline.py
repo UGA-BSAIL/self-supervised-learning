@@ -22,6 +22,7 @@ def create_pipeline(**_):
                     detections="raw_detections_190",
                     video="cotton_videos_190",
                     min_confidence="params:min_confidence",
+                    iou_threshold="params:iou_threshold",
                 ),
                 "annotations_mot_1_1_190",
                 tags="post_process",
