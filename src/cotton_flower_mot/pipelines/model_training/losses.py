@@ -476,11 +476,11 @@ class CIOULoss(tf.keras.losses.Loss):
 
     def get_config(self) -> Dict[str, Any]:
         return dict(
-            iou_weight=self._iou_weight,
-            distance_weight=self._distance_weight,
-            aspect_ratio_weight=self._aspect_ratio_weight,
-            classification_weight=self._classification_weight,
-            positive_threshold=self._positive_threshold,
+            iou_weight=self._iou_weight.numpy().tolist(),
+            distance_weight=self._distance_weight.numpy().tolist(),
+            aspect_ratio_weight=self._aspect_ratio_weight.numpy().tolist(),
+            classification_weight=self._classification_weight.numpy().tolist(),
+            positive_threshold=self._positive_threshold.numpy().tolist(),
             name=self.name,
         )
 

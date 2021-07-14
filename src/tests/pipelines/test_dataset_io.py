@@ -73,7 +73,10 @@ def test_inputs_and_targets_from_dataset_smoke(
     inputs, targets = batch
 
     # Make sure we have the right inputs and targets.
-    expected_inputs = set(ModelInputs)
+    expected_inputs = set(ModelInputs) - {
+        ModelInputs.DETECTIONS,
+        ModelInputs.TRACKLETS,
+    }
     expected_targets = set(ModelTargets)
     if not include_frame:
         # We won't have a frame input in this case.
