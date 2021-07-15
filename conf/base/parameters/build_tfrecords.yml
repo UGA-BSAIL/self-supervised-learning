@@ -1,7 +1,7 @@
 # Specific clips to use for testing.
-test_clips: [14, 21, 23, 33]
+test_clips: [14, 21, 23, 33, 38]
 # Specific clips to use for validation.
-valid_clips: [26, 12, 20, 28, 29]
+valid_clips: [26, 12, 20, 28, 29, 40]
 
 # Fraction of the data to use for training, for random splits.
 train_fraction: 0.7

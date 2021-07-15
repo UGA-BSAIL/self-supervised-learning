@@ -33,6 +33,11 @@ cotton_videos_175:
   task_id: 175
   << : *cvat_credentials
 
+cotton_videos_190:
+  type: pycvat.CvatDataSet
+  task_id: 190
+  << : *cvat_credentials
+
 # Column names for the MOT format data.
 _mot_column_names: &mot_column_names
   names:
@@ -84,5 +89,11 @@ annotations_mot_1_1_175:
   type: pandas.CSVDataSet
   filepath: data/02_intermediate/video_4/gt.txt
   versioned: True
+  load_args:
+    << : *mot_column_names
+
+annotations_mot_1_1_190:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/flower_annotations_190_2021_07_14/gt.txt
   load_args:
     << : *mot_column_names

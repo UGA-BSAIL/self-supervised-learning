@@ -31,6 +31,7 @@ def create_pipeline(**kwargs):
                     "cotton_videos_173",
                     "cotton_videos_174",
                     "cotton_videos_175",
+                    "cotton_videos_190",
                 ],
                 "cotton_videos",
             ),

@@ -12,7 +12,7 @@ from .nodes import (
     split_clips,
 )
 
-_TASK_IDS = [169, 170, 172, 173, 174, 175]
+_TASK_IDS = [169, 170, 172, 173, 174, 175, 190]
 """
 All task IDs of the data we are processing.
 """
