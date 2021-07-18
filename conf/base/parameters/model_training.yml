@@ -24,7 +24,7 @@ loss_params:
 # Weights for each loss term.
 heatmap_loss_weight: 1000.0
 geometry_loss_weight: 1.0
-ciou_loss_weight: 0.0
+ciou_loss_weight: 1.0
 
 # Learning phases to use for training the model.
 learning_phases:
