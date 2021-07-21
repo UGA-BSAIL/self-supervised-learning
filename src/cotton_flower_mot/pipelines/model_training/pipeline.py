@@ -4,12 +4,7 @@ Pipeline definition for model training.
 
 from kedro.pipeline import Pipeline, node
 
-from .nodes import (
-    create_model,
-    make_callbacks,
-    set_check_numerics,
-    train_model,
-)
+from .nodes import create_model, set_check_numerics, train_model
 
 
 def create_pipeline(**kwargs):
@@ -18,15 +13,6 @@ def create_pipeline(**kwargs):
             node(set_check_numerics, "params:enable_numeric_checks", None),
             node(create_model, "model_config", "initial_model"),
             node(
-                make_callbacks,
-                dict(
-                    tensorboard_output_dir="params:tensorboard_output_dir",
-                    histogram_period="params:histogram_period",
-                    update_period="params:update_period",
-                ),
-                "callbacks",
-            ),
-            node(
                 train_model,
                 dict(
                     model="initial_model",
@@ -34,10 +20,16 @@ def create_pipeline(**kwargs):
                     testing_data="validation_data",
                     learning_phases="params:learning_phases",
                     loss_params="params:loss_params",
-                    callbacks="callbacks",
                     heatmap_loss_weight="params:heatmap_loss_weight",
                     geometry_loss_weight="params:geometry_loss_weight",
                     ciou_loss_weight="params:ciou_loss_weight",
+                    tensorboard_output_dir="params:tensorboard_output_dir",
+                    histogram_period="params:histogram_period",
+                    update_period="params:update_period",
+                    heatmap_size="params:heatmap_size",
+                    heatmap_period="params:heatmap_period",
+                    num_heatmap_batches="params:num_heatmap_batches",
+                    num_heatmap_images="params:num_heatmap_images",
                 ),
                 "trained_model",
             ),

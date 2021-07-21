@@ -123,7 +123,7 @@ class FeatureName(enum.Enum):
     """
 
 
-_NUM_THREADS = 1
+_NUM_THREADS = 2
 """
 Number of threads to use for multi-threaded operations.
 """
@@ -434,7 +434,7 @@ def _decode_image(feature_dict: Feature) -> tf.Tensor:
 
     """
     image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
-    return tf.io.decode_jpeg(image_encoded[0])
+    return tf.io.decode_jpeg(image_encoded[0], dct_method="INTEGER_FAST")
 
 
 def _decode_heat_map(feature_dict: Feature) -> tf.Tensor:
@@ -905,7 +905,7 @@ def _batch_and_prefetch(
     dataset: tf.data.Dataset,
     *,
     batch_size: int = 32,
-    num_prefetch_batches: int = 5,
+    num_prefetch_batches: int = 1,
 ) -> tf.data.Dataset:
     """
     Batches and prefetches data from a dataset.
@@ -940,14 +940,22 @@ def _batch_and_prefetch(
         transformer=_ensure_not_ragged,
     )
 
-    return ragged.prefetch(num_prefetch_batches)
+    prefetched = ragged.prefetch(num_prefetch_batches)
+
+    options = tf.data.Options()
+    # Autotuning doesn't seem to work as well as it should in this case.
+    options.experimental_optimization.autotune = False
+    options.experimental_threading.private_threadpool_size = _NUM_THREADS
+    options.experimental_optimization.map_fusion = True
+    options.experimental_optimization.map_and_filter_fusion = True
+    return prefetched.with_options(options)
 
 
 def inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
     batch_size: int = 32,
-    num_prefetch_batches: int = 5,
+    num_prefetch_batches: int = 1,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -979,7 +987,7 @@ def inputs_and_targets_from_datasets(
     *,
     interleave: bool = True,
     batch_size: int = 32,
-    num_prefetch_batches: int = 5,
+    num_prefetch_batches: int = 1,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """

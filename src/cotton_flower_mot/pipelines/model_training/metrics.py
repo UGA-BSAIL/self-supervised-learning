@@ -3,7 +3,7 @@ Custom metrics for the model.
 """
 
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import tensorflow as tf
 
@@ -238,6 +238,36 @@ class AveragePrecision(tf.keras.metrics.Metric):
         self._auc.reset_state()
 
 
+class MaxConfidence(tf.keras.metrics.Metric):
+    """
+    A metric that logs the maximum value in the heatmap. This can be useful
+    for debugging optimization problems.
+    """
+
+    def __init__(self, name: str = "max_confidence", **kwargs: Any):
+        """
+        Args:
+            name: The name of the metric.
+            **kwargs: Will be forwarded to the superclass.
+
+        """
+        super().__init__(name=name, **kwargs)
+
+        self._max_confidence = self.add_weight(
+            name="max_confidence", initializer="zeros", dtype=tf.float32
+        )
+
+    def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor, **_) -> None:
+        # Compute the maximum heatmap value.
+        batch_max = tf.reduce_max(y_pred)
+        self._max_confidence.assign(
+            tf.maximum(self._max_confidence, batch_max)
+        )
+
+    def result(self) -> tf.Tensor:
+        return self._max_confidence
+
+
 def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
     """
     Creates the metrics to use for the model.
@@ -247,4 +277,7 @@ def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
 
     """
     # return {ModelTargets.ASSIGNMENT.value: IdSwitches()}
-    return {ModelTargets.GEOMETRY_SPARSE_PRED.value: AveragePrecision()}
+    return {
+        ModelTargets.GEOMETRY_SPARSE_PRED.value: AveragePrecision(),
+        ModelTargets.HEATMAP.value: MaxConfidence(),
+    }

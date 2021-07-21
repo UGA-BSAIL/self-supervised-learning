@@ -5,6 +5,14 @@ tensorboard_output_dir: ${log_dir}/tensorboard
 histogram_period: 2
 # Period at which to write metrics, in batches.
 update_period: 100
+# Size of generated heatmap visualizations. (width, height).
+heatmap_size: [1280, 720]
+# Period in epochs at which to visualize heatmaps.
+heatmap_period: 5
+# Number of batches to visualize heatmaps from.
+num_heatmap_batches: 2
+# Number of heatmaps to visualize in each batch.
+num_heatmap_images: 3
 
 # Whether to enable debugging checks for NaN and infinity. This
 # is very useful when trying to debug numerical issues, but it

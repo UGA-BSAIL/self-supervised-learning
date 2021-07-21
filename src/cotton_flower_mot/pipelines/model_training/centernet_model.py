@@ -139,7 +139,6 @@ def compute_sparse_predictions(
     # sparse_offsets = tf.boolean_mask(offsets, center_masks)
     sparse_confidence = tf.boolean_mask(confidence_masks, center_masks)
     sparse_confidence = tf.expand_dims(sparse_confidence, 1)
-    tf.print("max local maximum:", tf.reduce_max(sparse_confidence))
 
     # Figure out the sparse center points.
     sparse_centers = tf.where(center_masks)
