@@ -115,6 +115,7 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         positive_loss = tf.pow(one - y_pred, self._alpha) * tf.math.log(
             y_pred + self._EPSILON
         )
+        positive_loss *= 100.0
         # Loss we use at "negative" locations.
         negative_loss = (
             tf.pow(one - y_true, self._beta)

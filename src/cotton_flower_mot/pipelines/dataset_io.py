@@ -347,8 +347,8 @@ def _get_geometric_features(
         )
         offsets = tf.cast(offsets, tf.float32)
 
-        width_px = tf.stack([size_x, size_y], axis=1)
-        geometry = tf.concat([center_points_px, width_px, offsets], axis=1)
+        size_px = tf.stack([size_x, size_y], axis=1)
+        geometry = tf.concat([center_points_px, size_px, offsets], axis=1)
         image_width_height_tiled = tf.tile(image_width_height, (3,))
         return geometry / image_width_height_tiled
 
@@ -482,9 +482,14 @@ def _load_single_image_features(
         bbox_coords = _extract_bbox_coords(feature_dict)
         image = _decode_image(feature_dict)
 
+        # Down-sample the image by half.
+        original_shape = tf.shape(image)
+        size = original_shape[:2]
+        image = tf.image.resize(image, size // 2)
+
         # Compute the geometric features.
         geometric_features = _get_geometric_features(
-            bbox_coords, image_shape=tf.shape(image), config=config
+            bbox_coords, image_shape=original_shape, config=config
         )
 
         # Extract the heatmap.
