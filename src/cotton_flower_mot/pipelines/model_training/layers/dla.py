@@ -22,8 +22,8 @@ class _BilinearInitializer(tf.keras.initializers.Initializer):
 
     """
 
-    _BILINEAR_KERNEL = tf.constant(
-        [[0.0, 0.25, 0.0], [0.25, 1.0, 0.25], [0.0, 0.25, 0.0]]
+    _BILINEAR_KERNEL = np.array(
+        [[0.25, 0.5, 0.25], [0.5, 1.0, 0.5], [0.25, 0.5, 0.25]]
     )
     """
     The basic kernel to use for bilinear up-sampling.
@@ -44,16 +44,21 @@ class _BilinearInitializer(tf.keras.initializers.Initializer):
         """
         if shape[:2] != (3, 3):
             raise ValueError(
-                f"Bilinear kernels must be 3x3, but this one is {shape[:2]}"
+                f"Bilinear kernels must be 3x3, but this one is {shape[:2]}."
+            )
+        if len(shape) != 4:
+            raise ValueError(
+                f"Bilinear kernels operate on 4D inputs, "
+                f"but requested input is {len(shape)}D."
             )
 
-        kernel = tf.cast(self._BILINEAR_KERNEL, dtype)
+        # Make sure it only gets applied channel-wise.
+        _, _, num_input_channels, num_output_channels = shape
+        channel_wise_kernel = np.zeros(shape)
+        for i in range(num_input_channels):
+            channel_wise_kernel[:, :, i, i] = self._BILINEAR_KERNEL
 
-        # If we have additional dimensions, repeat the kernel.
-        num_extra_dims = len(shape) - 2
-        kernel = tf.reshape(kernel, (3, 3) + (1,) * num_extra_dims)
-        tile_multiples = shape[2:]
-        return tf.tile(kernel, (1, 1) + tile_multiples)
+        return tf.constant(channel_wise_kernel, dtype=dtype)
 
 
 class AggregationNode(layers.Layer):
