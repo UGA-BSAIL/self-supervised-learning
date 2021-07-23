@@ -1,11 +1,21 @@
 import random
+from logging import DEBUG
 from typing import Dict, Iterable, List, Tuple
 
+import cv2
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from cvat_api.rest import ApiException
 from loguru import logger
 from pycvat import Task
+from tenacity import (
+    after_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 from ..config import ModelConfig
 from ..heat_maps import make_heat_map
@@ -213,12 +223,14 @@ def _generate_heat_map(
 
     """
     # Calculate the heatmap size.
-    image_height, image_width, _ = config.frame_input_shape
-    frame_size = np.array([image_width, image_height])
     down_sample_factor = 2 ** config.num_reduction_stages
-    heatmap_size = frame_size // down_sample_factor
+    input_height, input_width, _ = config.detection_model_input_shape
+    input_size = np.array([input_width, input_height])
+    heatmap_size = input_size // down_sample_factor
 
     # Extract the detection centers.
+    image_height, image_width, _ = config.frame_input_shape
+    frame_size = np.array([image_width, image_height])
     high_points = frame_annotations[
         [Otf.OBJECT_BBOX_X_MAX.value, Otf.OBJECT_BBOX_Y_MAX.value]
     ].values
@@ -242,6 +254,34 @@ def _generate_heat_map(
     heat_map = tf.cast(heat_map, tf.uint16)
     # Compress the heatmap.
     return tf.io.encode_png(heat_map).numpy()
+
+
+@retry(
+    retry=retry_if_exception_type(ApiException),
+    reraise=True,
+    wait=wait_random_exponential(multiplier=1, max=60),
+    stop=stop_after_attempt(20),
+    after=after_log(logger, DEBUG),
+)
+def _get_frame_image(video_frames: Task, *, frame_num: int) -> np.ndarray:
+    """
+    Gets a single frame for CVAT.
+
+    Args:
+        video_frames: The CVAT task to pull frames from.
+        frame_num: The frame number to get.
+
+    Returns:
+        The frame, as a JPEG.
+
+    """
+    frame_image = video_frames.get_image(frame_num)
+    # CVAT data is generally compressed as PNGs, which are not ideal for
+    # this application.
+    encoded, frame_image = cv2.imencode(".jpg", frame_image)
+    assert encoded, "Failed to encode image."
+
+    return frame_image
 
 
 def _generate_clip_examples(
@@ -284,7 +324,8 @@ def _generate_clip_examples(
         )
 
         # Get the actual frame image.
-        frame_image = video_frames.get_image(frame_num, compressed=True)
+        frame_image = _get_frame_image(video_frames, frame_num=frame_num)
+
         # Get the heatmap.
         heat_map = _generate_heat_map(frame_annotations, config=config)
 

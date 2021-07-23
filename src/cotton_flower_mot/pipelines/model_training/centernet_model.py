@@ -22,7 +22,7 @@ from .layers import (
 )
 
 # Use mixed precision to speed up training.
-# tf.keras.mixed_precision.set_global_policy("mixed_float16")
+tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
 
 def _build_backbone(
@@ -183,7 +183,8 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
 
     """
     images = layers.Input(
-        shape=config.frame_input_shape, name=ModelInputs.DETECTIONS_FRAME.value
+        shape=config.detection_model_input_shape,
+        name=ModelInputs.DETECTIONS_FRAME.value,
     )
 
     def _normalize(_images: tf.Tensor) -> tf.Tensor:

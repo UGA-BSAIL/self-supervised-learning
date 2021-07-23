@@ -167,7 +167,8 @@ def _flip_geometry(
 
     Args:
         geometry: The bounding box geometry, in the form
-            `[center_x, center_y, width, height, offset_x, offset_y]`.
+            `[center_x, center_y, ...]`. No attributes beyond the center
+            point will be changed.
         left_right: 0D bool tensor, whether to flip horizontally.
         up_down: 0D bool tensor, whether to flip vertically.
 
@@ -175,7 +176,6 @@ def _flip_geometry(
         The flipped geometry.
 
     """
-    geometry = tf.ensure_shape(geometry, (None, 6))
     left_right = tf.ensure_shape(left_right, ())
     up_down = tf.ensure_shape(up_down, ())
 
@@ -422,34 +422,33 @@ def _extract_bbox_coords(feature_dict: Feature) -> tf.Tensor:
     return tf.stack([y_min, x_min, y_max, x_max], axis=1)
 
 
-def _decode_image(feature_dict: Feature) -> tf.Tensor:
+def _decode_image(encoded: tf.Tensor, ratio: int = 1) -> tf.Tensor:
     """
     Decodes an image from a feature dictionary.
 
     Args:
-        feature_dict: The raw (combined) feature dictionary for one image.
+        encoded: The encoded image.
+        ratio: Downsample ratio to use when decoding.
 
     Returns:
         The raw decoded image.
 
     """
-    image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
-    return tf.io.decode_jpeg(image_encoded[0], dct_method="INTEGER_FAST")
+    return tf.io.decode_jpeg(encoded[0], ratio=ratio)
 
 
-def _decode_heat_map(feature_dict: Feature) -> tf.Tensor:
+def _decode_heat_map(encoded: tf.Tensor) -> tf.Tensor:
     """
     Decodes the heat map from a feature dictionary.
 
     Args:
-        feature_dict: The raw (combined) feature dictionary for one image.
+        encoded: The encoded heatmap.
 
     Returns:
         The raw decoded heatmap.
 
     """
-    heat_map_encoded = feature_dict[Otf.HEATMAP_ENCODED.value]
-    heat_map = tf.io.decode_png(heat_map_encoded[0], dtype=tf.uint16)
+    heat_map = tf.io.decode_png(encoded[0], dtype=tf.uint16)
     # Heat map is stored as ints, but we need it to be normalized floats.
     return tf.cast(heat_map, tf.float32) / np.iinfo(np.uint16).max
 
@@ -460,7 +459,6 @@ def _load_single_image_features(
     config: ModelConfig,
     include_frame: bool = False,
     include_heat_map: bool = False,
-    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -470,7 +468,6 @@ def _load_single_image_features(
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
         include_heat_map: Whether to include a detection heatmap.
-        augmentation_config: Configuration for data augmentation.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -480,29 +477,12 @@ def _load_single_image_features(
 
     def _process_image(feature_dict: Feature) -> Feature:
         bbox_coords = _extract_bbox_coords(feature_dict)
-        image = _decode_image(feature_dict)
-
-        # Down-sample the image by half.
-        original_shape = tf.shape(image)
-        size = original_shape[:2]
-        image = tf.image.resize(image, size // 2)
 
         # Compute the geometric features.
+        image = feature_dict[Otf.IMAGE_ENCODED.value]
+        image_shape = tf.io.extract_jpeg_shape(image[0])
         geometric_features = _get_geometric_features(
-            bbox_coords, image_shape=original_shape, config=config
-        )
-
-        # Extract the heatmap.
-        heatmap = None
-        if include_heat_map:
-            heatmap = _decode_heat_map(feature_dict)
-
-        # Perform data augmentation.
-        image, heatmap, geometric_features = _augment_inputs(
-            image=image,
-            heatmap=heatmap,
-            geometry=geometric_features,
-            config=augmentation_config,
+            bbox_coords, image_shape=image_shape, config=config
         )
 
         object_ids = feature_dict[Otf.OBJECT_ID.value]
@@ -517,8 +497,10 @@ def _load_single_image_features(
         }
         if include_frame:
             loaded_features[FeatureName.FRAME_IMAGE.value] = image
-        if heatmap is not None:
-            loaded_features[FeatureName.HEAT_MAP.value] = heatmap
+        if include_heat_map:
+            loaded_features[FeatureName.HEAT_MAP.value] = feature_dict[
+                Otf.HEATMAP_ENCODED.value
+            ]
 
         return loaded_features
 
@@ -624,6 +606,59 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         return inputs, targets
 
     return features.map(_process_pair, num_parallel_calls=_NUM_THREADS)
+
+
+def _decode_images(
+    features: tf.data.Dataset,
+    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
+) -> tf.data.Dataset:
+    """
+    Decodes images from pair features and does whatever processing that has
+    been deferred while the images were encoded. Since this is the slowest
+    and most memory-intensive step of the entire pipeline, it makes sense to
+    do this as late as possible after we've had a chance to filter out
+    unnecessary data.
+
+    Args:
+        features: The pair features, with images still encoded.
+        augmentation_config: Configuration for data augmentation.
+
+    Returns:
+        The same pair features, with the images decoded and processed.
+
+    """
+
+    def _process_example(
+        inputs: Feature, targets: Feature
+    ) -> Tuple[Feature, Feature]:
+        # Get the image features.
+        frame = inputs.get(ModelInputs.DETECTIONS_FRAME.value, None)
+        heatmap = targets.get(ModelTargets.HEATMAP.value, None)
+        geometric_features = inputs[ModelInputs.DETECTION_GEOMETRY.value]
+
+        # Decode the image features.
+        if heatmap is not None:
+            heatmap = _decode_heat_map(heatmap)
+        if frame is not None:
+            frame = _decode_image(frame, ratio=2)
+
+            # Perform data augmentation.
+            frame, heatmap, geometric_features = _augment_inputs(
+                image=frame,
+                heatmap=heatmap,
+                geometry=geometric_features,
+                config=augmentation_config,
+            )
+
+            inputs[ModelInputs.DETECTIONS_FRAME.value] = frame
+            inputs[ModelInputs.DETECTION_GEOMETRY.value] = geometric_features
+
+        if heatmap is not None:
+            targets[ModelTargets.HEATMAP.value] = heatmap
+
+        return inputs, targets
+
+    return features.map(_process_example, num_parallel_calls=_NUM_THREADS)
 
 
 def _filter_empty(features: tf.data.Dataset) -> tf.data.Dataset:
@@ -890,7 +925,6 @@ def _inputs_and_targets_from_dataset(
         config=config,
         include_frame=include_frame,
         include_heat_map=include_heat_map,
-        augmentation_config=augmentation_config,
     )
     # Break into pairs.
     image_pairs = _window_to_nested(
@@ -902,6 +936,11 @@ def _inputs_and_targets_from_dataset(
     # Remove empty examples.
     if not include_empty:
         pair_features = _filter_empty(pair_features)
+
+    # Decode the images.
+    pair_features = _decode_images(
+        pair_features, augmentation_config=augmentation_config
+    )
 
     return pair_features
 
