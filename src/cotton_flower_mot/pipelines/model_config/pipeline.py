@@ -14,6 +14,8 @@ def create_pipeline(**kwargs):
                 make_model_config,
                 dict(
                     image_input_shape="params:image_input_shape",
+                    detection_model_input_shape="params"
+                    ":detection_model_input_shape",
                     frame_input_shape="params:frame_input_shape",
                     num_appearance_features="params:num_appearance_features",
                     num_gcn_channels="params:num_gcn_channels",

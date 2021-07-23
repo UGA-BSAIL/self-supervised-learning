@@ -43,7 +43,7 @@ def _build_backbone(
         HdaStage,
         agg_filter_size=3,
         activation="relu",
-        block_type=HdaStage.Block.BOTTLENECK,
+        block_type=HdaStage.Block.BASIC,
     )
 
     # Create initial reduction stages.
