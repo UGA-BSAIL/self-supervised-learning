@@ -127,17 +127,17 @@ def _make_callbacks(
 
     nan_termination = tf.keras.callbacks.TerminateOnNaN()
 
-    # heatmap_callback = LogHeatmaps(
-    #     model=model,
-    #     dataset=dataset,
-    #     log_dir=log_dir,
-    #     resize_images=heatmap_size,
-    #     log_period=heatmap_period,
-    #     max_num_batches=num_heatmap_batches,
-    #     num_images_per_batch=num_heatmap_images,
-    # )
+    heatmap_callback = LogHeatmaps(
+        model=model,
+        dataset=dataset,
+        log_dir=log_dir,
+        resize_images=heatmap_size,
+        log_period=heatmap_period,
+        max_num_batches=num_heatmap_batches,
+        num_images_per_batch=num_heatmap_images,
+    )
 
-    return [tensorboard_callback, nan_termination]
+    return [tensorboard_callback, nan_termination, heatmap_callback]
 
 
 def _remove_unused_targets(dataset: tf.data.Dataset) -> tf.data.Dataset:
