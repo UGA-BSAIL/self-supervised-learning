@@ -480,10 +480,7 @@ def _load_single_image_features(
 
         # Compute the geometric features.
         image = feature_dict[Otf.IMAGE_ENCODED.value]
-        # FIXME (danielp): This must be removed after a new dataset is
-        #  generated.
-        # image_shape = tf.io.extract_jpeg_shape(image[0])
-        image_shape = tf.constant([1080, 1920, 3])
+        image_shape = tf.io.extract_jpeg_shape(image[0])
         geometric_features = _get_geometric_features(
             bbox_coords, image_shape=image_shape, config=config
         )
@@ -637,18 +634,13 @@ def _decode_images(
         # Get the image features.
         frame = inputs.get(ModelInputs.DETECTIONS_FRAME.value, None)
         heatmap = targets.get(ModelTargets.HEATMAP.value, None)
-        geometric_features = inputs[ModelInputs.DETECTION_GEOMETRY.value]
+        geometric_features = targets[ModelTargets.GEOMETRY_DENSE_PRED.value]
 
         # Decode the image features.
         if heatmap is not None:
             heatmap = _decode_heat_map(heatmap)
         if frame is not None:
-            # TODO (danielp): Return to using ratio to downsample after new
-            #  dataset is constructed.
-            frame = _decode_image(frame, ratio=1)
-
-            frame_size = tf.shape(frame)[:2]
-            frame = tf.image.resize(frame, frame_size // 2)
+            frame = _decode_image(frame, ratio=2)
 
             # Perform data augmentation.
             frame, heatmap, geometric_features = _augment_inputs(
@@ -659,7 +651,16 @@ def _decode_images(
             )
 
             inputs[ModelInputs.DETECTIONS_FRAME.value] = frame
-            inputs[ModelInputs.DETECTION_GEOMETRY.value] = geometric_features
+            # Update all the geometry.
+            inputs[ModelInputs.DETECTION_GEOMETRY.value] = geometric_features[
+                :, :4
+            ]
+            targets[
+                ModelTargets.GEOMETRY_DENSE_PRED.value
+            ] = geometric_features
+            targets[
+                ModelTargets.GEOMETRY_SPARSE_PRED.value
+            ] = geometric_features
 
         if heatmap is not None:
             targets[ModelTargets.HEATMAP.value] = heatmap

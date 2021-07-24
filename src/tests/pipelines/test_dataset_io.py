@@ -20,7 +20,6 @@ Number of elements that are in the test dataset.
 
 
 @pytest.mark.integration
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "include_frame", (True, False), ids=["include_frame", "no_frame"]
 )

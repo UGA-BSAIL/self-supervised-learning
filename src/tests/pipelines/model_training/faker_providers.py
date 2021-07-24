@@ -136,17 +136,27 @@ class TensorProvider(BaseProvider):
             The configuration that it created.
 
         """
-        # Our frame shape will be some multiple of the input shape.
-        frame_shape_multiple = self.random_int(min=1, max=10)
+        # Our detection input shape will be some multiple of the input shape.
+        detection_shape_multiple = self.random_int(min=1, max=10)
         image_height, image_width, image_channels = image_shape
-        frame_shape = (
-            image_height * frame_shape_multiple,
-            image_width * frame_shape_multiple,
+        detection_input_shape = (
+            image_height * detection_shape_multiple,
+            image_width * detection_shape_multiple,
             image_channels,
+        )
+
+        # Same with our frame shame.
+        frame_shape_multiple = self.random_int(min=1, max=3)
+        input_height, input_width, input_channels = detection_input_shape
+        frame_shape = (
+            input_height * frame_shape_multiple,
+            input_width * frame_shape_multiple,
+            input_channels,
         )
 
         return ModelConfig(
             image_input_shape=image_shape,
+            detection_model_input_shape=detection_input_shape,
             frame_input_shape=frame_shape,
             num_appearance_features=self.random_int(min=1, max=256),
             num_gcn_channels=self.random_int(min=1, max=256),
