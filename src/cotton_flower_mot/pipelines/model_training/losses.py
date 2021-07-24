@@ -95,11 +95,21 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
     Small constant value to avoid log(0).
     """
 
-    def __init__(self, *, alpha: float, beta: float, **kwargs: Any):
+    def __init__(
+        self,
+        *,
+        alpha: float,
+        beta: float,
+        positive_loss_weight: float = 1.0,
+        **kwargs: Any,
+    ):
         """
         Args:
             alpha: Alpha parameter for the focal loss.
             beta: Beta parameter for the focal loss.
+            positive_loss_weight: Additional weight to give the positive
+                component of the loss. This is to help balance the
+                preponderance of negative samples.
             **kwargs: Will be forwarded to superclass constructor.
 
         """
@@ -107,6 +117,7 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
 
         self._alpha = tf.constant(alpha)
         self._beta = tf.constant(beta)
+        self._positive_loss_weight = tf.constant(positive_loss_weight)
 
     def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
         one = tf.constant(1.0)
@@ -115,6 +126,7 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         positive_loss = tf.pow(one - y_pred, self._alpha) * tf.math.log(
             y_pred + self._EPSILON
         )
+        positive_loss *= self._positive_loss_weight
         # Loss we use at "negative" locations.
         negative_loss = (
             tf.pow(one - y_true, self._beta)
@@ -485,7 +497,12 @@ class CIOULoss(tf.keras.losses.Loss):
 
 
 def make_losses(
-    *, alpha: float, beta: float, size_weight: float, offset_weight: float
+    *,
+    alpha: float,
+    beta: float,
+    size_weight: float,
+    offset_weight: float,
+    positive_loss_weight: float,
 ) -> Dict[str, tf.keras.losses.Loss]:
     """
     Creates the losses to use for the model.
@@ -495,6 +512,7 @@ def make_losses(
         beta: The beta parameter to use for focal loss.
         size_weight: The weight to use for the size loss.
         offset_weight: The weight to use for the offset loss.
+        positive_loss_weight: Weight to give positive examples in heatmap loss.
 
     Returns:
         The losses that it created.
@@ -503,7 +521,10 @@ def make_losses(
     return {
         # ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
         ModelTargets.HEATMAP.value: HeatMapFocalLoss(
-            alpha=alpha, beta=beta, name="heatmap_loss"
+            alpha=alpha,
+            beta=beta,
+            positive_loss_weight=positive_loss_weight,
+            name="heatmap_loss",
         ),
         ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
             size_weight=size_weight,
