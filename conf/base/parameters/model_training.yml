@@ -29,7 +29,7 @@ loss_params:
   # Weight to use for offset regression loss.
   offset_weight: 1.0
   # Weight to use for positive examples in heatmap loss.
-  positive_loss_weight: 100.0
+  positive_loss_weight: 50.0
 
 # Weights for each loss term.
 heatmap_loss_weight: 1000.0
