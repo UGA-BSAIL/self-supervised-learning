@@ -97,10 +97,12 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
             **kwargs: Will be forwarded to `tf.summary.image`.
 
         """
-        with self._writer.as_default():
-            tf.summary.image(
+        with self._writer.as_default(), tf.summary.record_if(True):
+            wrote_success = tf.summary.image(
                 *args, max_outputs=self.__num_images_per_batch, **kwargs
             )
+            # This should never fail because we assign a default summary writer.
+            assert wrote_success, "Writing summary images failed unexpectedly."
 
     @abc.abstractmethod
     def _log_batch(
@@ -123,10 +125,12 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
         """
 
     def on_epoch_end(self, epoch: int, logs: Optional[Dict] = None) -> None:
-        if epoch == 0 or epoch % self.__log_period != 0:
+        if epoch % self.__log_period != 0:
             # Skip logging this epoch.
             return
-        logger.debug("Logging with {}...", self.__class__.__name__)
+        logger.debug(
+            "Logging with {} for epoch {}...", self.__class__.__name__, epoch
+        )
 
         for batch_num, (input_batch, target_batch) in enumerate(
             self.__dataset

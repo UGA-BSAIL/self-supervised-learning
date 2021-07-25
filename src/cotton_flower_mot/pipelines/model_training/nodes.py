@@ -130,7 +130,7 @@ def _make_callbacks(
     heatmap_callback = LogHeatmaps(
         model=model,
         dataset=dataset,
-        log_dir=log_dir,
+        log_dir=log_dir / "heatmaps",
         resize_images=heatmap_size,
         log_period=heatmap_period,
         max_num_batches=num_heatmap_batches,
