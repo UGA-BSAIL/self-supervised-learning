@@ -1069,9 +1069,8 @@ def inputs_and_targets_from_datasets(
 
     if interleave:
         # Interleave the results.
-        choices = tf.data.Dataset.range(len(parsed_datasets)).repeat()
-        maybe_interleaved = tf.data.experimental.choose_from_datasets(
-            parsed_datasets, choices
+        maybe_interleaved = tf.data.experimental.sample_from_datasets(
+            parsed_datasets
         )
 
     else:

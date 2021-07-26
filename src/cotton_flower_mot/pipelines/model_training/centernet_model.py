@@ -17,7 +17,6 @@ from .layers import (
     HdaStage,
     PeakLayer,
     ReductionStages,
-    TransitionLayer,
     UpSamplingIda,
 )
 
@@ -58,19 +57,19 @@ def _build_backbone(
         add_ida_skip=False,
         name="hda_stage_1",
     )(reduced_input)
-    transition1 = TransitionLayer()(hda1)
+    transition1 = layers.MaxPool2D()(hda1)
     hda2 = hda_stage(
         agg_depth=2,
         num_channels=128,
         name="hda_stage_2",
     )(transition1)
-    transition2 = TransitionLayer()(hda2)
+    transition2 = layers.MaxPool2D()(hda2)
     hda3 = hda_stage(
         agg_depth=2,
         num_channels=256,
         name="hda_stage_3",
     )(transition2)
-    transition3 = TransitionLayer()(hda3)
+    transition3 = layers.MaxPool2D()(hda3)
     hda4 = hda_stage(
         agg_depth=1,
         num_channels=512,

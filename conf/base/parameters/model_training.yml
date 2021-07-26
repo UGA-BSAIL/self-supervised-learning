@@ -6,7 +6,7 @@ histogram_period: 2
 # Period at which to write metrics, in batches.
 update_period: 100
 # Size of generated heatmap visualizations. (width, height).
-heatmap_size: [1280, 720]
+heatmap_size: [960, 540]
 # Period in epochs at which to visualize heatmaps.
 heatmap_period: 5
 # Number of batches to visualize heatmaps from.
@@ -29,7 +29,7 @@ loss_params:
   # Weight to use for offset regression loss.
   offset_weight: 1.0
   # Weight to use for positive examples in heatmap loss.
-  positive_loss_weight: 37.5
+  positive_loss_weight: 50.0
 
 # Weights for each loss term.
 heatmap_loss_weight: 1000.0
