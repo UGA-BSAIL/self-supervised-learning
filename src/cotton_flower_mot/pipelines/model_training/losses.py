@@ -134,24 +134,17 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
             * tf.math.log(one - y_pred + self._EPSILON)
         )
 
-        # Divide pixels into "positive" and "negative" pixels.
-        positive_mask = tf.greater(y_true, 0.5)
-        positive_pixels = tf.boolean_mask(positive_loss, positive_mask)
-        negative_pixels = tf.boolean_mask(
-            negative_loss, tf.logical_not(positive_mask)
-        )
+        # Figure out which locations are positive and which are negative.
+        positive_mask = tf.greater(y_true, 0.99)
+        pixel_wise_loss = tf.where(positive_mask, positive_loss, negative_loss)
 
-        # Sample only a subset of the negative pixels to avoid overwhelming
-        # the loss.
-        num_positive = tf.shape(positive_pixels)[0]
-        num_negative = tf.shape(negative_pixels)[0]
-        shuffle_indices = tf.random.shuffle(tf.range(num_negative))
-        negative_pixels = tf.gather(negative_pixels, shuffle_indices)
-        negative_pixels_sample = negative_pixels[:num_positive]
-
-        return -(
-            tf.reduce_mean(negative_pixels_sample)
-            + tf.reduce_mean(positive_pixels)
+        mean_loss = -tf.reduce_mean(pixel_wise_loss)
+        # Normalize by the number of keypoints.
+        num_points = tf.experimental.numpy.count_nonzero(positive_mask)
+        return tf.cond(
+            num_points > 0,
+            lambda: mean_loss / tf.cast(num_points, tf.float32),
+            lambda: mean_loss,
         )
 
 
