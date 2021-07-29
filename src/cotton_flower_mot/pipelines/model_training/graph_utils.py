@@ -46,6 +46,7 @@ def compute_bipartite_edge_features(
         # Compute the node dimension index pairs.
         num_left_nodes = tf.shape(left_nodes)[1]
         num_right_nodes = tf.shape(right_nodes)[1]
+        num_features = tf.shape(left_nodes)[2]
         left_node_indices = tf.range(0, limit=num_left_nodes)
         right_node_indices = tf.range(0, limit=num_right_nodes)
 
@@ -78,7 +79,7 @@ def compute_bipartite_edge_features(
 
         # Combine into a single tensor.
         split_feature_shape = tf.stack(
-            (batch_size, num_left_nodes, num_right_nodes, -1), axis=0
+            (batch_size, num_left_nodes, num_right_nodes, num_features), axis=0
         )
         left_features = tf.reshape(left_features, split_feature_shape)
         right_features = tf.reshape(right_features, split_feature_shape)

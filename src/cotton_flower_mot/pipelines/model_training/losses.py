@@ -438,6 +438,8 @@ class CIOULoss(tf.keras.losses.Loss):
         """
         y_true = tf.ensure_shape(y_true, (None, 6))
         y_pred = tf.ensure_shape(y_pred, (None, 5))
+        tf.print("y_true:", y_true)
+        tf.print("y_pred:", y_pred)
         # Handle the confidence separately.
         confidence = y_pred[:, 4]
         y_pred = y_pred[:, :4]

@@ -38,12 +38,13 @@ def _iter_feature_pairs(
 
 @pytest.mark.parametrize(
     ("batch_size", "num_left_nodes", "num_right_nodes", "num_features"),
-    [(1, 2, 3, 4), (3, 2, 3, 4), (3, 5, 5, 5), (3, 4, 4, 1)],
+    [(1, 2, 3, 4), (3, 2, 3, 4), (3, 5, 5, 5), (3, 4, 4, 1), (3, 0, 4, 2)],
     ids=(
         "batch_size_1",
         "different_num_nodes",
         "same_num_nodes",
         "feature_size_1",
+        "no_left_nodes",
     ),
 )
 def test_compute_bipartite_edge_features(

@@ -168,12 +168,12 @@ class AveragePrecision(tf.keras.metrics.Metric):
         )[0]
         # Anything below the threshold doesn't match.
         iou_matches = tf.greater_equal(ious, self._iou_threshold)
-        tf.print(
-            "num_iou_matches:",
-            tf.shape(tf.where(iou_matches))[0],
-            "num_pred:",
-            tf.shape(y_pred)[0],
-        )
+        # tf.print(
+        #     "num_iou_matches:",
+        #     tf.shape(tf.where(iou_matches))[0],
+        #     "num_pred:",
+        #     tf.shape(y_pred)[0],
+        # )
 
         matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
         true_positive_confidence = tf.reduce_max(
