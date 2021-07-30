@@ -3,6 +3,7 @@ Tests for the `metrics` module.
 """
 
 
+import numpy as np
 from faker import Faker
 
 from src.cotton_flower_mot.pipelines.model_training import metrics
@@ -21,6 +22,9 @@ def test_average_precision_smoke(faker: Faker) -> None:
     # Create fake ground truth and predictions.
     true_row_lengths = faker.random_choices(list(range(10)), length=10)
     pred_row_lengths = faker.random_choices(list(range(10)), length=10)
+    # Force a test for the case where the row length is zero.
+    pred_row_lengths.append(0)
+    true_row_lengths.append(1)
     y_true = faker.ragged_tensor(
         row_lengths=true_row_lengths,
         inner_shape=(6,),
@@ -41,4 +45,6 @@ def test_average_precision_smoke(faker: Faker) -> None:
 
     # Assert.
     # We should be able to get a result that's not stupid.
-    assert 0.0 <= metric.result().numpy() <= 1.0
+    result = metric.result().numpy()
+    assert not np.any(np.isnan(result))
+    assert 0.0 <= result <= 1.0

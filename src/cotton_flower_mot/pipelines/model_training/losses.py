@@ -135,10 +135,10 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         )
 
         # Figure out which locations are positive and which are negative.
-        positive_mask = tf.greater(y_true, 0.99)
+        positive_mask = tf.equal(y_true, 1.0)
         pixel_wise_loss = tf.where(positive_mask, positive_loss, negative_loss)
 
-        mean_loss = -tf.reduce_mean(pixel_wise_loss)
+        mean_loss = -tf.reduce_sum(pixel_wise_loss)
         # Normalize by the number of keypoints.
         num_points = tf.experimental.numpy.count_nonzero(positive_mask)
         return tf.cond(
@@ -373,7 +373,12 @@ class CIOULoss(tf.keras.losses.Loss):
         """
         # Find the best predictions for each ground-truth box.
         truth_min_loss = tf.reduce_min(pairwise_losses, axis=1)
-        return tf.reduce_mean(truth_min_loss)
+
+        # Stop it from going infinite if there are no data points.
+        mean_loss = tf.reduce_mean(truth_min_loss)
+        return tf.cond(
+            tf.math.is_inf(mean_loss), lambda: 10.0, lambda: mean_loss
+        )
 
     def _compute_classification_loss(
         self, pairwise_losses: tf.Tensor, confidence: tf.Tensor
@@ -415,6 +420,8 @@ class CIOULoss(tf.keras.losses.Loss):
         )
         loss = tf.keras.losses.binary_crossentropy(truth, predictions)
 
+        # Remove NaN values from loss.
+        loss = tf.where(tf.math.is_nan(loss), 0.0, loss)
         return tf.reduce_mean(loss)
 
     def _loss_for_image(
@@ -438,8 +445,6 @@ class CIOULoss(tf.keras.losses.Loss):
         """
         y_true = tf.ensure_shape(y_true, (None, 6))
         y_pred = tf.ensure_shape(y_pred, (None, 5))
-        tf.print("y_true:", y_true)
-        tf.print("y_pred:", y_pred)
         # Handle the confidence separately.
         confidence = y_pred[:, 4]
         y_pred = y_pred[:, :4]
@@ -478,6 +483,8 @@ class CIOULoss(tf.keras.losses.Loss):
                 `[center_x, center_y, size_x, size_y, confidence]`.
 
         """
+        tf.print("y_true shape:", y_true.bounding_shape())
+        tf.print("y_pred shape:", y_pred.bounding_shape())
         image_losses = ragged_map_fn(
             lambda e: self._loss_for_image(e[0], e[1]),
             (y_true, y_pred),

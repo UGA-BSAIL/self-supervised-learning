@@ -13,16 +13,16 @@ from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
 from .layers import (
     BnActConv,
-    CenterSizes,
     HdaStage,
     PeakLayer,
     ReductionStages,
     TransitionLayer,
     UpSamplingIda,
 )
+from .layers.resnet import resnet
 
 # Use mixed precision to speed up training.
-tf.keras.mixed_precision.set_global_policy("mixed_float16")
+# tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
 
 def _build_backbone(
@@ -133,6 +133,7 @@ def compute_sparse_predictions(
     # offsets = tf.ensure_shape(offsets, (None, None, None, 2))
     # offsets = tf.cast(offsets, tf.float32)
     mask_shape = tf.shape(confidence_masks)[1:3]
+    batch_size = tf.shape(confidence_masks)[0]
 
     # Mask the offsets and sizes.
     sparse_sizes = tf.boolean_mask(sizes, center_masks)
@@ -150,8 +151,10 @@ def compute_sparse_predictions(
 
     # Coerce all attributes into a ragged tensor by batch.
     batch_index = sparse_centers[:, 0]
-    _, _, row_lengths = tf.unique_with_counts(batch_index)
-    row_lengths = tf.cast(row_lengths, tf.int64)
+    possible_indices = tf.expand_dims(tf.range(batch_size, dtype=tf.int64), 1)
+    row_lengths = tf.reduce_sum(
+        tf.cast(batch_index == possible_indices, tf.int32), axis=1
+    )
     ragged_center_points = tf.RaggedTensor.from_row_lengths(
         center_points[..., ::-1], row_lengths
     )
@@ -199,11 +202,6 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
     heatmap = _build_prediction_head(features, output_channels=1)
     sizes = _build_prediction_head(features, output_channels=2)
     offsets = _build_prediction_head(features, output_channels=2)
-
-    # Center the sizes around an average value.
-    sizes = CenterSizes(
-        name="size_centering", mean_box_size=config.nominal_detection_size
-    )(sizes)
 
     # The loss expects sizes and offsets to be merged.
     geometry = layers.Concatenate(

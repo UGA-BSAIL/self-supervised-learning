@@ -205,10 +205,10 @@ def train_model(
         logger.info("Starting new training phase.")
         logger.debug("Using phase parameters: {}", phase)
 
-        optimizer = tf.keras.optimizers.SGD(
+        optimizer = tf.keras.optimizers.Adam(
             learning_rate=_make_learning_rate(phase["learning_rate"]),
-            momentum=phase["momentum"],
-            nesterov=True,
+            # momentum=phase["momentum"],
+            # nesterov=True,
         )
         model.compile(
             optimizer=optimizer,

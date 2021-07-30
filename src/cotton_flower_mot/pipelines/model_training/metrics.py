@@ -129,6 +129,37 @@ class AveragePrecision(tf.keras.metrics.Metric):
         confidence_order = tf.argsort(confidence, direction="DESCENDING")
         return tf.gather(predictions, confidence_order[:num_to_take])
 
+    @staticmethod
+    def _safe_argmax(
+        values: tf.Tensor,
+        axis: int,
+        output_type: tf.dtypes.int64,
+        **kwargs: Any
+    ) -> tf.Tensor:
+        """
+        A version of `argmax` that safely handles the case where the
+        reduction axis has a size of zero. In this case, it just returns an
+        empty tensor.
+
+        Args:
+            values: The values to take the argmax of.
+            axis: The axis to take the maximum on.
+            output_type: Output data type.
+            **kwargs: Will be forwarded to `tf.argmax`.
+
+        Returns:
+            The argmax result.
+
+        """
+        axis_size = tf.shape(values)[axis]
+        return tf.cond(
+            axis_size == 0,
+            lambda: tf.constant([], dtype=output_type),
+            lambda: tf.argmax(
+                values, axis=axis, output_type=output_type, **kwargs
+            ),
+        )
+
     def _update_auc_from_image(
         self, y_true: tf.Tensor, y_pred: tf.Tensor
     ) -> tf.Tensor:
@@ -168,21 +199,17 @@ class AveragePrecision(tf.keras.metrics.Metric):
         )[0]
         # Anything below the threshold doesn't match.
         iou_matches = tf.greater_equal(ious, self._iou_threshold)
-        # tf.print(
-        #     "num_iou_matches:",
-        #     tf.shape(tf.where(iou_matches))[0],
-        #     "num_pred:",
-        #     tf.shape(y_pred)[0],
-        # )
 
         matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
-        true_positive_confidence = tf.reduce_max(
-            matches_with_confidence, axis=1
+        # Confidence cannot realistically be less than 0, even if there are
+        # no predictions.
+        true_positive_confidence = tf.maximum(
+            tf.reduce_max(matches_with_confidence, axis=1), 0.0
         )
 
         # Figure out which predictions are false-positives, and create a mask
         # for them.
-        true_positive_indices = tf.argmax(
+        true_positive_indices = self._safe_argmax(
             matches_with_confidence, axis=1, output_type=tf.int32
         )
         true_positive_mask = tf.scatter_nd(
@@ -260,9 +287,7 @@ class MaxConfidence(tf.keras.metrics.Metric):
     def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor, **_) -> None:
         # Compute the maximum heatmap value.
         batch_max = tf.reduce_max(y_pred)
-        self._max_confidence.assign(
-            tf.maximum(self._max_confidence, batch_max)
-        )
+        self._max_confidence.assign(batch_max)
 
     def result(self) -> tf.Tensor:
         return self._max_confidence
