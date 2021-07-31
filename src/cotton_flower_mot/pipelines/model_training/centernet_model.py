@@ -193,12 +193,14 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
     def _normalize(_images: tf.Tensor) -> tf.Tensor:
         # Normalize the images before putting them through the model.
         float_images = tf.cast(_images, tf.keras.backend.floatx())
-        return tf.image.per_image_standardization(float_images)
+        # return tf.image.per_image_standardization(float_images)
+        return tf.keras.applications.resnet_v2.preprocess_input(float_images)
 
     normalized = layers.Lambda(_normalize, name="normalize")(images)
 
     # Build the model.
-    features = _build_backbone(normalized, config=config)
+    # features = _build_backbone(normalized, config=config)
+    features = resnet(image_input=normalized, config=config)
     heatmap = _build_prediction_head(features, output_channels=1)
     sizes = _build_prediction_head(features, output_channels=2)
     offsets = _build_prediction_head(features, output_channels=2)

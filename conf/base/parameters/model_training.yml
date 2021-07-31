@@ -43,7 +43,7 @@ learning_phases:
       # Initial learning rate value.
       initial: 0.001
       # Specify that we want to decay over time.
-      decay: true
+      decay: false
       # Number of steps to decay over.
       # (44 steps per epoch)
       decay_steps: 132
@@ -56,4 +56,4 @@ learning_phases:
     # The momentum to use for the phase.
     momentum: 0.9
     # Number of epochs to train for in this phase.
-    num_epochs: 189
+    num_epochs: 90
