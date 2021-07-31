@@ -972,8 +972,10 @@ def _batch_and_prefetch(
         The batched dataset.
 
     """
+    shuffled = dataset.shuffle(batch_size * 20)
+
     # Construct batches.
-    batched = dataset.apply(
+    batched = shuffled.apply(
         tf.data.experimental.dense_to_ragged_batch(batch_size)
     )
 
