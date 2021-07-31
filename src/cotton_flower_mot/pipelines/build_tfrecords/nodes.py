@@ -18,7 +18,7 @@ from tenacity import (
 )
 
 from ..config import ModelConfig
-from ..heat_maps import make_heat_map
+from ..heat_maps import make_object_heat_map
 from ..schemas import ObjectTrackingFeatures as Otf
 from ..tfrecords_utils import bytes_feature, float_feature, int_feature
 
@@ -240,12 +240,19 @@ def _generate_heat_map(
     sizes = high_points - low_points
     center_points = low_points + sizes / 2
     normalized_center_points = center_points / frame_size
+    normalized_sizes = sizes / frame_size
+    boxes = tf.concat(
+        (
+            tf.convert_to_tensor(normalized_center_points, dtype=tf.float32),
+            tf.convert_to_tensor(normalized_sizes, dtype=tf.float32),
+        ),
+        axis=1,
+    )
 
     # Create the heatmap.
-    heat_map = make_heat_map(
-        tf.convert_to_tensor(normalized_center_points),
+    heat_map = make_object_heat_map(
+        boxes,
         map_size=tf.convert_to_tensor(heatmap_size, dtype=tf.int32),
-        sigma=config.detection_sigma,
         normalized=False,
     )
 

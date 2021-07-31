@@ -4,11 +4,10 @@ keypoint-based detectors.
 """
 
 
-from typing import Optional
+import math
+from typing import Any, Optional
 
 import tensorflow as tf
-import tensorflow_addons as tfa
-from loguru import logger
 
 
 def trim_out_of_bounds(points: tf.Tensor) -> tf.Tensor:
@@ -32,11 +31,74 @@ def trim_out_of_bounds(points: tf.Tensor) -> tf.Tensor:
     return tf.boolean_mask(points, point_valid)
 
 
+def _to_pixel_points(points: tf.Tensor, *, map_size: tf.Tensor) -> tf.Tensor:
+    """
+    Converts points from normalized to pixel coordinates.
+
+    Args:
+        points: The normalized points to convert.
+        map_size: The size of the output heatmap.
+
+    Returns:
+        The points in pixel coordinates, with out-of-bounds points excluded.
+
+    """
+    points = tf.ensure_shape(points, (None, 2))
+    map_size = tf.ensure_shape(map_size, (2,))
+    points = tf.cast(points, tf.float32)
+
+    # Eliminate any points that are out-of-bounds.
+    points = trim_out_of_bounds(points)
+
+    # Quantize the annotations to convert from frame fractions to actual
+    # pixel values.
+    pixel_points = points * tf.cast(map_size - tf.constant(1), tf.float32)
+    return tf.cast(tf.round(pixel_points), tf.int64)
+
+
+def _max_overlap_radii(
+    bbox_sizes: tf.Tensor, min_iou: float = 0.3
+) -> tf.Tensor:
+    """
+    Calculates the radii that our center predictions needs to be within of
+    the truth in order to achieve some minimum IOU.
+
+    Args:
+        bbox_sizes: The sizes of the bounding boxes. Should have shape
+            `[num_boxes, 2]`, where the second dimension is of the form
+            `[width, height]`.
+        min_iou: The minimum IOU we want.
+
+    Returns:
+        The radii corresponding to each box.
+
+    """
+    bbox_width = tf.cast(bbox_sizes[:, 0], tf.float32)
+    bbox_height = tf.cast(bbox_sizes[:, 1], tf.float32)
+
+    a1 = 1.0
+    b1 = bbox_height + bbox_width
+    c1 = bbox_width * bbox_height * (1.0 - min_iou) / (1.0 + min_iou)
+    sq1 = tf.sqrt(b1 ** 2.0 - 4.0 * a1 * c1)
+    r1 = (b1 + sq1) / 2.0
+    a2 = 4.0
+    b2 = 2.0 * (bbox_height + bbox_width)
+    c2 = (1.0 - min_iou) * bbox_width * bbox_height
+    sq2 = tf.sqrt(b2 ** 2.0 - 4.0 * a2 * c2)
+    r2 = (b2 + sq2) / 2.0
+    a3 = 4.0 * min_iou
+    b3 = -2.0 * min_iou * (bbox_height + bbox_width)
+    c3 = (min_iou - 1.0) * bbox_width * bbox_height
+    sq3 = tf.sqrt(b3 ** 2.0 - 4.0 * a3 * c3)
+    r3 = (b3 + sq3) / 2.0
+    return tf.minimum(tf.minimum(r1, r2), r3)
+
+
 def make_point_annotation_map(
     points: tf.Tensor,
     *,
     map_size: tf.Tensor,
-    point_values: Optional[tf.Tensor] = None
+    point_values: Optional[tf.Tensor] = None,
 ) -> tf.Tensor:
     """
     Creates dense point maps given a set of point locations. Each point
@@ -56,17 +118,7 @@ def make_point_annotation_map(
         specified by `map_size`.
 
     """
-    points = tf.ensure_shape(points, (None, 2))
-    map_size = tf.ensure_shape(map_size, (2,))
-    points = tf.cast(points, tf.float32)
-
-    # Eliminate any points that are out-of-bounds.
-    points = trim_out_of_bounds(points)
-
-    # Quantize the annotations to convert from frame fractions to actual
-    # pixel values.
-    pixel_points = points * tf.cast(map_size - tf.constant(1), tf.float32)
-    pixel_points = tf.cast(tf.round(pixel_points), tf.int64)
+    pixel_points = _to_pixel_points(points, map_size=map_size)
 
     # Generate the output maps.
     if point_values is None:
@@ -95,9 +147,9 @@ def make_point_annotation_map(
 def make_heat_map(
     points: tf.Tensor,
     *,
+    sigmas: tf.Tensor,
     map_size: tf.Tensor,
-    sigma: float,
-    normalized: bool = True
+    normalized: bool = True,
 ) -> tf.Tensor:
     """
     Creates a gaussian heat map by splatting a set of points.
@@ -105,42 +157,96 @@ def make_heat_map(
     Args:
         points: The points to add to the map. Should be in the form (x, y).
             They should be normalized to [0.0, 1.0]
-        map_size: The size of the map, in the form (width, height).
-        sigma:
-            The standard deviation in pixels to use for the applied gaussian
-            filter.
+        map_size: The size of the map in pixels, in the form (width, height).
+        sigmas: The corresponding standard deviation to use for each point.
+            Should be a 1D vector.
         normalized: If true, the gaussians will be normalized, such that
             the integral for each adds up to one. Otherwise, they will be
             un-normalized.
 
     Returns:
-        A tensor containing density maps, of the shape
+        A tensor containing heat map, of the shape
         (height, width, 1)
 
     """
-    # Compute our filter size so that it's odd and has sigma pixels on either
-    # side.
-    kernel_size = int(1 + 6 * sigma)
-    logger.debug("Using {}-pixel kernel for gaussian blur.", kernel_size)
+    points = tf.ensure_shape(points, (None, 2))
+    sigmas = tf.cast(tf.ensure_shape(sigmas, (None,)), tf.float32)
+    map_size = tf.ensure_shape(map_size, (2,))
 
-    # Obtain initial point annotations.
-    dense_annotations = make_point_annotation_map(points, map_size=map_size)
-    # Add a dummy channel dimension.
-    dense_annotations = tf.expand_dims(dense_annotations, 2)
+    pixel_points = _to_pixel_points(points, map_size=map_size)
+    map_size = tf.cast(map_size, tf.int64)
 
-    blurred = tfa.image.gaussian_filter2d(
-        dense_annotations,
-        filter_shape=kernel_size,
-        sigma=sigma,
+    # Create grids to apply the gaussians on.
+    grid_indices_x, grid_indices_y = tf.meshgrid(
+        tf.range(map_size[0]),
+        tf.range(map_size[1]),
+    )
+    # We want a separate grid for each point.
+    num_points = tf.shape(points, out_type=tf.int64)[0]
+    heatmap_shape = tf.concat(
+        (map_size[::-1], tf.expand_dims(num_points, 0)), axis=0
+    )
+    grid_indices_x = tf.broadcast_to(
+        tf.expand_dims(grid_indices_x, 2), heatmap_shape
+    )
+    grid_indices_y = tf.broadcast_to(
+        tf.expand_dims(grid_indices_y, 2), heatmap_shape
     )
 
-    if not normalized:
-        # Get rid of the normalization constant. We should be able to
-        # calculate the coefficient statically based on our sigma value,
-        # but due to quantization error, it's more accurate to calculate it
-        # dynamically.
-        max_value = tf.reduce_max(blurred)
-        blurred = tf.cond(
-            max_value > 0, lambda: blurred / max_value, lambda: blurred
+    # Calculate the gaussian.
+    point_x = tf.cast(pixel_points[:, 0], tf.float32)
+    point_y = tf.cast(pixel_points[:, 1], tf.float32)
+    grid_indices_x = tf.cast(grid_indices_x, tf.float32)
+    grid_indices_y = tf.cast(grid_indices_y, tf.float32)
+    gaussian_values = tf.exp(
+        -(
+            tf.square(grid_indices_x - point_x)
+            + tf.square(grid_indices_y - point_y)
         )
-    return blurred
+        / (2.0 * tf.square(sigmas))
+    )
+    if normalized:
+        gaussian_values *= 1.0 / (2.0 * math.pi * tf.square(sigmas))
+
+    # Convert back to heatmaps.
+    heatmaps = tf.reshape(gaussian_values, heatmap_shape)
+    # Squash into a single heatmap.
+    return tf.reduce_max(heatmaps, axis=2, keepdims=True)
+
+
+def make_object_heat_map(
+    boxes: tf.Tensor,
+    *,
+    map_size: tf.Tensor,
+    min_iou: float = 0.3,
+    **kwargs: Any,
+) -> tf.Tensor:
+    """
+    Generates a heatmap with a dynamic sigma value chosen for each point
+    based on the size of the object.
+
+    Args:
+        boxes: The object bounding boxes. Should be a 2D matrix where each row
+            has the form `[center_x, center_y, width, height]`, and all
+            coordinates are normalized.
+        map_size: The size of the map in pixels, in the form (width, height).
+        min_iou: The minimum IOU we want for a correctly-sized box prediction
+            that is within three sigma of the ground truth.
+        **kwargs: Additional arguments will be forwarded to `make_heat_map()`.
+
+    Returns:
+        A tensor containing heat map, of the shape
+        (height, width, 1)
+
+    """
+    boxes = tf.ensure_shape(boxes, (None, 4))
+    map_size = tf.ensure_shape(map_size, (2,))
+
+    # Calculate the sigmas to use.
+    pixel_sizes = boxes[:, 2:] * tf.cast(map_size, tf.float32)
+    radii = _max_overlap_radii(pixel_sizes, min_iou=min_iou)
+    sigmas = radii / tf.constant(3.0)
+
+    # Create the heat maps.
+    centers = boxes[:, :2]
+    return make_heat_map(centers, sigmas=sigmas, map_size=map_size, **kwargs)

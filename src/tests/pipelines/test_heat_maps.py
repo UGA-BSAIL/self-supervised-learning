@@ -88,19 +88,20 @@ def test_make_heat_map(sigma: int, normalized: bool) -> None:
     # Arrange.
     # Create some test points.
     points = np.array([[0.3, 0.4], [0.2, 0.1], [0.7, 0.3]])
+    num_points = points.shape[0]
 
     # Act.
     got_heat_map = heat_maps.make_heat_map(
         points,
-        map_size=tf.constant((100, 100)),
-        sigma=sigma,
+        map_size=tf.constant((150, 100)),
+        sigmas=tf.constant([sigma] * num_points),
         normalized=normalized,
     ).numpy()
 
     # Assert.
     if normalized:
-        # It should have three points overall.
-        assert np.sum(got_heat_map) == pytest.approx(3.0, abs=0.1)
+        # It should have the correct number of points overall.
+        assert np.sum(got_heat_map) == pytest.approx(num_points, abs=0.1)
     else:
         # Maximum value should be one.
         assert np.max(got_heat_map) == pytest.approx(1.0)
@@ -108,4 +109,44 @@ def test_make_heat_map(sigma: int, normalized: bool) -> None:
     # There should be a distinct peak for each point.
     max_value = np.max(got_heat_map)
     peaks = np.count_nonzero(got_heat_map == max_value)
-    assert peaks == 3
+    assert peaks == num_points
+
+
+@pytest.mark.parametrize(
+    "normalized", [True, False], ids=["normalized", "un-normalized"]
+)
+def test_make_object_heat_map(normalized: bool) -> None:
+    """
+    Tests that `make_object_heat_map` works.
+
+    Args:
+        normalized: Whether to test with normalized gaussians.
+
+    """
+    # Arrange.
+    # Create some test objects.
+    objects = np.array(
+        [[0.3, 0.4, 0.05, 0.03], [0.2, 0.1, 0.06, 0.1], [0.7, 0.3, 0.2, 0.22]],
+        dtype=np.float32,
+    )
+    num_objects = objects.shape[0]
+
+    # Act.
+    got_heat_map = heat_maps.make_object_heat_map(
+        objects, map_size=tf.constant((150, 100)), normalized=normalized
+    ).numpy()
+
+    # Assert.
+    if normalized:
+        # It should have the correct number of points overall.
+        assert np.sum(got_heat_map) == pytest.approx(num_objects, abs=0.1)
+    else:
+        # Maximum value should be one.
+        assert np.max(got_heat_map) == pytest.approx(1.0)
+
+        # There should be a distinct peak for each point. We don't check this
+        # in the normalized case, because if it's normalized, the different
+        # spreads will lead to different peak values.
+        max_value = np.max(got_heat_map)
+        peaks = np.count_nonzero(got_heat_map == max_value)
+        assert peaks == num_objects
