@@ -54,7 +54,7 @@ _mot_column_names: &mot_column_names
 # Raw annotations, in MOT 1.1 format, corresponding to the frames.
 annotations_mot_1_1_169:
   type: pandas.CSVDataSet
-  filepath: data/01_raw/flower_annotations_169_2021_03_08/gt.txt
+  filepath: data/01_raw/flower_annotations_169_2021_08_01/gt.txt
   load_args:
     << : *mot_column_names
 
