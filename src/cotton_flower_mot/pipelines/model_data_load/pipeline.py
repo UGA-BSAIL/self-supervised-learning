@@ -57,6 +57,7 @@ def create_pipeline(**kwargs):
                 dict(
                     raw_datasets="tfrecord_train",
                     augmentation_config="data_augmentation_config",
+                    shuffle_buffer_size="params:shuffle_buffer_size",
                     **loading_config
                 ),
                 "training_data",

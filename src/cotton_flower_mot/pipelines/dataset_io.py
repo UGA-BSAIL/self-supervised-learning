@@ -959,6 +959,7 @@ def _batch_and_prefetch(
     *,
     batch_size: int = 32,
     num_prefetch_batches: int = 1,
+    shuffle_buffer_size: Optional[int] = None,
 ) -> tf.data.Dataset:
     """
     Batches and prefetches data from a dataset.
@@ -967,15 +968,18 @@ def _batch_and_prefetch(
         dataset: The dataset to process.
         batch_size: The batch size to use.
         num_prefetch_batches: The number of batches to prefetch.
+        shuffle_buffer_size: The buffer size to use for shuffling. If set to
+            None, it will not shuffle at all.
 
     Returns:
         The batched dataset.
 
     """
-    shuffled = dataset.shuffle(batch_size * 20)
+    if shuffle_buffer_size is not None:
+        dataset = dataset.shuffle(batch_size * 20)
 
     # Construct batches.
-    batched = shuffled.apply(
+    batched = dataset.apply(
         tf.data.experimental.dense_to_ragged_batch(batch_size)
     )
 
@@ -1011,6 +1015,7 @@ def inputs_and_targets_from_dataset(
     *,
     batch_size: int = 32,
     num_prefetch_batches: int = 1,
+    shuffle_buffer_size: Optional[int] = None,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -1021,6 +1026,8 @@ def inputs_and_targets_from_dataset(
         raw_dataset: The raw dataset, containing serialized data.
         batch_size: The batch size to use.
         num_prefetch_batches: The number of batches to prefetch.
+        shuffle_buffer_size: The buffer size to use for shuffling. If set to
+            None, it will not shuffle at all.
         kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
 
     Returns:
@@ -1034,6 +1041,7 @@ def inputs_and_targets_from_dataset(
         inputs_and_targets,
         batch_size=batch_size,
         num_prefetch_batches=num_prefetch_batches,
+        shuffle_buffer_size=shuffle_buffer_size,
     )
 
 
@@ -1043,6 +1051,7 @@ def inputs_and_targets_from_datasets(
     interleave: bool = True,
     batch_size: int = 32,
     num_prefetch_batches: int = 1,
+    shuffle_buffer_size: Optional[int] = None,
     **kwargs: Any,
 ) -> tf.data.Dataset:
     """
@@ -1056,6 +1065,8 @@ def inputs_and_targets_from_datasets(
             individual clips intact.
         batch_size: The batch size to use.
         num_prefetch_batches: The number of batches to prefetch.
+        shuffle_buffer_size: The buffer size to use for shuffling. If set to
+            None, it will not shuffle at all.
         **kwargs: Will be forwarded to `_inputs_and_targets_from_dataset`.
 
     Returns:
@@ -1085,6 +1096,7 @@ def inputs_and_targets_from_datasets(
         maybe_interleaved,
         batch_size=batch_size,
         num_prefetch_batches=num_prefetch_batches,
+        shuffle_buffer_size=shuffle_buffer_size,
     )
 
 

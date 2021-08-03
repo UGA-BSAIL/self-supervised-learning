@@ -12,6 +12,8 @@ min_saturation: 0.9
 max_saturation: 1.1
 # Whether to allow random flipping.
 flip: true
+# Number of batches to buffer when shuffling.
+shuffle_buffer_size: 20
 
 # Probability of dropping a particular example to use.
 drop_probability: 0.0
