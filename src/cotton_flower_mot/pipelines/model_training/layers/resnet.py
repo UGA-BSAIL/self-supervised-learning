@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.applications.resnet_v2 import ResNet50V2
+from tensorflow.keras.applications.resnet_v2 import ResNet101V2
 from tensorflow.keras.layers import (
     BatchNormalization,
     Concatenate,
@@ -19,7 +19,7 @@ def resnet(
     image_input: tf.Tensor,
     config: ModelConfig,
 ):
-    resnet = ResNet50V2(
+    resnet = ResNet101V2(
         include_top=False,
         input_tensor=image_input,
         input_shape=config.detection_model_input_shape,
@@ -29,8 +29,8 @@ def resnet(
     # C5 (b, 16, 16, 512)
     c2 = resnet.get_layer("conv2_block3_1_relu").get_output_at(0)
     c3 = resnet.get_layer("conv3_block4_1_relu").get_output_at(0)
-    c4 = resnet.get_layer("conv4_block6_1_relu").get_output_at(0)
-    c5 = resnet.get_layer("conv5_block3_2_relu").get_output_at(0)
+    c4 = resnet.get_layer("conv4_block23_1_relu").get_output_at(0)
+    c5 = resnet.get_layer("post_relu").get_output_at(0)
 
     c5 = Dropout(rate=0.5)(c5)
     c4 = Dropout(rate=0.4)(c4)
