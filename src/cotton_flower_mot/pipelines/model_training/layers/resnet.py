@@ -19,6 +19,17 @@ def resnet(
     image_input: tf.Tensor,
     config: ModelConfig,
 ):
+    """
+    Creates a new ResNet-based model.
+
+    Args:
+        image_input: The tensor containing (normalized) input images.
+        config: The model configuration to use.
+
+    Returns:
+        The top layer of the model.
+
+    """
     resnet = ResNet101V2(
         include_top=False,
         input_tensor=image_input,
@@ -26,7 +37,6 @@ def resnet(
     )
     resnet.trainable = False
 
-    # C5 (b, 16, 16, 512)
     c2 = resnet.get_layer("conv2_block3_1_relu").get_output_at(0)
     c3 = resnet.get_layer("conv3_block4_1_relu").get_output_at(0)
     c4 = resnet.get_layer("conv4_block23_1_relu").get_output_at(0)
@@ -59,7 +69,6 @@ def resnet(
         kernel_regularizer=l2(5e-4),
     )(x)
     x = BatchNormalization()(x)
-    # (b, 32, 32, 512)
     x = ReLU()(x)
 
     x = Conv2D(
@@ -82,7 +91,6 @@ def resnet(
         kernel_regularizer=l2(5e-4),
     )(x)
     x = BatchNormalization()(x)
-    # (b, 64, 64, 128)
     x = ReLU()(x)
 
     x = Conv2D(
@@ -108,5 +116,4 @@ def resnet(
         kernel_regularizer=l2(5e-4),
     )(x)
     x = BatchNormalization()(x)
-    # (b, 128, 128, 512)
     return ReLU()(x)
