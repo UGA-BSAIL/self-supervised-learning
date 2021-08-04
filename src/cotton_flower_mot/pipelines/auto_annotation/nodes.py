@@ -203,8 +203,13 @@ def _get_frame_detections(
         The extracted detections, in a `DataFrame`.
 
     """
-    # Get the outputs.
+    # Make sure input is the correct shape.
     frame_batch = np.expand_dims(frame, 0)
+    input_size = model.input_shape[1:3]
+    logger.debug("Got model input shape: {}", input_size)
+    frame_batch = tf.image.resize(frame_batch, input_size)
+
+    # Get the outputs.
     model_outputs = model(frame_batch, training=False)
     bbox_predictions = model_outputs[2][0].numpy()
 
@@ -212,6 +217,10 @@ def _get_frame_detections(
     confidence = bbox_predictions[..., 4]
     confidence_order = np.argsort(confidence)[::-1]
     bbox_predictions = bbox_predictions[confidence_order[:num_to_keep]]
+    logger.debug(
+        "Max confidence is {}.",
+        confidence.max(),
+    )
 
     return pd.DataFrame(
         data=bbox_predictions,

@@ -38,6 +38,11 @@ cotton_videos_190:
   task_id: 190
   << : *cvat_credentials
 
+cotton_videos_191:
+  type: pycvat.CvatDataSet
+  task_id: 191
+  << : *cvat_credentials
+
 # Column names for the MOT format data.
 _mot_column_names: &mot_column_names
   names:

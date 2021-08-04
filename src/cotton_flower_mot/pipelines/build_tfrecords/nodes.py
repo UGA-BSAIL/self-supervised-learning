@@ -6,9 +6,8 @@ import cv2
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from cvat_api.rest import ApiException
 from loguru import logger
-from pycvat import Task
+from swagger_client.rest import ApiException
 from tenacity import (
     after_log,
     retry,
@@ -16,6 +15,8 @@ from tenacity import (
     stop_after_attempt,
     wait_random_exponential,
 )
+
+from pycvat import Task
 
 from ..config import ModelConfig
 from ..heat_maps import make_object_heat_map
