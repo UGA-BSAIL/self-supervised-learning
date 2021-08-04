@@ -1,0 +1,39 @@
+_cvat_credentials: &cvat_credentials
+  host: "http://localhost:8080/api/v1"
+  credentials: dev_cvat
+
+# CVAT datasets containing raw frame data.
+cotton_videos_190:
+  type: pycvat.CvatDataSet
+  task_id: 190
+  << : *cvat_credentials
+
+# Intermediate datasets containing raw bounding box detections.
+raw_detections_190:
+  type: pandas.ParquetDataSet
+  filepath: data/07_model_output/raw_detections/task_190.parquet
+  versioned: true
+
+# Converted annotations, in MOT 1.1 format.
+_mot_csv_parameters: &mot_csv_parameters
+  type: pandas.CSVDataSet
+  versioned: True
+  save_args:
+    # No header row.
+    header: false
+    # Columns to write.
+    columns:
+      - frame
+      - id
+      - bb_left
+      - bb_top
+      - bb_width
+      - bb_height
+      - not_ignored
+      - class_id
+      - visibility
+
+# Raw annotations, in MOT 1.1 format, corresponding to the frames.
+annotations_mot_1_1_190:
+  filepath: data/01_raw/flower_annotations_190/gt.txt
+  << : *mot_csv_parameters

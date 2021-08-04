@@ -1,0 +1,4 @@
+# Any detections below this confidence level will be ignored.
+min_confidence: 0.75
+# The IOU threshold to use for NMS.
+iou_threshold: 0.5
