@@ -4,12 +4,21 @@ Annotates data automatically using a trained model.
 
 
 import enum
+from logging import DEBUG
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from loguru import logger
+from swagger_client.rest import ApiException
+from tenacity import (
+    after_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 from pycvat import Task
 
@@ -284,6 +293,28 @@ def convert_to_mot(
     return mot_detections
 
 
+@retry(
+    retry=retry_if_exception_type(ApiException),
+    reraise=True,
+    wait=wait_random_exponential(multiplier=1, max=60),
+    stop=stop_after_attempt(20),
+    after=after_log(logger, DEBUG),
+)
+def _get_frame_image(video_frames: Task, *, frame_num: int) -> np.ndarray:
+    """
+    Gets a single frame for CVAT.
+
+    Args:
+        video_frames: The CVAT task to pull frames from.
+        frame_num: The frame number to get.
+
+    Returns:
+        The frame data.
+
+    """
+    return video_frames.get_image(frame_num)
+
+
 def annotate_video(video: Task, *, model: tf.keras.Model) -> pd.DataFrame:
     """
     Annotates a complete video using a pretrained model.
@@ -302,7 +333,7 @@ def annotate_video(video: Task, *, model: tf.keras.Model) -> pd.DataFrame:
     all_detections = []
     for frame_num in range(num_frames):
         # Get the frame image.
-        frame = video.get_image(frame_num)
+        frame = _get_frame_image(video, frame_num=frame_num)
 
         # Run inference.
         detections = _get_frame_detections(frame, model=model)
