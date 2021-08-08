@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import Tuple
 
 from pydantic.dataclasses import dataclass
@@ -44,3 +45,18 @@ class ModelConfig:
     sinkhorn_lambda: float
 
     nominal_detection_size: Tuple[float, float]
+
+    @cached_property
+    def heatmap_size(self) -> Tuple[int, int]:
+        """
+        Returns:
+            The size of the heatmaps from the detector, in the form
+            `(width, height)`.
+
+        """
+        down_sample_factor = 2 ** self.num_reduction_stages
+        input_height, input_width, _ = self.detection_model_input_shape
+        return (
+            input_width // down_sample_factor,
+            input_height // down_sample_factor,
+        )

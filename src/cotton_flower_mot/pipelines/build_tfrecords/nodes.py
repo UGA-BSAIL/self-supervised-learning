@@ -224,10 +224,7 @@ def _generate_heat_map(
 
     """
     # Calculate the heatmap size.
-    down_sample_factor = 2 ** config.num_reduction_stages
-    input_height, input_width, _ = config.detection_model_input_shape
-    input_size = np.array([input_width, input_height])
-    heatmap_size = input_size // down_sample_factor
+    heatmap_size = np.array(config.heatmap_size)
 
     # Extract the detection centers.
     image_height, image_width, _ = config.frame_input_shape

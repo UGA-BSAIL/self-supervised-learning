@@ -8,6 +8,7 @@ from pydantic.dataclasses import dataclass
 
 from .assignment import construct_gt_sinkhorn_matrix
 from .config import ModelConfig
+from .heat_maps import make_object_heat_map
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
 
@@ -120,6 +121,26 @@ class FeatureName(enum.Enum):
     SEQUENCE_ID = "sequence_id"
     """
     The sequence ID of the clip.
+    """
+
+
+@enum.unique
+class HeatMapSource(enum.Enum):
+    """
+    Specifies how we want to produce heatmaps for CenterNet.
+    """
+
+    NONE = enum.auto()
+    """
+    Don't include heatmaps at all.
+    """
+    LOAD = enum.auto()
+    """
+    Load pre-generated heatmaps from the input dataset.
+    """
+    GENERATE = enum.auto()
+    """
+    Generate heatmaps on-the-fly.
     """
 
 
@@ -458,7 +479,7 @@ def _load_single_image_features(
     *,
     config: ModelConfig,
     include_frame: bool = False,
-    include_heat_map: bool = False,
+    heat_map_source: HeatMapSource = HeatMapSource.LOAD,
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -467,7 +488,7 @@ def _load_single_image_features(
         features: The dataset of feature dictionaries for each image.
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
-        include_heat_map: Whether to include a detection heatmap.
+        heat_map_source: Where to get the detection heatmap from.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -497,7 +518,7 @@ def _load_single_image_features(
         }
         if include_frame:
             loaded_features[FeatureName.FRAME_IMAGE.value] = image
-        if include_heat_map:
+        if heat_map_source == HeatMapSource.LOAD:
             loaded_features[FeatureName.HEAT_MAP.value] = feature_dict[
                 Otf.HEATMAP_ENCODED.value
             ]
@@ -610,7 +631,10 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
 
 def _decode_images(
     features: tf.data.Dataset,
+    *,
+    model_config: ModelConfig,
     augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
+    heat_map_source: HeatMapSource = HeatMapSource.LOAD,
 ) -> tf.data.Dataset:
     """
     Decodes images from pair features and does whatever processing that has
@@ -621,7 +645,9 @@ def _decode_images(
 
     Args:
         features: The pair features, with images still encoded.
+        model_config: The model configuration to use.
         augmentation_config: Configuration for data augmentation.
+        heat_map_source: Where we should get the heatmaps from.
 
     Returns:
         The same pair features, with the images decoded and processed.
@@ -637,8 +663,18 @@ def _decode_images(
         geometric_features = targets[ModelTargets.GEOMETRY_DENSE_PRED.value]
 
         # Decode the image features.
-        if heatmap is not None:
+        if heat_map_source == HeatMapSource.LOAD:
+            # Heatmap should have been provided in this case.
+            assert heatmap is not None
             heatmap = _decode_heat_map(heatmap)
+        elif heat_map_source == HeatMapSource.GENERATE:
+            # Generate a new heatmap.
+            heatmap = make_object_heat_map(
+                geometric_features[:, :4],
+                map_size=tf.constant(model_config.heatmap_size),
+                normalized=False,
+            )
+
         if frame is not None:
             frame = _decode_image(frame, ratio=2)
 
@@ -891,7 +927,7 @@ def _inputs_and_targets_from_dataset(
     config: ModelConfig,
     include_empty: bool = False,
     include_frame: bool = False,
-    include_heat_map: bool = False,
+    heat_map_source: HeatMapSource = HeatMapSource.LOAD,
     drop_probability: float = 0.0,
     repeats: int = 1,
     augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
@@ -907,7 +943,7 @@ def _inputs_and_targets_from_dataset(
             or tracklets. Otherwise, it will filter them.
         include_frame: If true, will include the full frame image as well
             as the detection crops.
-        include_heat_map: Whether to include a detection heatmap.
+        heat_map_source: Source to use for detection heatmap.
         drop_probability: Probability to drop a particular example.
         repeats: Number of times to repeat the dataset to make up for dropped
             examples.
@@ -933,7 +969,7 @@ def _inputs_and_targets_from_dataset(
         deserialized,
         config=config,
         include_frame=include_frame,
-        include_heat_map=include_heat_map,
+        heat_map_source=heat_map_source,
     )
     # Break into pairs.
     image_pairs = _window_to_nested(
@@ -948,7 +984,10 @@ def _inputs_and_targets_from_dataset(
 
     # Decode the images.
     pair_features = _decode_images(
-        pair_features, augmentation_config=augmentation_config
+        pair_features,
+        augmentation_config=augmentation_config,
+        model_config=config,
+        heat_map_source=heat_map_source,
     )
 
     return pair_features

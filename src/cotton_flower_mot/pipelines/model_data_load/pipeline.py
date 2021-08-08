@@ -8,6 +8,7 @@ from kedro.pipeline import Pipeline, node
 
 from ..dataset_io import (
     DataAugmentationConfig,
+    HeatMapSource,
     inputs_and_targets_from_datasets,
 )
 
@@ -17,7 +18,7 @@ def create_pipeline(**kwargs):
     load_datasets = partial(
         inputs_and_targets_from_datasets,
         include_frame=True,
-        include_heat_map=True,
+        heat_map_source=HeatMapSource.LOAD,
     )
     # Preset for loading testing and validation data that doesn't randomize
     # or interleave clips.
@@ -26,6 +27,7 @@ def create_pipeline(**kwargs):
         interleave=False,
         include_empty=True,
         include_frame=True,
+        heat_map_source=HeatMapSource.NONE,
         batch_size=1,
     )
     # Common configuration for standard dataset loading.

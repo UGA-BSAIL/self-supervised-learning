@@ -184,7 +184,7 @@ def make_heat_map(
     # We want a separate grid for each point.
     num_points = tf.shape(points, out_type=tf.int64)[0]
     heatmap_shape = tf.concat(
-        (map_size[::-1], tf.expand_dims(num_points, 0)), axis=0
+        (map_size[..., ::-1], tf.expand_dims(num_points, 0)), axis=0
     )
     grid_indices_x = tf.broadcast_to(
         tf.expand_dims(grid_indices_x, 2), heatmap_shape

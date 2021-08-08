@@ -9,6 +9,7 @@ import tensorflow as tf
 from faker import Faker
 
 from src.cotton_flower_mot.pipelines import dataset_io
+from src.cotton_flower_mot.pipelines.dataset_io import HeatMapSource
 from src.cotton_flower_mot.pipelines.schemas import ModelInputs, ModelTargets
 
 from .data import TESTING_DATASET_PATH
@@ -27,13 +28,15 @@ Number of elements that are in the test dataset.
     "random_drop", (True, False), ids=["random_drop", "no_random_drop"]
 )
 @pytest.mark.parametrize(
-    "include_heat_map", (True, False), ids=["heatmap", "no_heatmap"]
+    "heat_map_source",
+    HeatMapSource,
+    ids=[e.name for e in HeatMapSource],
 )
 def test_inputs_and_targets_from_dataset_smoke(
     faker: Faker,
     include_frame: bool,
     random_drop: bool,
-    include_heat_map: bool,
+    heat_map_source: HeatMapSource,
 ) -> None:
     """
     Attempts to load actual data and makes sure that it works.
@@ -42,7 +45,7 @@ def test_inputs_and_targets_from_dataset_smoke(
         faker: The fixture to use for generating fake data.
         include_frame: Whether to test including the full frame.
         random_drop: Whether to test dropping random examples.
-        include_heat_map: Whether to test including the detection heat map.
+        heat_map_source: Where to source heatmaps from during the test.
 
     """
     # Arrange.
@@ -60,7 +63,7 @@ def test_inputs_and_targets_from_dataset_smoke(
         raw_dataset,
         config=config,
         include_frame=include_frame,
-        include_heat_map=include_heat_map,
+        heat_map_source=heat_map_source,
         batch_size=8,
         **drop_kwargs
     )
@@ -80,7 +83,7 @@ def test_inputs_and_targets_from_dataset_smoke(
     if not include_frame:
         # We won't have a frame input in this case.
         expected_inputs -= {ModelInputs.DETECTIONS_FRAME}
-    if not include_heat_map:
+    if heat_map_source == HeatMapSource.NONE:
         expected_targets -= {ModelTargets.HEATMAP}
         expected_targets -= {ModelTargets.GEOMETRY_DENSE_PRED}
     for element in expected_inputs:
@@ -97,7 +100,7 @@ def test_inputs_and_targets_from_dataset_smoke(
         assert len(frame_shape) == 4
         assert frame_shape[0] == expected_batch_size
 
-    if include_heat_map:
+    if heat_map_source != HeatMapSource.NONE:
         # Check the heatmap shape.
         heatmap_shape = tf.shape(targets[ModelTargets.HEATMAP.value]).numpy()
         assert len(heatmap_shape) == 4
