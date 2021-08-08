@@ -207,8 +207,6 @@ def train_model(
 
         optimizer = tf.keras.optimizers.Adam(
             learning_rate=_make_learning_rate(phase["learning_rate"]),
-            # momentum=phase["momentum"],
-            # nesterov=True,
         )
         model.compile(
             optimizer=optimizer,
