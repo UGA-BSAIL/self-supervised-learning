@@ -102,3 +102,9 @@ annotations_mot_1_1_190:
   filepath: data/01_raw/flower_annotations_190_2021_07_14/gt.txt
   load_args:
     << : *mot_column_names
+
+annotations_mot_1_1_191:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/flower_annotations_191_2021_08_08/gt.txt
+  load_args:
+    << : *mot_column_names

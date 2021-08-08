@@ -12,7 +12,7 @@ from .nodes import (
     split_clips,
 )
 
-_TASK_IDS = [169, 170, 172, 173, 174, 175, 190]
+_TASK_IDS = [169, 170, 172, 173, 174, 175, 190, 191]
 """
 All task IDs of the data we are processing.
 """
@@ -47,6 +47,13 @@ def create_pipeline(**kwargs):
     return Pipeline(
         task_specific_nodes
         + [
+            # This node is needed so we can pass an iterable of datasets as
+            # input to the next node.
+            node(
+                lambda *args: args,
+                [f"cotton_videos_{i}" for i in _TASK_IDS],
+                "cotton_videos",
+            ),
             # Merge all annotations into one.
             node(
                 merge_annotations,

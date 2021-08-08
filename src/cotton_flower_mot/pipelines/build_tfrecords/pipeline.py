@@ -20,21 +20,6 @@ def create_pipeline(**kwargs):
                     "annotations_tf_valid",
                 ],
             ),
-            # This node is needed so we can pass an iterable of datasets as
-            # input to the next node.
-            node(
-                lambda *args: args,
-                [
-                    "cotton_videos_169",
-                    "cotton_videos_170",
-                    "cotton_videos_172",
-                    "cotton_videos_173",
-                    "cotton_videos_174",
-                    "cotton_videos_175",
-                    "cotton_videos_190",
-                ],
-                "cotton_videos",
-            ),
             # Generate TFRecords from all splits.
             node(
                 generate_examples,
