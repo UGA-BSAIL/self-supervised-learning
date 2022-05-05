@@ -51,7 +51,7 @@ function prepare_environment() {
 prepare_environment
 
 # Load needed modules.
-ml Python/3.8.2-GCCcore-8.3.0
+ml Python/3.8.6-GCCcore-8.3.0
 ml CUDA/11.2.1-GCC-8.3.0
 ml cuDNN/8.1.0.77-CUDA-11.2.1
 

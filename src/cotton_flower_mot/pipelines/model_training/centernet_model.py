@@ -130,14 +130,14 @@ def compute_sparse_predictions(
     center_masks = tf.greater(confidence_masks, 0.0)
     sizes = tf.ensure_shape(sizes, (None, None, None, 2))
     sizes = tf.cast(sizes, tf.float32)
-    # offsets = tf.ensure_shape(offsets, (None, None, None, 2))
-    # offsets = tf.cast(offsets, tf.float32)
+    offsets = tf.ensure_shape(offsets, (None, None, None, 2))
+    offsets = tf.cast(offsets, tf.float32)
     mask_shape = tf.shape(confidence_masks)[1:3]
     batch_size = tf.shape(confidence_masks)[0]
 
     # Mask the offsets and sizes.
     sparse_sizes = tf.boolean_mask(sizes, center_masks)
-    # sparse_offsets = tf.boolean_mask(offsets, center_masks)
+    sparse_offsets = tf.boolean_mask(offsets, center_masks)
     sparse_confidence = tf.boolean_mask(confidence_masks, center_masks)
     sparse_confidence = tf.expand_dims(sparse_confidence, 1)
 
@@ -159,15 +159,15 @@ def compute_sparse_predictions(
         center_points[..., ::-1], row_lengths
     )
     ragged_sizes = tf.RaggedTensor.from_row_lengths(sparse_sizes, row_lengths)
-    # ragged_offsets = tf.RaggedTensor.from_row_lengths(
-    #     sparse_offsets, row_lengths
-    # )
+    ragged_offsets = tf.RaggedTensor.from_row_lengths(
+        sparse_offsets, row_lengths
+    )
     ragged_confidence = tf.RaggedTensor.from_row_lengths(
         sparse_confidence, row_lengths
     )
 
     # Nudge them by the offsets.
-    # ragged_center_points += ragged_offsets
+    ragged_center_points += ragged_offsets
     # Add the size.
     return tf.concat(
         (ragged_center_points, ragged_sizes, ragged_confidence), axis=2

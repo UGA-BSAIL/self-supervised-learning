@@ -787,7 +787,7 @@ def _drop_mask(
     """
     generator = np.random.default_rng(_RANDOM_SEED)
 
-    currently_dropping = np.zeros((width,), dtype=np.bool)
+    currently_dropping = np.zeros((width,), dtype=bool)
     while True:
         threshold = np.where(
             currently_dropping, repeat_probability, drop_probability
@@ -1042,8 +1042,8 @@ def _batch_and_prefetch(
 
     options = tf.data.Options()
     # Autotuning doesn't seem to work as well as it should in this case.
-    options.experimental_optimization.autotune = False
-    options.experimental_threading.private_threadpool_size = _NUM_THREADS
+    options.autotune.enabled = False
+    options.threading.private_threadpool_size = _NUM_THREADS
     options.experimental_optimization.map_fusion = True
     options.experimental_optimization.map_and_filter_fusion = True
     return prefetched.with_options(options)
