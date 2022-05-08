@@ -84,10 +84,9 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
         return -tf.reduce_sum(weighted_losses) / num_samples
 
 
-class HeatMapFocalLoss(tf.keras.losses.Loss):
+class FocalLoss(tf.keras.losses.Loss):
     """
-    Implements a penalty-reduced pixel-wise logistic regression with focal loss,
-    as described in https://arxiv.org/pdf/1904.07850.pdf
+    Implements focal loss, as described by Lin et al. (2017).
     """
 
     _EPSILON = tf.constant(0.0001)
@@ -99,14 +98,13 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         self,
         *,
         alpha: float,
-        beta: float,
-        positive_loss_weight: float = 1.0,
+        gamma: float,
         **kwargs: Any,
     ):
         """
         Args:
-            alpha: Alpha parameter for the focal loss.
-            beta: Beta parameter for the focal loss.
+            alpha: Loss weight parameter for the focal loss.
+            gamma: Focal strength parameter for the focal loss.
             positive_loss_weight: Additional weight to give the positive
                 component of the loss. This is to help balance the
                 preponderance of negative samples.
@@ -116,36 +114,40 @@ class HeatMapFocalLoss(tf.keras.losses.Loss):
         super().__init__(**kwargs)
 
         self._alpha = tf.constant(alpha)
-        self._beta = tf.constant(beta)
-        self._positive_loss_weight = tf.constant(positive_loss_weight)
+        self._gamma = tf.constant(gamma)
 
     def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
         one = tf.constant(1.0)
 
-        # Loss we use at "positive" locations.
-        positive_loss = tf.pow(one - y_pred, self._alpha) * tf.math.log(
-            y_pred + self._EPSILON
-        )
-        positive_loss *= self._positive_loss_weight
-        # Loss we use at "negative" locations.
-        negative_loss = (
-            tf.pow(one - y_true, self._beta)
-            * tf.pow(y_pred, self._alpha)
-            * tf.math.log(one - y_pred + self._EPSILON)
-        )
-
         # Figure out which locations are positive and which are negative.
-        positive_mask = tf.equal(y_true, 1.0)
-        pixel_wise_loss = tf.where(positive_mask, positive_loss, negative_loss)
+        positive_mask = tf.equal(y_true, 1)
+        positive_pred = tf.boolean_mask(y_pred, positive_mask)
+        negative_pred = one - tf.boolean_mask(y_pred, ~positive_mask)
+        tf.print("positive_pred", positive_pred)
+        tf.print("negative_pred", negative_pred)
+        tf.print("num_positive_pred", tf.shape(positive_pred))
+        tf.print("num_negative_pred", tf.shape(negative_pred))
+        pred_t = tf.concat([positive_pred, negative_pred], axis=-1)
 
-        mean_loss = -tf.reduce_sum(pixel_wise_loss)
-        # Normalize by the number of keypoints.
-        num_points = tf.experimental.numpy.count_nonzero(positive_mask)
-        return tf.cond(
-            num_points > 0,
-            lambda: mean_loss / tf.cast(num_points, tf.float32),
-            lambda: mean_loss,
+        # Define the loss weight in the same fashion.
+        positive_alpha = tf.broadcast_to(self._alpha, tf.shape(positive_pred))
+        negative_alpha = tf.broadcast_to(
+            1.0 - self._alpha, tf.shape(negative_pred)
         )
+        alpha_t = tf.concat([positive_alpha, negative_alpha], axis=-1)
+
+        # Don't allow it to take the log of 0.
+        pred_t = tf.maximum(pred_t, self._EPSILON)
+
+        # Compute the focal loss.
+        point_loss = -tf.pow(one - pred_t, self._gamma) * tf.math.log(pred_t)
+        tf.print(
+            "point_loss",
+            point_loss,
+            "max_point_loss",
+            tf.reduce_max(point_loss),
+        )
+        return alpha_t * point_loss
 
 
 class GeometryL1Loss(tf.keras.losses.Loss):
@@ -508,20 +510,18 @@ class CIOULoss(tf.keras.losses.Loss):
 def make_losses(
     *,
     alpha: float,
-    beta: float,
+    gamma: float,
     size_weight: float,
     offset_weight: float,
-    positive_loss_weight: float,
 ) -> Dict[str, tf.keras.losses.Loss]:
     """
     Creates the losses to use for the model.
 
     Args:
         alpha: The alpha parameter to use for focal loss.
-        beta: The beta parameter to use for focal loss.
+        gamma: The beta parameter to use for focal loss.
         size_weight: The weight to use for the size loss.
         offset_weight: The weight to use for the offset loss.
-        positive_loss_weight: Weight to give positive examples in heatmap loss.
 
     Returns:
         The losses that it created.
@@ -529,10 +529,9 @@ def make_losses(
     """
     return {
         # ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
-        ModelTargets.HEATMAP.value: HeatMapFocalLoss(
+        ModelTargets.HEATMAP.value: FocalLoss(
             alpha=alpha,
-            beta=beta,
-            positive_loss_weight=positive_loss_weight,
+            gamma=gamma,
             name="heatmap_loss",
         ),
         ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
