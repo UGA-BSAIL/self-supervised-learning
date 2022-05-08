@@ -20,8 +20,7 @@ opencv-python = "^4.5.1"
 tensorflow-addons = "^0.13.0"
 tenacity = "^8.0.1"
 tensorflow-datasets = "^4.4.0"
-tensorflow = "^2.8.0"
-numpy = "^1.22.3"
+tensorflow = "2.5"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
