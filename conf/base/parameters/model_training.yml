@@ -21,7 +21,7 @@ enable_numeric_checks: false
 
 loss_params:
   # Alpha constant for heatmap focal loss.
-  alpha: 0.75
+  alpha: 0.25
   # Gamma constant for heatmap focal loss.
   gamma: 4.0
   # Weight to use for size regression loss.

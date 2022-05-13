@@ -6,6 +6,7 @@ Defines custom losses.
 from typing import Any, Dict
 
 import tensorflow as tf
+from focal_loss import BinaryFocalLoss
 
 from ..heat_maps import make_point_annotation_map, trim_out_of_bounds
 from ..schemas import ModelTargets
@@ -84,72 +85,6 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
         return -tf.reduce_sum(weighted_losses) / num_samples
 
 
-class FocalLoss(tf.keras.losses.Loss):
-    """
-    Implements focal loss, as described by Lin et al. (2017).
-    """
-
-    _EPSILON = tf.constant(0.0001)
-    """
-    Small constant value to avoid log(0).
-    """
-
-    def __init__(
-        self,
-        *,
-        alpha: float,
-        gamma: float,
-        **kwargs: Any,
-    ):
-        """
-        Args:
-            alpha: Loss weight parameter for the focal loss.
-            gamma: Focal strength parameter for the focal loss.
-            positive_loss_weight: Additional weight to give the positive
-                component of the loss. This is to help balance the
-                preponderance of negative samples.
-            **kwargs: Will be forwarded to superclass constructor.
-
-        """
-        super().__init__(**kwargs)
-
-        self._alpha = tf.constant(alpha)
-        self._gamma = tf.constant(gamma)
-
-    def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
-        one = tf.constant(1.0)
-
-        # Figure out which locations are positive and which are negative.
-        positive_mask = tf.equal(y_true, 1)
-        positive_pred = tf.boolean_mask(y_pred, positive_mask)
-        negative_pred = one - tf.boolean_mask(y_pred, ~positive_mask)
-        tf.print("positive_pred", positive_pred)
-        tf.print("negative_pred", negative_pred)
-        tf.print("num_positive_pred", tf.shape(positive_pred))
-        tf.print("num_negative_pred", tf.shape(negative_pred))
-        pred_t = tf.concat([positive_pred, negative_pred], axis=-1)
-
-        # Define the loss weight in the same fashion.
-        positive_alpha = tf.broadcast_to(self._alpha, tf.shape(positive_pred))
-        negative_alpha = tf.broadcast_to(
-            1.0 - self._alpha, tf.shape(negative_pred)
-        )
-        alpha_t = tf.concat([positive_alpha, negative_alpha], axis=-1)
-
-        # Don't allow it to take the log of 0.
-        pred_t = tf.maximum(pred_t, self._EPSILON)
-
-        # Compute the focal loss.
-        point_loss = -tf.pow(one - pred_t, self._gamma) * tf.math.log(pred_t)
-        tf.print(
-            "point_loss",
-            point_loss,
-            "max_point_loss",
-            tf.reduce_max(point_loss),
-        )
-        return alpha_t * point_loss
-
-
 class GeometryL1Loss(tf.keras.losses.Loss):
     """
     A custom sparse L1 loss specifically designed to work on the "geometry"
@@ -205,24 +140,26 @@ class GeometryL1Loss(tf.keras.losses.Loss):
         # See https://github.com/tensorflow/tensorrt/issues/118 for
         # explanation of indexing.
         map_size = tf.shape(dense_predictions)[..., ::-1]
-        point_mask = make_point_annotation_map(
-            center_points, map_size=map_size
-        )
-        point_mask = tf.cast(point_mask, tf.bool)
 
-        # Extract the relevant point values with the mask.
-        sparse_predictions = tf.boolean_mask(dense_predictions, point_mask)
-
-        # We need to make sure the sparse truth is ordered the same way,
-        # which is why we also represent it in dense form.
+        # Create a dense ground-truth map.
         truth_values = sparse_truth[:, 2]
         dense_truth = make_point_annotation_map(
             center_points, map_size=map_size, point_values=truth_values
         )
-        ordered_sparse_truth = tf.boolean_mask(dense_truth, point_mask)
 
-        # We should now be able to compare directly to the ground-truth.
-        return tf.norm(ordered_sparse_truth - sparse_predictions, ord=1)
+        # Calculate the loss between the dense ground truth and dense
+        # predictions.
+        dense_l1 = tf.abs(dense_truth - dense_predictions)
+        tf.print(dense_l1)
+
+        # We only actually care about the points where a real object is.
+        point_mask = make_point_annotation_map(
+            center_points, map_size=map_size
+        )
+        point_mask = tf.cast(point_mask, tf.bool)
+        sparse_l1 = tf.boolean_mask(dense_l1, point_mask)
+
+        return tf.reduce_mean(sparse_l1)
 
     @classmethod
     def _batch_sparse_l1_loss(
@@ -528,8 +465,8 @@ def make_losses(
     """
     return {
         # ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
-        ModelTargets.HEATMAP.value: FocalLoss(
-            alpha=alpha,
+        ModelTargets.HEATMAP.value: BinaryFocalLoss(
+            pos_weight=alpha,
             gamma=gamma,
             name="heatmap_loss",
         ),

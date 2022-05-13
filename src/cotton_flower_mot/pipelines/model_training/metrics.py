@@ -86,7 +86,7 @@ class AveragePrecision(tf.keras.metrics.Metric):
         self,
         *,
         iou_threshold: float = 0.5,
-        use_top_predictions: Optional[int] = 100,
+        use_top_predictions: Optional[int] = 10,
         name="average_precision",
         **kwargs: Any
     ):
@@ -187,8 +187,12 @@ class AveragePrecision(tf.keras.metrics.Metric):
             )
         confidence = y_pred[:, 4]
         y_pred = y_pred[:, :4]
-        # We don't need the offsets.
-        y_true = y_true[:, :4]
+
+        # Add the offsets to the center locations.
+        true_offsets = y_true[:, 4:]
+        padding = tf.zeros_like(true_offsets)
+        true_offsets = tf.concat([true_offsets, padding], axis=1)
+        y_true = y_true[:, :4] + true_offsets
 
         # Determine which predictions match up with the truth through IOU.
         ious = compute_pairwise_similarities(

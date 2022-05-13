@@ -333,6 +333,20 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "focal-loss"
+version = "0.0.7"
+description = "TensorFlow implementation of focal loss."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+tensorflow = ">=2.2"
+
+[package.extras]
+dev = ["numpy", "scipy", "matplotlib", "seaborn", "pytest", "coverage", "sphinx", "sphinx-rtd-theme"]
+
+[[package]]
 name = "fonttools"
 version = "4.33.3"
 description = "Tools to manipulate font files"
@@ -2291,7 +2305,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = "~3.8"
-content-hash = "63f8c4853dacf9e751e33bc207f1b3569194441e953b14f454ec96783d6ed131"
+content-hash = "25374efa438ad4bec61a1f96194bffd6c1f2f8d66a5dfd8b1663facb9612f8ef"
 
 [metadata.files]
 absl-py = [
@@ -2499,6 +2513,10 @@ flake8 = [
 flatbuffers = [
     {file = "flatbuffers-1.12-py2.py3-none-any.whl", hash = "sha256:9e9ef47fa92625c4721036e7c4124182668dc6021d9e7c73704edd395648deb9"},
     {file = "flatbuffers-1.12.tar.gz", hash = "sha256:63bb9a722d5e373701913e226135b28a6f6ac200d5cc7b4d919fa38d73b44610"},
+]
+focal-loss = [
+    {file = "focal-loss-0.0.7.tar.gz", hash = "sha256:52de3311fdd6e6ee8f746638fb949b8fc55e167acdfffc74a33ac852750c893c"},
+    {file = "focal_loss-0.0.7-py3-none-any.whl", hash = "sha256:2dad215281050019eb0ffdb4903335de6ef614f5576b08d2961bf1f2493eba42"},
 ]
 fonttools = [
     {file = "fonttools-4.33.3-py3-none-any.whl", hash = "sha256:f829c579a8678fa939a1d9e9894d01941db869de44390adb49ce67055a06cc2a"},
