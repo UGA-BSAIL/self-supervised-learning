@@ -6,7 +6,6 @@ Defines custom losses.
 from typing import Any, Dict
 
 import tensorflow as tf
-from focal_loss import BinaryFocalLoss
 
 from ..heat_maps import make_point_annotation_map, trim_out_of_bounds
 from ..schemas import ModelTargets
@@ -85,6 +84,69 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
         return -tf.reduce_sum(weighted_losses) / num_samples
 
 
+class HeatMapFocalLoss(tf.keras.losses.Loss):
+    """
+    Implements a penalty-reduced pixel-wise logistic regression with focal loss,
+    as described in https://arxiv.org/pdf/1904.07850.pdf
+    """
+
+    _EPSILON = tf.constant(0.0001)
+    """
+    Small constant value to avoid log(0).
+    """
+
+    def __init__(
+        self,
+        *,
+        alpha: float,
+        beta: float,
+        positive_loss_weight: float = 1.0,
+        **kwargs: Any,
+    ):
+        """
+        Args:
+            alpha: Alpha parameter for the focal loss.
+            beta: Beta parameter for the focal loss.
+            positive_loss_weight: Additional weight to give the positive
+                component of the loss. This is to help balance the
+                preponderance of negative samples.
+            **kwargs: Will be forwarded to superclass constructor.
+        """
+        super().__init__(**kwargs)
+
+        self._alpha = tf.constant(alpha)
+        self._beta = tf.constant(beta)
+        self._positive_loss_weight = tf.constant(positive_loss_weight)
+
+    def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+        one = tf.constant(1.0)
+
+        # Loss we use at "positive" locations.
+        positive_loss = tf.pow(one - y_pred, self._alpha) * tf.math.log(
+            y_pred + self._EPSILON
+        )
+        positive_loss *= self._positive_loss_weight
+        # Loss we use at "negative" locations.
+        negative_loss = (
+            tf.pow(one - y_true, self._beta)
+            * tf.pow(y_pred, self._alpha)
+            * tf.math.log(one - y_pred + self._EPSILON)
+        )
+
+        # Figure out which locations are positive and which are negative.
+        positive_mask = tf.equal(y_true, 1.0)
+        pixel_wise_loss = tf.where(positive_mask, positive_loss, negative_loss)
+
+        mean_loss = -tf.reduce_sum(pixel_wise_loss)
+        # Normalize by the number of keypoints.
+        num_points = tf.experimental.numpy.count_nonzero(positive_mask)
+        return tf.cond(
+            num_points > 0,
+            lambda: mean_loss / tf.cast(num_points, tf.float32),
+            lambda: mean_loss,
+        )
+
+
 class GeometryL1Loss(tf.keras.losses.Loss):
     """
     A custom sparse L1 loss specifically designed to work on the "geometry"
@@ -150,7 +212,6 @@ class GeometryL1Loss(tf.keras.losses.Loss):
         # Calculate the loss between the dense ground truth and dense
         # predictions.
         dense_l1 = tf.abs(dense_truth - dense_predictions)
-        tf.print(dense_l1)
 
         # We only actually care about the points where a real object is.
         point_mask = make_point_annotation_map(
@@ -446,7 +507,7 @@ class CIOULoss(tf.keras.losses.Loss):
 def make_losses(
     *,
     alpha: float,
-    gamma: float,
+    beta: float,
     size_weight: float,
     offset_weight: float,
 ) -> Dict[str, tf.keras.losses.Loss]:
@@ -455,7 +516,7 @@ def make_losses(
 
     Args:
         alpha: The alpha parameter to use for focal loss.
-        gamma: The beta parameter to use for focal loss.
+        beta: The beta parameter to use for focal loss.
         size_weight: The weight to use for the size loss.
         offset_weight: The weight to use for the offset loss.
 
@@ -465,9 +526,9 @@ def make_losses(
     """
     return {
         # ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
-        ModelTargets.HEATMAP.value: BinaryFocalLoss(
-            pos_weight=alpha,
-            gamma=gamma,
+        ModelTargets.HEATMAP.value: HeatMapFocalLoss(
+            alpha=alpha,
+            beta=beta,
             name="heatmap_loss",
         ),
         ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
