@@ -47,7 +47,7 @@ class TensorProvider(BaseProvider):
         reverse_dimensions = list(reversed(shape))
 
         tensor = tf.linspace(
-            0.0,
+            min_value,
             self.__faker.pyfloat(min_value=min_value, max_value=max_value),
             reverse_dimensions[0],
         )
@@ -55,6 +55,7 @@ class TensorProvider(BaseProvider):
             tensor = tf.linspace(
                 tensor,
                 tf.zeros_like(tensor)
+                + min_value
                 + self.__faker.pyfloat(
                     min_value=min_value, max_value=max_value
                 ),
