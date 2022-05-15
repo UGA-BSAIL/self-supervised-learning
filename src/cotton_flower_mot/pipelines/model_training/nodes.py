@@ -92,6 +92,8 @@ def _make_callbacks(
     heatmap_period: int,
     num_heatmap_batches: int,
     num_heatmap_images: int,
+    lr_patience_epochs: int,
+    min_lr: float,
 ) -> List[tf.keras.callbacks.Callback]:
     """
     Creates callbacks to use when training the model.
@@ -111,6 +113,8 @@ def _make_callbacks(
         num_heatmap_batches: Total number of batches to log heatmap data from.
         num_heatmap_images: Total number of heatmap images to include in each
             batch.
+        lr_patience_epochs: Patience parameter to use for LR reduction.
+        min_lr: The minimum learning rate to allow.
 
     Returns:
         The list of callbacks.
@@ -137,7 +141,18 @@ def _make_callbacks(
         num_images_per_batch=num_heatmap_images,
     )
 
-    return [tensorboard_callback, nan_termination, heatmap_callback]
+    reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
+        patience=lr_patience_epochs,
+        verbose=1,
+        min_lr=min_lr,
+    )
+
+    return [
+        tensorboard_callback,
+        nan_termination,
+        heatmap_callback,
+        reduce_lr_callback,
+    ]
 
 
 def _remove_unused_targets(dataset: tf.data.Dataset) -> tf.data.Dataset:

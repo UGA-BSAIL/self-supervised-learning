@@ -33,6 +33,11 @@ loss_params:
 heatmap_loss_weight: 1.0
 geometry_loss_weight: 0.1
 
+# How many epochs of no improvement we tolerate before reducing the LR.
+lr_patience_epochs: 20
+# Minimum LR to use.
+min_lr: 0.00001
+
 # Learning phases to use for training the model.
 learning_phases:
   # The initial learning rate to use for the phase.
@@ -53,4 +58,4 @@ learning_phases:
     # The momentum to use for the phase.
     momentum: 0.9
     # Number of epochs to train for in this phase.
-    num_epochs: 90
+    num_epochs: 100
