@@ -171,7 +171,6 @@ def train_model(
     loss_params: Dict[str, Any],
     heatmap_loss_weight: float = 1.0,
     geometry_loss_weight: float = 1.0,
-    ciou_loss_weight: float = 1.0,
     **kwargs: Any,
 ) -> tf.keras.Model:
     """
@@ -188,7 +187,6 @@ def train_model(
         loss_params: Parameters to pass to the loss functions.
         heatmap_loss_weight: The loss weight for the heatmap focal loss.
         geometry_loss_weight: The loss weight for the L1 geometry loss.
-        ciou_loss_weight: The loss weight for the cIOU loss.
         **kwargs: Will be forwarded to `_make_callbacks()`.
 
     Returns:
@@ -214,7 +212,6 @@ def train_model(
             loss_weights={
                 ModelTargets.HEATMAP.value: heatmap_loss_weight,
                 ModelTargets.GEOMETRY_DENSE_PRED.value: geometry_loss_weight,
-                ModelTargets.GEOMETRY_SPARSE_PRED.value: ciou_loss_weight,
             },
             metrics=make_metrics(),
         )
