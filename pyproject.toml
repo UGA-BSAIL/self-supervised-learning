@@ -20,8 +20,8 @@ opencv-python = "4.5.2.54"
 tensorflow-addons = "^0.13.0"
 tenacity = "^8.0.1"
 tensorflow-datasets = "^4.4.0"
-tensorflow = "2.5.3"
-numpy = "1.19.5"
+tensorflow = "2.9"
+numpy = "1.22"
 opencv-contrib-python = "4.5.2.54"
 google-cloud-bigquery = "2.20.0"
 
@@ -37,6 +37,7 @@ Faker = "^6.6.2"
 pytest-coverage = "^0.0"
 PyYAML = "^5.4.1"
 pytest-flake8 = "^1.0.7"
+pydot = "^1.4.2"
 
 [tool.black]
 line-length = 79
