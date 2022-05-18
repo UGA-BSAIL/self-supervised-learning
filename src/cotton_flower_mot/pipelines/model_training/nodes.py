@@ -107,7 +107,7 @@ def create_model(
         The model that it created.
 
     """
-    model = build_model(config)
+    _, model = build_model(config)
     logger.info("Model has {} parameters.", model.count_params())
 
     return model

@@ -264,7 +264,7 @@ def _build_common(
 
 def build_detection_model(
     config: ModelConfig, encoder: Optional[tf.keras.Model] = None
-) -> tf.keras.Model:
+) -> Tuple[tf.keras.Model, tf.keras.Model]:
     """
     Builds the detection model.
 
@@ -274,7 +274,9 @@ def build_detection_model(
             extraction.
 
     Returns:
-        The model that it created.
+        The feature extractor model, which only outputs the features from
+        the backbone before the detection heads, and the full model, which
+        outputs complete bounding boxes.
 
     """
     images, encoder_features = _build_common(
@@ -307,9 +309,13 @@ def build_detection_model(
         name=ModelTargets.GEOMETRY_SPARSE_PRED.value,
     )((confidence_mask, sizes, offsets))
 
-    return tf.keras.Model(
+    feature_extractor = tf.keras.Model(inputs=images, outputs=[
+        decoder_features])
+    detection_model = tf.keras.Model(
         inputs=images, outputs=[heatmap, geometry, bounding_boxes]
     )
+
+    return feature_extractor, detection_model
 
 
 def build_rotnet_model(config: ModelConfig) -> tf.keras.Model:
