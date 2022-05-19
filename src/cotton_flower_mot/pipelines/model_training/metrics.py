@@ -232,8 +232,6 @@ class AveragePrecision(tf.keras.metrics.Metric):
         # Create the ground-truth and predictions.
         positive_gt = tf.ones_like(true_positive_confidence)
         negative_gt = tf.zeros_like(false_positive_confidence)
-        tf.print("tp_conf:", true_positive_confidence)
-        tf.print("fp_conf:", false_positive_confidence)
         self._auc.update_state(positive_gt, true_positive_confidence)
         self._auc.update_state(negative_gt, false_positive_confidence)
 
