@@ -1,6 +1,6 @@
 import tensorflow as tf
-from tensorflow.keras.applications.efficientdet_v2 import EfficientNetV2S
-from tensorflow.python.keras.layers import (
+from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2S
+from tensorflow.keras.layers import (
     BatchNormalization,
     Concatenate,
     Conv2D,
@@ -15,9 +15,9 @@ from ...config import ModelConfig
 
 
 def efficientnet(
-        *,
-        image_input: tf.Tensor,
-        config: ModelConfig,
+    *,
+    image_input: tf.Tensor,
+    config: ModelConfig,
 ):
     """
     Creates a new EfficientNet-based model.
