@@ -28,6 +28,14 @@ tfrecord_valid:
   extension: .tfrecord
   versioned: True
 
+# Unannotated data, as TFRecords.
+tfrecord_unannotated:
+  type: PartitionedDataSet
+  dataset:
+    type: cotton_flower_mot.data_sets.TfRecordsDataSet
+  path: data/05_model_input/unannotated
+  filename_suffix: ".tfrecord"
+
 # Intermediate TF Datasets containing pre-processed data.
 training_data:
   type: MemoryDataSet

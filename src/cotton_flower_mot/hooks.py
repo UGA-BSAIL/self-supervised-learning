@@ -45,6 +45,7 @@ from .pipelines import (
     model_data_load,
     model_evaluation,
     model_training,
+    build_unannotated_tfrecords,
 )
 
 
@@ -64,6 +65,7 @@ class ProjectHooks:
             + config_pipeline
             + build_tfrecords.create_pipeline()
         )
+        unannotated_pipeline = build_unannotated_tfrecords.create_pipeline()
         eda_pipeline = eda.create_pipeline()
         data_load_pipeline = (
             config_pipeline + model_data_load.create_pipeline()
@@ -80,6 +82,7 @@ class ProjectHooks:
         return {
             "__default__": eda_pipeline + training_pipeline,
             "build_tfrecords": tfrecord_pipeline,
+            "build_unannotated_tfrecords": unannotated_pipeline,
             "eda": eda_pipeline,
             "model_training": training_pipeline,
             "model_evaluation": evaluation_pipeline,

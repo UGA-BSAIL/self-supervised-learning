@@ -1,0 +1,63 @@
+_video_args: &video_args
+  type: PartitionedDataSet
+  filename_suffix: ".MP4"
+  dataset:
+    type: cotton_flower_mot.data_sets.VideoDataSet
+    bgr_color: false
+
+# Raw video inputs.
+mars_2021-08-25_left:
+  << : *video_args
+  path: ${mars_data_dir}/2021-08-25/left/
+
+mars_2021-08-25_right:
+  << : *video_args
+  path: ${mars_data_dir}/2021-08-25/right/
+
+# Skip 2021-09-02 because it doesn't contain any video data.
+
+mars_2021-09-03_left:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-03/left/
+
+mars_2021-09-03_right:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-03/right/
+
+mars_2021-09-10_left:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-10/left/
+
+mars_2021-09-10_right:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-10/right/
+
+mars_2021-09-24_left:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-24/left/
+
+mars_2021-09-24_right:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-24/right/
+
+# Skip 2021-10-01 left because the camera is sideways.
+
+mars_2021-10-01_right:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-01/right/
+
+mars_2021-10-15_left:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-15/left/
+
+mars_2021-10-15_right:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-15/right/
+
+mars_2021-10-22_left:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-22/left/
+
+mars_2021-10-22_right:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-15/right/

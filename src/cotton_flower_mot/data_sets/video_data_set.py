@@ -4,12 +4,23 @@ Loads/stores a video from/to a sequence of frame images.
 
 
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple, Callable, Protocol
 
 import cv2
 import numpy as np
 from kedro.io import AbstractVersionedDataSet, Version
 from loguru import logger
+
+
+class FrameReader(Protocol):
+    """
+    A function that can be used to read frames starting at a particular spot.
+    """
+
+    def __call__(
+        self, frame_num: int, max_frames: Optional[int] = ..., /
+    ) -> Iterable[np.ndarray]:
+        ...
 
 
 class VideoDataSet(AbstractVersionedDataSet):
@@ -25,12 +36,13 @@ class VideoDataSet(AbstractVersionedDataSet):
         fps: int = 30,
         resolution: Tuple[int, int] = (1920, 1080),
         bgr_color: bool = True,
+        skip_frames: int = 0,
     ):
         """
         Args:
             filepath: The path to the output video.
             version: The version information for the `DataSet`.
-            codec: FourCC code code to use for video encoding.
+            codec: FourCC code to use for video encoding.
             fps: The FPS to use when writing the video.
             resolution: The output resolution of the video, in the form
                 `(width, height)`.
@@ -45,29 +57,58 @@ class VideoDataSet(AbstractVersionedDataSet):
         self.__resolution = resolution
         self.__bgr_color = bgr_color
 
-    def _load(self) -> Iterable[np.ndarray]:
+    def _load(self) -> FrameReader:
         """
         Loads the video frame-by-frame.
 
-        Yields:
-            Each frame of the video, in order.
+        Returns:
+            A function that can be used to read frames starting at a particular
+            point, and reading up to a maximum number of frames.
 
         """
-        reader = cv2.VideoCapture(self._get_load_path().as_posix())
 
-        while reader.isOpened():
-            status, frame = reader.read()
-            if not status:
-                logger.warning("Failed to read frame, skipping.")
-                continue
+        def _read_frame(
+            frame_num: int, max_frames: Optional[int] = None
+        ) -> Iterable[np.ndarray]:
+            logger.info(
+                "Reading video at {} from frame {}.",
+                self._get_load_path(),
+                frame_num,
+            )
+            reader = cv2.VideoCapture(self._get_load_path().as_posix())
+            # Get the total number of frames.
+            total_frames = int(reader.get(cv2.CAP_PROP_FRAME_COUNT))
+            logger.debug("Video has {} frames.", total_frames)
 
-            if not self.__bgr_color:
-                # OpenCV works with BGR images, but we need RGB.
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Seek to the starting point.
+            if frame_num >= total_frames:
+                raise ValueError(
+                    f"Frame {frame_num} requested, but video has only"
+                    f" {total_frames} frames."
+                )
+            set_success = reader.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            assert set_success
 
-            yield frame
+            # Read the frames.
+            num_read = 0
+            while reader.isOpened() and (
+                max_frames is None or num_read < max_frames
+            ):
+                status, frame = reader.read()
+                num_read += 1
+                if not status:
+                    logger.warning("Failed to read frame, skipping.")
+                    continue
 
-        reader.release()
+                if not self.__bgr_color:
+                    # OpenCV works with BGR images, but we need RGB.
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                yield frame
+
+            reader.release()
+
+        return _read_frame
 
     def _save(self, data: Iterable[np.ndarray]) -> None:
         """

@@ -13,7 +13,7 @@ from loguru import logger
 
 from ..config import ModelConfig
 from ..schemas import ModelTargets
-from .callbacks import LogHeatmaps
+from .callbacks import LogHeatmaps, ClearMemory
 from .centernet_model import build_model
 from .losses import make_losses
 from .metrics import make_metrics
@@ -147,11 +147,14 @@ def _make_callbacks(
         min_lr=min_lr,
     )
 
+    memory_callback = ClearMemory()
+
     return [
         tensorboard_callback,
         nan_termination,
         heatmap_callback,
         reduce_lr_callback,
+        memory_callback,
     ]
 
 

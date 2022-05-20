@@ -6,6 +6,7 @@ Encapsulates custom callbacks to use.
 import abc
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
+import gc
 
 import tensorflow as tf
 import tensorflow.keras as keras
@@ -221,3 +222,14 @@ class LogHeatmaps(_ImageLoggingCallback):
             visualizations,
             step=epoch,
         )
+
+
+class ClearMemory(callbacks.Callback):
+    """
+    Forces garbage collection at the end of each epoch, which can
+    decrease overall memory usage.
+    """
+
+    def on_epoch_end(self, epoch: int, logs: Optional[Dict] = None) -> None:
+        gc.collect()
+        keras.backend.clear_session()

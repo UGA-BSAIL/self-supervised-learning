@@ -168,6 +168,27 @@ tracking problem.
 
 
 @enum.unique
+class UnannotatedFeatures(enum.Enum):
+    """
+    Features for unannotated data.
+    """
+
+    IMAGE_ENCODED = ObjectDetectionFeatures.IMAGE_ENCODED.value
+    """
+    Encoded image data.
+    """
+
+    IMAGE_SEQUENCE_ID = ObjectTrackingFeatures.IMAGE_SEQUENCE_ID.value
+    """
+    Unique ID for identifying frames that belong to the same video clip.
+    """
+    IMAGE_FRAME_NUM = ObjectTrackingFeatures.IMAGE_FRAME_NUM.value
+    """
+    The frame number within the clip.
+    """
+
+
+@enum.unique
 class ModelInputs(enum.Enum):
     """
     Key names for the inputs to the model.

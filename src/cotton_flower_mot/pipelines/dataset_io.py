@@ -1041,9 +1041,6 @@ def _batch_and_prefetch(
     prefetched = ragged.prefetch(num_prefetch_batches)
 
     options = tf.data.Options()
-    # Autotuning doesn't seem to work as well as it should in this case.
-    options.autotune.enabled = False
-    options.threading.private_threadpool_size = _NUM_THREADS
     options.experimental_optimization.map_fusion = True
     options.experimental_optimization.map_and_filter_fusion = True
     return prefetched.with_options(options)
