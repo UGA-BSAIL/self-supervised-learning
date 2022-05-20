@@ -19,10 +19,20 @@ from src.cotton_flower_mot.pipelines import heat_maps
             np.array([[0.0, 0.5], [0.8, 0.2]]),
             np.array([[0, 0, 1], [1, 0, 0], [0, 0, 0]]),
         ),
+        (
+            np.array([[0.0, 0.5], [0.8, 0.2], [0.0, 0.5]]),
+            np.array([[0, 0, 1], [1, 0, 0], [0, 0, 0]]),
+        ),
         (np.reshape(np.array([]), (0, 2)), np.zeros((3, 3))),
         (np.array([[1.1, 0.2], [-0.1, 0.5]]), np.zeros((3, 3))),
     ],
-    ids=["single_point", "two_points", "no_points", "invalid_points"],
+    ids=[
+        "single_point",
+        "two_points",
+        "duplicate_points",
+        "no_points",
+        "invalid_points",
+    ],
 )
 def test_make_point_annotation_map(
     points: np.ndarray, expected_map: np.ndarray

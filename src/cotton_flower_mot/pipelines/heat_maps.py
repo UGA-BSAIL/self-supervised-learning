@@ -94,6 +94,50 @@ def _max_overlap_radii(
     return tf.minimum(tf.minimum(r1, r2), r3)
 
 
+def _compute_hash(data: tf.Tensor) -> tf.Tensor:
+    """
+    Computes the hashes of arbitrary data.
+
+    Args:
+        data: The data to hash. The first dimension is the batch dimension,
+            and the others will be hashed.
+
+    Returns:
+        A vector with the same length as the batch, with one hash value for
+        each element.
+
+    """
+    fingerprint = tf.fingerprint(data)
+
+    # Combine the bytes into a single number.
+    fingerprint = tf.cast(fingerprint, tf.uint64)
+    shifted = []
+    for i, shift in enumerate(range(0, 64, 8)):
+        shifted.append(tf.bitwise.left_shift(fingerprint[:, i], shift))
+    return sum(shifted)
+
+
+def _de_duplicate_points(points: tf.Tensor) -> tf.Tensor:
+    """
+    Removes duplicate values from a set of points.
+
+    Args:
+        points: The points to process. Should be in the form (x, y).
+
+    Returns:
+        The same points, but without duplicates.
+
+    """
+    # Hash all the points.
+    point_hashes = _compute_hash(points)
+    # Find unique values.
+    _, indices = tf.unique(point_hashes)
+    unique_indices, _ = tf.unique(indices)
+
+    # Limit to only the unique points.
+    return tf.gather(points, unique_indices, axis=0)
+
+
 def make_point_annotation_map(
     points: tf.Tensor,
     *,
@@ -119,6 +163,7 @@ def make_point_annotation_map(
 
     """
     pixel_points = _to_pixel_points(points, map_size=map_size)
+    pixel_points = _de_duplicate_points(pixel_points)
 
     # Generate the output maps.
     if point_values is None:
@@ -138,8 +183,6 @@ def make_point_annotation_map(
     dense = tf.sparse.to_dense(
         sparse_maps,
         default_value=0.0,
-        # There might be duplicate indices, which we want to ignore.
-        validate_indices=False,
     )
     return dense
 
