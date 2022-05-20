@@ -4,4 +4,4 @@ output_data_dir: output_data
 log_dir: logs
 
 # Location of the MARS videos.
-mars_data_dir: "/run/user/1001/gvfs/smb-share:server=bsailn1.engr.uga.edu,share=bsail,user=daniel/raw_data/2021/images/ground"
+mars_data_dir: "/home/daniel/lab_share/raw_data/2021/images/ground"

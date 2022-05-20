@@ -103,7 +103,7 @@ def _generate_clip_examples(
 
 def _generate_examples(
     video: FrameReader, *, video_name: str, clip_length: int
-) -> Dict[str, Callable[[], Iterable[tf.train.Example]]]:
+) -> Dict[str, Iterable[tf.train.Example]]:
     """
     Generates TFRecord examples for an entire video, splitting it up into
     clips.
@@ -133,24 +133,23 @@ def _generate_examples(
             The examples for the clip.
 
         """
-        clip = video(_start_frame, max_frames=clip_length)
+        clip = video.read(_start_frame)
+        clip = itertools.islice(clip, clip_length)
         yield from _generate_clip_examples(clip, sequence_id=_sequence_id)
 
     clips = {}
     for sequence_id, start_frame in enumerate(
-        itertools.count(step=clip_length)
+        range(0, video.num_frames, clip_length)
     ):
         clip_name = f"{video_name}_clip_{sequence_id}.tfrecord"
-        clips[clip_name] = partial(
-            _read_and_process_clip, sequence_id, start_frame
-        )
+        clips[clip_name] = _read_and_process_clip(sequence_id, start_frame)
 
     return clips
 
 
 def generate_multiple_video_examples(
     videos: Dict[str, Callable[[], Any]], *, clip_length: int
-) -> Dict[str, Callable[[], Iterable[tf.train.Example]]]:
+) -> Dict[str, Iterable[tf.train.Example]]:
     """
 
     Args:
@@ -175,7 +174,7 @@ def generate_multiple_video_examples(
 
 def combine_session_examples(
     *args: Any,
-) -> Dict[str, Callable[[], Iterable[tf.train.Example]]]:
+) -> Dict[str, Iterable[tf.train.Example]]:
     """
     Combines examples from a bunch of clips into a single dictionary.
 
