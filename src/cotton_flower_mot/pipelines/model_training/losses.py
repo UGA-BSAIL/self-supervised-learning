@@ -317,9 +317,9 @@ def make_losses(
             beta=beta,
             name="heatmap_loss",
         ),
-        ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
-            size_weight=size_weight,
-            offset_weight=offset_weight,
-            name="geometry_loss",
-        ),
+        # ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
+        #     size_weight=size_weight,
+        #     offset_weight=offset_weight,
+        #     name="geometry_loss",
+        # ),
     }
