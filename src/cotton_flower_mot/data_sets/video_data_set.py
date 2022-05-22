@@ -3,6 +3,7 @@ Loads/stores a video from/to a sequence of frame images.
 """
 
 
+from functools import cached_property
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional, Tuple
 
@@ -10,7 +11,6 @@ import cv2
 import numpy as np
 from kedro.io import AbstractVersionedDataSet, Version
 from loguru import logger
-from functools import cached_property
 
 
 class FrameReader:
@@ -64,7 +64,7 @@ class FrameReader:
         assert set_success
 
         # Read the frames.
-        while self.__capture.isOpened():
+        for _ in range(start_frame, self.num_frames):
             status, frame = self.__capture.read()
             if not status:
                 logger.warning("Failed to read frame, skipping.")

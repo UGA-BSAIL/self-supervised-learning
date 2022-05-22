@@ -1,2 +1,4 @@
 # The length of each clip that we produce, in frames.
 clip_length: 300
+# How many frames to skip at the beginning of each clip.
+skip_initial_frames: 900

@@ -1,6 +1,6 @@
 from kedro.pipeline import Pipeline, node, pipeline
-from .nodes import generate_multiple_video_examples, combine_session_examples
 
+from .nodes import combine_session_examples, generate_multiple_video_examples
 
 _SESSIONS = [
     "2021-08-25_left",
@@ -40,6 +40,7 @@ def _make_session_pipeline(session_name: str) -> Pipeline:
                 dict(
                     videos=f"mars_{session_name}",
                     clip_length="params:clip_length",
+                    skip_initial_frames="params:skip_initial_frames",
                 ),
                 f"{session_name}_tfrecord_unannotated",
             )
@@ -47,7 +48,7 @@ def _make_session_pipeline(session_name: str) -> Pipeline:
     )
 
 
-def create_pipeline(**kwargs) -> Pipeline:
+def create_pipeline(**_) -> Pipeline:
     my_pipeline = sum([_make_session_pipeline(name) for name in _SESSIONS])
     my_pipeline += pipeline(
         [

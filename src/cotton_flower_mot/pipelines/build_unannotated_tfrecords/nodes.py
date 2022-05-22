@@ -103,7 +103,11 @@ def _generate_clip_examples(
 
 
 def _generate_examples(
-    video: FrameReader, *, video_name: str, clip_length: int
+    video: FrameReader,
+    *,
+    video_name: str,
+    clip_length: int,
+    skip_initial_frames: int = 0,
 ) -> Dict[str, Callable[[], Iterable[tf.train.Example]]]:
     """
     Generates TFRecord examples for an entire video, splitting it up into
@@ -113,6 +117,8 @@ def _generate_examples(
         video: The video to generate annotations for.
         video_name: Unique name for the video.
         clip_length: The length of each clip, in frames.
+        skip_initial_frames: How many frames to skip at the beginning of the
+            video.
 
     Returns:
         A dictionary of functions mapping file names to
@@ -140,7 +146,7 @@ def _generate_examples(
 
     clips = {}
     for sequence_id, start_frame in enumerate(
-        range(0, video.num_frames, clip_length)
+        range(skip_initial_frames, video.num_frames, clip_length)
     ):
         clip_name = f"{video_name}_clip_{sequence_id}.tfrecord"
         clips[clip_name] = partial(
@@ -151,13 +157,17 @@ def _generate_examples(
 
 
 def generate_multiple_video_examples(
-    videos: Dict[str, Callable[[], Any]], *, clip_length: int
+    videos: Dict[str, Callable[[], Any]],
+    *,
+    clip_length: int,
+    skip_initial_frames: int = 0,
 ) -> Dict[str, Callable[[], Iterable[tf.train.Example]]]:
     """
 
     Args:
         videos: The videos to generate examples for.
         clip_length: The length of the clips to generate.
+        skip_initial_frames: How many frames to skip at the
 
     Returns:
         A dictionary mapping clip names to generators that produce examples
@@ -168,7 +178,10 @@ def generate_multiple_video_examples(
     for video_name, video in videos.items():
         clips.update(
             _generate_examples(
-                video(), video_name=video_name, clip_length=clip_length
+                video(),
+                video_name=video_name,
+                clip_length=clip_length,
+                skip_initial_frames=skip_initial_frames,
             )
         )
 
