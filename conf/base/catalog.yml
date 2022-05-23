@@ -33,6 +33,7 @@ tfrecord_unannotated:
   type: PartitionedDataSet
   dataset:
     type: cotton_flower_mot.data_sets.TfRecordsDataSet
+    verbose: false
   path: data/05_model_input/unannotated
 
 # Intermediate TF Datasets containing pre-processed data.

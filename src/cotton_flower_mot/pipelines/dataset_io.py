@@ -11,8 +11,9 @@ from .config import ModelConfig
 from .heat_maps import make_object_heat_map
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
+from .schemas import UnannotatedFeatures as Uf
 
-_FEATURE_DESCRIPTION = {
+_OTF_FEATURE_DESCRIPTION = {
     Otf.IMAGE_HEIGHT.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),
     Otf.IMAGE_WIDTH.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),
     Otf.IMAGE_FILENAME.value: tf.io.FixedLenFeature([1], tf.dtypes.string),
@@ -33,6 +34,15 @@ _FEATURE_DESCRIPTION = {
 }
 """
 Descriptions of the features found in the dataset containing flower annotations.
+"""
+
+_UF_FEATURE_DESCRIPTION = {
+    Uf.IMAGE_ENCODED.value: tf.io.FixedLenFeature([1], tf.dtypes.string),
+    Uf.IMAGE_FRAME_NUM.value: tf.io.RaggedFeature(tf.dtypes.int64),
+    Uf.IMAGE_SEQUENCE_ID.value: tf.io.RaggedFeature(tf.dtypes.int64),
+}
+"""
+Descriptions of the features found in the dataset containing unannotated images.
 """
 
 Feature = Dict[str, tf.Tensor]
@@ -121,6 +131,22 @@ class FeatureName(enum.Enum):
     SEQUENCE_ID = "sequence_id"
     """
     The sequence ID of the clip.
+    """
+
+
+@enum.unique
+class RotNetFeatureName(enum.Enum):
+    """
+    Standard key names for processed RotNet features.
+    """
+
+    IMAGE = "image"
+    """
+    The complete image.
+    """
+    PREDICTIONS = "predictions"
+    """
+    Integer specifying the rotation class label of this image.
     """
 
 
@@ -316,6 +342,58 @@ def _augment_inputs(
         )
 
     return image, heatmap, geometry
+
+
+def _extract_rotations(image: tf.Tensor) -> tf.Tensor:
+    """
+    Extracts all four rotations from an image.
+
+    Args:
+        image: The image to extract rotations from.
+
+    Returns:
+        The four rotations, in a single tensor, with a new dimension
+        prepended. The order is always 0, 90, 180, 270.
+
+    """
+    # 90-degree rotation.
+    deg_90 = tf.image.rot90(image)
+    # 180-degree rotation, which is just flipping.
+    deg_180 = tf.image.flip_up_down(image)
+    # 270-degree rotation.
+    deg_270 = tf.image.flip_left_right(deg_90)
+
+    return tf.stack([image, deg_90, deg_180, deg_270])
+
+
+def _load_rot_net(
+    unannotated_features: Feature, *, config: ModelConfig
+) -> Tuple[Feature, Feature]:
+    """
+    Extracts RotNet features from the unannotated TFRecords.
+
+    Args:
+        unannotated_features: The raw unannotated features.
+        config: The model configuration to use.
+
+    Returns:
+        Equivalent RotNet features. Will match the spec set out in
+        `RotNetFeatureName`. Will return input and target features.
+
+    """
+    # Decode the image.
+    image_encoded = unannotated_features[Uf.IMAGE_ENCODED.value]
+    image = _decode_image(image_encoded)
+
+    # Crop to the RotNet input shape.
+    image = tf.image.random_crop(image, size=config.rot_net_input_shape)
+
+    # Labels are just integers.
+    labels = tf.range(4)
+    rotations = _extract_rotations(image)
+    return {RotNetFeatureName.IMAGE.value: rotations}, {
+        RotNetFeatureName.PREDICTIONS.value: labels,
+    }
 
 
 def _get_geometric_features(
@@ -960,7 +1038,7 @@ def _inputs_and_targets_from_dataset(
 
     # Deserialize it.
     deserialized = filtered_raw.map(
-        lambda s: tf.io.parse_single_example(s, _FEATURE_DESCRIPTION),
+        lambda s: tf.io.parse_single_example(s, _OTF_FEATURE_DESCRIPTION),
         num_parallel_calls=_NUM_THREADS,
     )
 
@@ -1046,6 +1124,50 @@ def _batch_and_prefetch(
     return prefetched.with_options(options)
 
 
+def rot_net_inputs_and_targets_from_datasets(
+    unannotated_datasets: Iterable[tf.data.Dataset],
+    *,
+    config: ModelConfig,
+    batch_size: int = 8,
+    num_prefetch_batches: int = 1,
+) -> tf.data.Dataset:
+    """
+    Loads RotNet input features from a dataset of unannotated images.
+
+    Args:
+        unannotated_datasets: The datasets of unannotated images.
+        config: Model configuration we are loading data for.
+        batch_size: The batch size to use. The actual batch size will be
+            multiplied by four. because it will include all four rotations.
+        num_prefetch_batches: The number of batches to prefetch.
+
+    Returns:
+        A dataset that produces input images and target classes.
+
+    """
+    # Combine all the clip datasets into a single giant one.
+    combined_dataset = tf.data.Dataset.sample_from_datasets(
+        list(unannotated_datasets)
+    )
+
+    # Deserialize it.
+    deserialized = combined_dataset.map(
+        lambda s: tf.io.parse_single_example(s, _UF_FEATURE_DESCRIPTION),
+        num_parallel_calls=_NUM_THREADS,
+    )
+
+    # Extract the rotations.
+    rot_net_dataset = deserialized.map(
+        partial(_load_rot_net, config=config), num_parallel_calls=_NUM_THREADS
+    )
+    # Unbatch to separate all the rotations.
+    rot_net_dataset = rot_net_dataset.unbatch()
+
+    # Batch and prefetch.
+    batched = rot_net_dataset.batch(batch_size * 4)
+    return batched.prefetch(num_prefetch_batches)
+
+
 def inputs_and_targets_from_dataset(
     raw_dataset: tf.data.Dataset,
     *,
@@ -1118,7 +1240,7 @@ def inputs_and_targets_from_datasets(
 
     if interleave:
         # Interleave the results.
-        maybe_interleaved = tf.data.experimental.sample_from_datasets(
+        maybe_interleaved = tf.data.Dataset.sample_from_datasets(
             parsed_datasets
         )
 

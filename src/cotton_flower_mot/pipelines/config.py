@@ -1,6 +1,7 @@
 from functools import cached_property
 from typing import Tuple
 
+from pydantic import validator
 from pydantic.dataclasses import dataclass
 
 
@@ -12,10 +13,13 @@ class ModelConfig:
     Attributes:
         image_input_shape: The shape of the detections and tracklets being
             input to the appearance feature extractor (height, width, channels).
-        frame_input_shape: The shape of the frame images being input to the
-            detector (height, width, channels).
+        frame_input_shape: The shape of the raw video frames from the dataset
+         (height, width, channels).
         detection_model_input_shape: The shape of the input to the detection
             model (height, width, channels).
+        rot_net_input_shape: The shape of the input to use for RotNet
+            pretraining. Should be square so rotated images can be stored in a
+            single tensor. (height, width, channels)
         num_reduction_stages: How many initial reduction stages to add to the
             detector. Every stage will reduce the size of the heatmap output
             by a factor of 2.
@@ -36,6 +40,7 @@ class ModelConfig:
     image_input_shape: Tuple[int, int, int]
     frame_input_shape: Tuple[int, int, int]
     detection_model_input_shape: Tuple[int, int, int]
+    rot_net_input_shape: Tuple[int, int, int]
     num_reduction_stages: int
     detection_sigma: float
 
@@ -45,6 +50,25 @@ class ModelConfig:
     sinkhorn_lambda: float
 
     nominal_detection_size: Tuple[float, float]
+
+    @validator("rot_net_input_shape")
+    def rot_net_input_is_square(
+        cls, value: Tuple[int, int, int]
+    ) -> Tuple[int, int, int]:
+        """
+        Ensures that the RotNet input is square.
+
+        Args:
+            value: The value to check.
+
+        Returns:
+            The same value.
+
+        """
+        height, width, _ = value
+        if height != width:
+            raise ValueError("RotNet input must be square.")
+        return value
 
     @cached_property
     def heatmap_size(self) -> Tuple[int, int]:

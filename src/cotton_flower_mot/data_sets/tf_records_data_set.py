@@ -17,14 +17,21 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
     """
 
     def __init__(
-        self, filepath: PurePosixPath, version: Optional[Version] = None
+        self,
+        filepath: PurePosixPath,
+        version: Optional[Version] = None,
+        verbose: bool = True,
     ):
         """
         Args:
             filepath: The path to the output TFRecords file.
             version: The version information for the `DataSet`.
+            verbose: Whether to provide logging output every time a dataset
+                is saved or loaded.
         """
         super().__init__(PurePosixPath(filepath), version)
+
+        self.__verbose = verbose
 
     def _load(self) -> tf.data.TFRecordDataset:
         """
@@ -35,7 +42,8 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
 
         """
         load_path = self._get_load_path()
-        logger.debug("Loading TFRecords from {}.", load_path)
+        if self.__verbose:
+            logger.debug("Loading TFRecords from {}.", load_path)
         raw_dataset = tf.data.TFRecordDataset([load_path.as_posix()])
 
         return raw_dataset
@@ -50,7 +58,8 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
 
         """
         save_path = self._get_save_path()
-        logger.debug("Saving TFRecords to {}.", save_path)
+        if self.__verbose:
+            logger.debug("Saving TFRecords to {}.", save_path)
 
         # Make sure all the intermediate directories are created.
         save_dir = Path(save_path).parent

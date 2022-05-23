@@ -27,10 +27,10 @@
 # limitations under the License.
 
 """Project settings."""
-from .hooks import ProjectHooks
+from kedro.config import TemplatedConfigLoader
 
 # Instantiate and list your project hooks here
-HOOKS = (ProjectHooks(),)
+# HOOKS = (ProjectHooks(),)
 
 # List the installed plugins for which to disable auto-registry
 # DISABLE_HOOKS_FOR_PLUGINS = ("kedro-viz",)
@@ -49,3 +49,6 @@ HOOKS = (ProjectHooks(),)
 
 # Define the configuration folder. Defaults to `conf`
 # CONF_ROOT = "conf"
+
+CONFIG_LOADER_CLASS = TemplatedConfigLoader
+CONFIG_LOADER_ARGS = dict(globals_pattern="*globals.yml")
