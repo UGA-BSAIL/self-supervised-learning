@@ -599,7 +599,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
 
         """
         # Calculate the nominal stride of the horizontal indices.
-        stride = 2 ** depth
+        stride = 2**depth
         # The stride is increased by a factor of two because vertical chains
         # of aggregation nodes will be fused into one. Therefore, every other
         # node is just going to get removed anyway.
@@ -625,7 +625,7 @@ class HdaStage(layers.Layer, GraphLayerMixin):
 
         """
         # Each aggregation level reduces the number of nodes by half.
-        return 2 ** self._agg_depth
+        return 2**self._agg_depth
 
     def _find_reentrant_input(self, index: int) -> layers.Layer:
         """

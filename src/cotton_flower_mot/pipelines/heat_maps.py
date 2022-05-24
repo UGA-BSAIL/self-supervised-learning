@@ -79,17 +79,17 @@ def _max_overlap_radii(
     a1 = 1.0
     b1 = bbox_height + bbox_width
     c1 = bbox_width * bbox_height * (1.0 - min_iou) / (1.0 + min_iou)
-    sq1 = tf.sqrt(b1 ** 2.0 - 4.0 * a1 * c1)
+    sq1 = tf.sqrt(b1**2.0 - 4.0 * a1 * c1)
     r1 = (b1 + sq1) / 2.0
     a2 = 4.0
     b2 = 2.0 * (bbox_height + bbox_width)
     c2 = (1.0 - min_iou) * bbox_width * bbox_height
-    sq2 = tf.sqrt(b2 ** 2.0 - 4.0 * a2 * c2)
+    sq2 = tf.sqrt(b2**2.0 - 4.0 * a2 * c2)
     r2 = (b2 + sq2) / 2.0
     a3 = 4.0 * min_iou
     b3 = -2.0 * min_iou * (bbox_height + bbox_width)
     c3 = (min_iou - 1.0) * bbox_width * bbox_height
-    sq3 = tf.sqrt(b3 ** 2.0 - 4.0 * a3 * c3)
+    sq3 = tf.sqrt(b3**2.0 - 4.0 * a3 * c3)
     r3 = (b3 + sq3) / 2.0
     return tf.minimum(tf.minimum(r1, r2), r3)
 

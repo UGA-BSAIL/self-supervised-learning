@@ -3,8 +3,7 @@ Implementation of the CenterNet detector model.
 """
 
 
-from functools import partial
-from typing import Optional
+from typing import Optional, Tuple
 
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -13,74 +12,12 @@ from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
 from .layers import (
     BnActConv,
-    HdaStage,
     PeakLayer,
-    ReductionStages,
-    TransitionLayer,
-    UpSamplingIda,
 )
 from .layers.efficientnet import efficientnet
 
 # Use mixed precision to speed up training.
 tf.keras.mixed_precision.set_global_policy("mixed_float16")
-
-
-def _build_backbone(
-    normalized_input: tf.Tensor, *, config: ModelConfig
-) -> tf.Tensor:
-    """
-    Builds the backbone for CenterNet, which in this case, is based on DLA.
-
-    Args:
-        normalized_input: The normalized input images.
-        config: Model configuration.
-
-    Returns:
-        The batch of extracted features.
-
-    """
-    hda_stage = partial(
-        HdaStage,
-        agg_filter_size=3,
-        activation="relu",
-        block_type=HdaStage.Block.BOTTLENECK,
-    )
-
-    # Create initial reduction stages.
-    reduced_input = ReductionStages(
-        num_reduction_stages=config.num_reduction_stages,
-    )(normalized_input)
-
-    # Create the main stages of the model.
-    hda1 = hda_stage(
-        agg_depth=1,
-        num_channels=64,
-        add_ida_skip=False,
-        name="hda_stage_1",
-    )(reduced_input)
-    transition1 = TransitionLayer()(hda1)
-    hda2 = hda_stage(
-        agg_depth=2,
-        num_channels=128,
-        name="hda_stage_2",
-    )(transition1)
-    transition2 = TransitionLayer()(hda2)
-    hda3 = hda_stage(
-        agg_depth=2,
-        num_channels=256,
-        name="hda_stage_3",
-    )(transition2)
-    transition3 = TransitionLayer()(hda3)
-    hda4 = hda_stage(
-        agg_depth=1,
-        num_channels=512,
-        name="hda_stage_4",
-    )(transition3)
-
-    # Create the decoder side.
-    return UpSamplingIda(
-        agg_filter_size=3, activation="relu", name="up_sample"
-    )((hda1, hda2, hda3, hda4))
 
 
 def _build_prediction_head(
@@ -174,15 +111,18 @@ def compute_sparse_predictions(
     )
 
 
-def build_model(config: ModelConfig) -> tf.keras.Model:
+def _build_common(
+    config: ModelConfig, pretrained: bool = True
+) -> Tuple[tf.keras.Input, tf.Tensor]:
     """
-    Builds the detection model.
+    Builds the portions of the model that are common to all setups.
 
     Args:
         config: The model configuration.
+        pretrained: Whether to initialize with pretrained `ImageNet` weights.
 
     Returns:
-        The model that it created.
+        The input layer, and the final extracted features.
 
     """
     images = layers.Input(
@@ -200,7 +140,23 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
 
     # Build the model.
     # features = _build_backbone(normalized, config=config)
-    features = efficientnet(image_input=normalized, config=config)
+    return images, efficientnet(image_input=normalized, config=config,
+                                pretrained=pretrained)
+
+
+def build_model(config: ModelConfig) -> tf.keras.Model:
+    """
+    Builds the detection model.
+
+    Args:
+        config: The model configuration.
+
+    Returns:
+        The model that it created.
+
+    """
+    images, features = _build_common(config=config)
+
     heatmap = _build_prediction_head(features, output_channels=1)
     sizes = _build_prediction_head(features, output_channels=2)
     offsets = _build_prediction_head(features, output_channels=2)

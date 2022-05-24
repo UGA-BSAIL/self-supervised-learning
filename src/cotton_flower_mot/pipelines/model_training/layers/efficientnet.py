@@ -18,13 +18,17 @@ def efficientnet(
     *,
     image_input: tf.Tensor,
     config: ModelConfig,
-):
+    pretrained: bool = True,
+) -> tf.Tensor:
     """
     Creates a new EfficientNet-based model.
 
     Args:
         image_input: The tensor containing (non-normalized) input images.
         config: The model configuration to use.
+        pretrained: If true, it will use pretrained `ImageNet` weights and
+            fix those portions of the network. Otherwise, it will initialize
+            randomly, and the whole thing will be trainable.
 
     Returns:
         The top layer of the model.
@@ -34,8 +38,9 @@ def efficientnet(
         include_top=False,
         input_tensor=image_input,
         input_shape=config.detection_model_input_shape,
+        weights="imagenet" if pretrained else None,
     )
-    efficientnet.trainable = False
+    efficientnet.trainable = not pretrained
 
     block2 = efficientnet.get_layer("block2d_add").get_output_at(0)
     block3 = efficientnet.get_layer("block3d_add").get_output_at(0)

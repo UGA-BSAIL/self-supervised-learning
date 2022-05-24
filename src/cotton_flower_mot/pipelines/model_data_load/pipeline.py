@@ -11,6 +11,7 @@ from ..dataset_io import (
     HeatMapSource,
     inputs_and_targets_from_datasets,
 )
+from .nodes import build_rotnet_pipeline
 
 
 def create_pipeline(**kwargs):
@@ -90,6 +91,15 @@ def create_pipeline(**kwargs):
                     config="model_config",
                 ),
                 "validation_data_clips",
+            ),
+            node(
+                build_rotnet_pipeline,
+                dict(
+                    unannotated_datasets="tfrecord_unannotated_no_wheel",
+                    config="model_config",
+                    batch_size="params:batch_size",
+                ),
+                "unannotated_data",
             ),
         ]
     )
