@@ -259,3 +259,15 @@ class ModelTargets(enum.Enum):
     this one is in sparse form, i.e. the predictions will have the form
     `[center_x, center_y, width, height, confidence]`.
     """
+
+
+@enum.unique
+class RotNetTargets(enum.Enum):
+    """
+    Key names for the RotNet model targets.
+    """
+
+    ROTATION_CLASS = "rotation_class"
+    """
+    The predicted rotation class for an input.
+    """

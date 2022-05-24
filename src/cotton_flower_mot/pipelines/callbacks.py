@@ -4,17 +4,19 @@ Encapsulates custom callbacks to use.
 
 
 import abc
+import gc
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
-import gc
 
 import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.callbacks as callbacks
 from loguru import logger
 
-from ..schemas import ModelInputs, ModelTargets
-from .visualization import visualize_heat_maps
+from src.cotton_flower_mot.pipelines.model_training.visualization import (
+    visualize_heat_maps,
+)
+from src.cotton_flower_mot.pipelines.schemas import ModelInputs, ModelTargets
 
 
 class _TensorboardLoggingCallback(callbacks.Callback):

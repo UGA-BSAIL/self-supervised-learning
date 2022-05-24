@@ -3,65 +3,22 @@ Nodes for the model training pipeline.
 """
 
 
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 import tensorflow as tf
-import tensorflow.keras.optimizers.schedules as schedules
 from loguru import logger
 
+from ..callbacks import LogHeatmaps
 from ..config import ModelConfig
 from ..schemas import ModelTargets
-from .callbacks import LogHeatmaps, ClearMemory
-from .centernet_model import build_model
+from ..training_utils import (
+    get_log_dir,
+    make_common_callbacks,
+    make_learning_rate,
+)
+from .centernet_model import build_detection_model
 from .losses import make_losses
 from .metrics import make_metrics
-
-
-def _make_learning_rate(
-    config: Dict[str, Any]
-) -> Union[float, schedules.LearningRateSchedule]:
-    """
-    Creates the learning rate to use for optimization, based on the user
-    configuration.
-
-    Args:
-        config: The configuration for the learning rate.
-
-    Returns:
-        Either a float for a fixed learning rate, or a `LearningRateSchedule`.
-
-    """
-    initial_rate = config["initial"]
-    if not config.get("decay", False):
-        # No decay is configured.
-        logger.debug("Using fixed learning rate of {}.", initial_rate)
-        return initial_rate
-
-    logger.debug("Using decaying learning rate.")
-    return tf.keras.experimental.CosineDecayRestarts(
-        initial_rate,
-        config["decay_steps"],
-        t_mul=config["t_mul"],
-        m_mul=config["m_mul"],
-        alpha=config["min_learning_rate"],
-    )
-
-
-def set_check_numerics(enable: bool) -> None:
-    """
-    Sets whether to enable checking for NaNs and infinities.
-
-    Args:
-        enable: If true, will enable the checks.
-
-    """
-    if enable:
-        logger.info("Enabling numeric checks. Training might be slow.")
-        tf.debugging.enable_check_numerics()
-    else:
-        tf.debugging.disable_check_numerics()
 
 
 def create_model(config: ModelConfig) -> tf.keras.Model:
@@ -75,7 +32,7 @@ def create_model(config: ModelConfig) -> tf.keras.Model:
         The model that it created.
 
     """
-    model = build_model(config)
+    model = build_detection_model(config)
     logger.info("Model has {} parameters.", model.count_params())
 
     return model
@@ -86,14 +43,11 @@ def _make_callbacks(
     model: tf.keras.Model,
     dataset: tf.data.Dataset,
     tensorboard_output_dir: str,
-    histogram_period: int,
-    update_period: int,
     heatmap_size: Tuple[int, int],
     heatmap_period: int,
     num_heatmap_batches: int,
     num_heatmap_images: int,
-    lr_patience_epochs: int,
-    min_lr: float,
+    **kwargs: Any,
 ) -> List[tf.keras.callbacks.Callback]:
     """
     Creates callbacks to use when training the model.
@@ -103,9 +57,6 @@ def _make_callbacks(
         dataset: The dataset to use for logging heatmaps.
         tensorboard_output_dir: The directory to use for storing Tensorboard
             logs.
-        histogram_period: Period at which to generate histograms for
-            Tensorboard output, in epochs.
-        update_period: Period in batches at which to log metrics.
         heatmap_size: Size of the logged heatmap visualizations.
             (width, height)
         heatmap_period: Period at which to generate heatmap visualizations,
@@ -113,24 +64,17 @@ def _make_callbacks(
         num_heatmap_batches: Total number of batches to log heatmap data from.
         num_heatmap_images: Total number of heatmap images to include in each
             batch.
-        lr_patience_epochs: Patience parameter to use for LR reduction.
-        min_lr: The minimum learning rate to allow.
+        **kwargs: Will be forwarded to `make_common_callbacks`.
 
     Returns:
         The list of callbacks.
 
     """
-    # Create a callback for storing Tensorboard logs.
-    log_dir = Path(tensorboard_output_dir) / datetime.now().isoformat()
-    logger.debug("Writing Tensorboard logs to {}.", log_dir)
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=log_dir,
-        histogram_freq=histogram_period,
-        update_freq=update_period,
+    common_callbacks = make_common_callbacks(
+        tensorboard_output_dir=tensorboard_output_dir, **kwargs
     )
 
-    nan_termination = tf.keras.callbacks.TerminateOnNaN()
-
+    log_dir = get_log_dir(tensorboard_output_dir)
     heatmap_callback = LogHeatmaps(
         model=model,
         dataset=dataset,
@@ -141,21 +85,7 @@ def _make_callbacks(
         num_images_per_batch=num_heatmap_images,
     )
 
-    reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
-        patience=lr_patience_epochs,
-        verbose=1,
-        min_lr=min_lr,
-    )
-
-    memory_callback = ClearMemory()
-
-    return [
-        tensorboard_callback,
-        nan_termination,
-        heatmap_callback,
-        reduce_lr_callback,
-        memory_callback,
-    ]
+    return common_callbacks + [heatmap_callback]
 
 
 def _remove_unused_targets(dataset: tf.data.Dataset) -> tf.data.Dataset:
@@ -222,7 +152,7 @@ def train_model(
         logger.debug("Using phase parameters: {}", phase)
 
         optimizer = tf.keras.optimizers.Adam(
-            learning_rate=_make_learning_rate(phase["learning_rate"]),
+            learning_rate=make_learning_rate(phase["learning_rate"]),
         )
         model.compile(
             optimizer=optimizer,

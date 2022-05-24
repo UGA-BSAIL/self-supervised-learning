@@ -9,11 +9,8 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 from ..config import ModelConfig
-from ..schemas import ModelInputs, ModelTargets
-from .layers import (
-    BnActConv,
-    PeakLayer,
-)
+from ..schemas import ModelInputs, ModelTargets, RotNetTargets
+from .layers import BnActConv, PeakLayer
 from .layers.efficientnet import efficientnet
 
 # Use mixed precision to speed up training.
@@ -140,11 +137,12 @@ def _build_common(
 
     # Build the model.
     # features = _build_backbone(normalized, config=config)
-    return images, efficientnet(image_input=normalized, config=config,
-                                pretrained=pretrained)
+    return images, efficientnet(
+        image_input=normalized, config=config, pretrained=pretrained
+    )
 
 
-def build_model(config: ModelConfig) -> tf.keras.Model:
+def build_detection_model(config: ModelConfig) -> tf.keras.Model:
     """
     Builds the detection model.
 
@@ -184,3 +182,26 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
     return tf.keras.Model(
         inputs=images, outputs=[heatmap, geometry, bounding_boxes]
     )
+
+
+def build_rotnet_model(config: ModelConfig) -> tf.keras.Model:
+    """
+    Builds the model to use for RotNet pre-training.
+
+    Args:
+        config: The model configuration.
+
+    Returns:
+        The model that it created.
+
+    """
+    images, features = _build_common(config=config, pretrained=False)
+
+    # Add the classification head.
+    class_head = BnActConv(4, 1, activation="relu", padding="same")(features)
+    average_pool = layers.GlobalAveragePooling2D()(class_head)
+    rotation_class = layers.Activation(
+        "softmax", name=RotNetTargets.ROTATION_CLASS.value
+    )(average_pool)
+
+    return tf.keras.Model(inputs=images, outputs=rotation_class)

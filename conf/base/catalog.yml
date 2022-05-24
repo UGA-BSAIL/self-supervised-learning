@@ -85,3 +85,8 @@ _model_args: &model_args
 trained_model:
   filepath: ${output_data_dir}/06_models/fully_trained.hd5
   << : *model_args
+
+# Saved model, produced at the end of RotNet pre-training.
+pretrained_rotnet_model:
+  filepath: ${output_data_dir}/06_models/pretrained_rotnet.hd5
+  << : *model_args

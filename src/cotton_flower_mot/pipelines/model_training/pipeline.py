@@ -4,7 +4,8 @@ Pipeline definition for model training.
 
 from kedro.pipeline import Pipeline, node
 
-from .nodes import create_model, set_check_numerics, train_model
+from ..training_utils import set_check_numerics
+from .nodes import create_model, train_model
 
 
 def create_pipeline(**kwargs):

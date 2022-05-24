@@ -391,7 +391,7 @@ def _load_rot_net(
     # Labels are just integers.
     labels = tf.range(4)
     rotations = _extract_rotations(image)
-    return {RotNetFeatureName.IMAGE.value: rotations}, {
+    return {ModelInputs.DETECTIONS_FRAME.value: rotations}, {
         RotNetFeatureName.PREDICTIONS.value: labels,
     }
 
@@ -440,7 +440,7 @@ def _get_geometric_features(
 
         # Compute the offset.
         center_points_px = tf.stack([center_x, center_y], axis=1)
-        down_sample_factor = tf.constant(2**config.num_reduction_stages)
+        down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
         offsets = (
             tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
         )
