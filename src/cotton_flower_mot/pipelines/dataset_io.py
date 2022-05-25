@@ -11,6 +11,7 @@ from .config import ModelConfig
 from .heat_maps import make_object_heat_map
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
+from .schemas import RotNetTargets
 from .schemas import UnannotatedFeatures as Uf
 
 _OTF_FEATURE_DESCRIPTION = {
@@ -392,7 +393,7 @@ def _load_rot_net(
     labels = tf.range(4)
     rotations = _extract_rotations(image)
     return {ModelInputs.DETECTIONS_FRAME.value: rotations}, {
-        RotNetFeatureName.PREDICTIONS.value: labels,
+        RotNetTargets.ROTATION_CLASS.value: labels,
     }
 
 

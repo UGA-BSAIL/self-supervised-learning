@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import tensorflow as tf
 from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2S
 from tensorflow.keras.layers import (
@@ -11,13 +13,11 @@ from tensorflow.keras.layers import (
 )
 from tensorflow.python.keras.regularizers import l2
 
-from ...config import ModelConfig
-
 
 def efficientnet(
     *,
     image_input: tf.Tensor,
-    config: ModelConfig,
+    input_shape: Tuple[int, int, int],
     pretrained: bool = True,
 ) -> tf.Tensor:
     """
@@ -25,7 +25,7 @@ def efficientnet(
 
     Args:
         image_input: The tensor containing (non-normalized) input images.
-        config: The model configuration to use.
+        input_shape: The shape of the inputs to the model.
         pretrained: If true, it will use pretrained `ImageNet` weights and
             fix those portions of the network. Otherwise, it will initialize
             randomly, and the whole thing will be trainable.
@@ -37,7 +37,7 @@ def efficientnet(
     efficientnet = EfficientNetV2S(
         include_top=False,
         input_tensor=image_input,
-        input_shape=config.detection_model_input_shape,
+        input_shape=input_shape,
         weights="imagenet" if pretrained else None,
     )
     efficientnet.trainable = not pretrained

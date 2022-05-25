@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 from tensorflow.keras import layers
+from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2S
 
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets, RotNetTargets
@@ -14,7 +15,7 @@ from .layers import BnActConv, PeakLayer
 from .layers.efficientnet import efficientnet
 
 # Use mixed precision to speed up training.
-tf.keras.mixed_precision.set_global_policy("mixed_float16")
+# tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
 
 def _build_prediction_head(
@@ -109,13 +110,13 @@ def compute_sparse_predictions(
 
 
 def _build_common(
-    config: ModelConfig, pretrained: bool = True
+    input_shape: Tuple[int, int, int], pretrained: bool = True
 ) -> Tuple[tf.keras.Input, tf.Tensor]:
     """
     Builds the portions of the model that are common to all setups.
 
     Args:
-        config: The model configuration.
+        input_shape: The shape of the image input to the model.
         pretrained: Whether to initialize with pretrained `ImageNet` weights.
 
     Returns:
@@ -123,7 +124,7 @@ def _build_common(
 
     """
     images = layers.Input(
-        shape=config.detection_model_input_shape,
+        shape=input_shape,
         name=ModelInputs.DETECTIONS_FRAME.value,
     )
 
@@ -138,7 +139,7 @@ def _build_common(
     # Build the model.
     # features = _build_backbone(normalized, config=config)
     return images, efficientnet(
-        image_input=normalized, config=config, pretrained=pretrained
+        image_input=normalized, input_shape=input_shape, pretrained=pretrained
     )
 
 
@@ -153,7 +154,9 @@ def build_detection_model(config: ModelConfig) -> tf.keras.Model:
         The model that it created.
 
     """
-    images, features = _build_common(config=config)
+    images, features = _build_common(
+        input_shape=config.detection_model_input_shape
+    )
 
     heatmap = _build_prediction_head(features, output_channels=1)
     sizes = _build_prediction_head(features, output_channels=2)
@@ -195,7 +198,18 @@ def build_rotnet_model(config: ModelConfig) -> tf.keras.Model:
         The model that it created.
 
     """
-    images, features = _build_common(config=config, pretrained=False)
+    images = layers.Input(
+        shape=config.rot_net_input_shape,
+        name=ModelInputs.DETECTIONS_FRAME.value,
+    )
+
+    backbone = EfficientNetV2S(
+        include_top=False,
+        input_tensor=images,
+        input_shape=config.rot_net_input_shape,
+        weights=None,
+    )
+    features = backbone.get_layer("top_activation").get_output_at(0)
 
     # Add the classification head.
     class_head = BnActConv(4, 1, activation="relu", padding="same")(features)

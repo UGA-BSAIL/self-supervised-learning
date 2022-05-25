@@ -97,7 +97,7 @@ def create_pipeline(**kwargs):
                 dict(
                     unannotated_datasets="tfrecord_unannotated_no_wheel",
                     config="model_config",
-                    batch_size="params:batch_size",
+                    batch_size="params:rot_net_batch_size",
                 ),
                 "unannotated_data",
             ),
