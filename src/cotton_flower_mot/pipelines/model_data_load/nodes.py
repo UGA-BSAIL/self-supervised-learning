@@ -3,10 +3,12 @@ Nodes for the `model_data_load` pipeline.
 """
 
 
-from typing import Dict, Callable, Any
+from typing import Any, Callable, Dict
+
 import tensorflow as tf
 from tqdm import tqdm
-from ..dataset_io import rot_net_inputs_and_targets_from_datasets
+
+from ..dataset_io import rot_net_inputs_and_targets_from_dataset
 
 
 def build_rotnet_pipeline(
@@ -19,7 +21,7 @@ def build_rotnet_pipeline(
     Args:
         unannotated_datasets: The raw, unannotated data to use as input.
         **kwargs: Will be forwarded to
-            `rot_net_inputs_and_targets_from_datasets`.
+            `rot_net_inputs_and_targets_from_dataset`.
 
     Returns:
         The dataset for training `RotNet`.
@@ -32,4 +34,4 @@ def build_rotnet_pipeline(
     ):
         datasets.append(loader())
 
-    return rot_net_inputs_and_targets_from_datasets(datasets, **kwargs)
+    return rot_net_inputs_and_targets_from_dataset(datasets, **kwargs)

@@ -384,7 +384,7 @@ def _load_rot_net(
     """
     # Decode the image.
     image_encoded = unannotated_features[Uf.IMAGE_ENCODED.value]
-    image = _decode_image(image_encoded)
+    image = _decode_image(image_encoded, ratio=2)
 
     # Crop to the RotNet input shape.
     image = tf.image.random_crop(image, size=config.rot_net_input_shape)
@@ -1125,8 +1125,8 @@ def _batch_and_prefetch(
     return prefetched.with_options(options)
 
 
-def rot_net_inputs_and_targets_from_datasets(
-    unannotated_datasets: Iterable[tf.data.Dataset],
+def rot_net_inputs_and_targets_from_dataset(
+    unannotated_dataset: tf.data.Dataset,
     *,
     config: ModelConfig,
     batch_size: int = 8,
@@ -1136,7 +1136,7 @@ def rot_net_inputs_and_targets_from_datasets(
     Loads RotNet input features from a dataset of unannotated images.
 
     Args:
-        unannotated_datasets: The datasets of unannotated images.
+        unannotated_dataset: The dataset of unannotated images.
         config: Model configuration we are loading data for.
         batch_size: The batch size to use. The actual batch size will be
             multiplied by four. because it will include all four rotations.
@@ -1146,13 +1146,15 @@ def rot_net_inputs_and_targets_from_datasets(
         A dataset that produces input images and target classes.
 
     """
-    # Combine all the clip datasets into a single giant one.
-    combined_dataset = tf.data.Dataset.sample_from_datasets(
-        list(unannotated_datasets)
-    )
+    # Shuffle all the clips together through sharding.
+    sharded_datasets = []
+    num_shards = 100
+    for i in range(0, num_shards):
+        sharded_datasets.append(unannotated_dataset.shard(num_shards, i))
+    shuffled_dataset = tf.data.Dataset.sample_from_datasets(sharded_datasets)
 
     # Deserialize it.
-    deserialized = combined_dataset.map(
+    deserialized = shuffled_dataset.map(
         lambda s: tf.io.parse_single_example(s, _UF_FEATURE_DESCRIPTION),
         num_parallel_calls=_NUM_THREADS,
     )

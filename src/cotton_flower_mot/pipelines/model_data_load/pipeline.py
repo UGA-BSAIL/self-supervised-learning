@@ -10,6 +10,7 @@ from ..dataset_io import (
     DataAugmentationConfig,
     HeatMapSource,
     inputs_and_targets_from_datasets,
+    rot_net_inputs_and_targets_from_dataset,
 )
 from .nodes import build_rotnet_pipeline
 
@@ -93,9 +94,9 @@ def create_pipeline(**kwargs):
                 "validation_data_clips",
             ),
             node(
-                build_rotnet_pipeline,
+                rot_net_inputs_and_targets_from_dataset,
                 dict(
-                    unannotated_datasets="tfrecord_unannotated_no_wheel",
+                    unannotated_dataset="tfrecord_unannotated_no_wheel_combined",
                     config="model_config",
                     batch_size="params:rot_net_batch_size",
                 ),

@@ -41,8 +41,18 @@ tfrecord_unannotated_wheel:
   type: PartitionedDataSet
   dataset:
     type: cotton_flower_mot.data_sets.TfRecordsDataSet
-    verbose: false
   path: data/05_model_input/unannotated/wheel
+
+# A version of the unannotated datasets to use for loading. This can
+# be more efficient, because it loads all the TFRecords files into
+# a single dataset.
+tfrecord_unannotated_no_wheel_combined:
+  type: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/unannotated/no_wheel
+
+tfrecord_unannotated_wheel_combined:
+  type: cotton_flower_mot.data_sets.TfRecordsDataSet
+  filepath: data/05_model_input/unannotated/wheel
 
 # Intermediate TF Datasets containing pre-processed data.
 training_data:

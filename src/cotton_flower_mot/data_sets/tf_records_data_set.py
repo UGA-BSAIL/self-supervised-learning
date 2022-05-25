@@ -3,6 +3,7 @@ A custom `DataSet` for creating TFRecords files.
 """
 
 
+import random
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional
 
@@ -41,10 +42,24 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
             The raw `tf.data.TFRecordDataset` that it loaded.
 
         """
-        load_path = self._get_load_path()
+        load_path = Path(self._get_load_path())
         if self.__verbose:
             logger.debug("Loading TFRecords from {}.", load_path)
-        raw_dataset = tf.data.TFRecordDataset([load_path.as_posix()])
+
+        load_paths = [load_path.as_posix()]
+        if load_path.is_dir():
+            # Load everything in the directory as a single dataset.
+            tfrecords_files = list(load_path.iterdir())
+            logger.debug(
+                "Loading {} TFRecords files from directory.",
+                len(tfrecords_files),
+            )
+            # Shuffle them so the order appears random.
+            random.shuffle(tfrecords_files)
+
+            load_paths = [f.as_posix() for f in tfrecords_files]
+
+        raw_dataset = tf.data.TFRecordDataset(load_paths)
 
         return raw_dataset
 
