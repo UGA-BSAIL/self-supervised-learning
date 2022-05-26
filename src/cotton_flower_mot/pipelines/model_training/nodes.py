@@ -145,11 +145,16 @@ def train_model(
     training_data = _remove_unused_targets(training_data)
     testing_data = _remove_unused_targets(testing_data)
 
-    callbacks = _make_callbacks(model=model, dataset=testing_data, **kwargs)
-
     for phase in learning_phases:
         logger.info("Starting new training phase.")
         logger.debug("Using phase parameters: {}", phase)
+
+        callbacks = _make_callbacks(
+            model=model,
+            dataset=testing_data,
+            training_params=phase,
+            **kwargs,
+        )
 
         optimizer = tf.keras.optimizers.Adam(
             learning_rate=make_learning_rate(phase["learning_rate"]),

@@ -84,8 +84,8 @@ def make_common_callbacks(
     tensorboard_output_dir: str,
     histogram_period: int,
     update_period: int,
-    lr_patience_epochs: int,
-    min_lr: float,
+    training_params: Dict[str, Any],
+    lr_monitor: str = "val_loss",
 ) -> List[tf.keras.callbacks.Callback]:
     """
     Creates callbacks to use when training the model.
@@ -96,8 +96,8 @@ def make_common_callbacks(
         histogram_period: Period at which to generate histograms for
             Tensorboard output, in epochs.
         update_period: Period in batches at which to log metrics.
-        lr_patience_epochs: Patience parameter to use for LR reduction.
-        min_lr: The minimum learning rate to allow.
+        training_params: The hyperparameter configurations for training.
+        lr_monitor: Metric to be monitored for automatic LR reduction.
 
     Returns:
         The list of callbacks.
@@ -114,9 +114,10 @@ def make_common_callbacks(
     nan_termination = tf.keras.callbacks.TerminateOnNaN()
 
     reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
-        patience=lr_patience_epochs,
+        monitor=lr_monitor,
+        patience=training_params["learning_rate"]["lr_patience_epochs"],
         verbose=1,
-        min_lr=min_lr,
+        min_lr=training_params["learning_rate"]["min_learning_rate"],
     )
 
     memory_callback = ClearMemory()

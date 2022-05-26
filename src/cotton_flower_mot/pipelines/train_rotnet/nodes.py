@@ -51,11 +51,14 @@ def train_model(
         The trained model.
 
     """
-    callbacks = make_common_callbacks(**kwargs)
-
     for phase in learning_phases:
         logger.info("Starting new training phase.")
         logger.debug("Using phase parameters: {}", phase)
+
+        # We don't do any validation here, so monitor training loss.
+        callbacks = make_common_callbacks(
+            training_params=phase, lr_monitor="loss", **kwargs
+        )
 
         optimizer = tf.keras.optimizers.Adam(
             learning_rate=make_learning_rate(phase["learning_rate"]),

@@ -441,7 +441,7 @@ def _get_geometric_features(
 
         # Compute the offset.
         center_points_px = tf.stack([center_x, center_y], axis=1)
-        down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
+        down_sample_factor = tf.constant(2**config.num_reduction_stages)
         offsets = (
             tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
         )
@@ -1131,6 +1131,7 @@ def rot_net_inputs_and_targets_from_dataset(
     config: ModelConfig,
     batch_size: int = 8,
     num_prefetch_batches: int = 1,
+    num_shards: int = 100,
 ) -> tf.data.Dataset:
     """
     Loads RotNet input features from a dataset of unannotated images.
@@ -1141,6 +1142,9 @@ def rot_net_inputs_and_targets_from_dataset(
         batch_size: The batch size to use. The actual batch size will be
             multiplied by four. because it will include all four rotations.
         num_prefetch_batches: The number of batches to prefetch.
+        num_shards: The number of shards to use when randomizing. A larger
+            number improves randomness, but may risk exhausting the maximum
+            number of open files.
 
     Returns:
         A dataset that produces input images and target classes.
@@ -1148,7 +1152,6 @@ def rot_net_inputs_and_targets_from_dataset(
     """
     # Shuffle all the clips together through sharding.
     sharded_datasets = []
-    num_shards = 100
     for i in range(0, num_shards):
         sharded_datasets.append(unannotated_dataset.shard(num_shards, i))
     shuffled_dataset = tf.data.Dataset.sample_from_datasets(sharded_datasets)

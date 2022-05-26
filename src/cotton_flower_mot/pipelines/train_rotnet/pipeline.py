@@ -18,12 +18,10 @@ def create_pipeline(**_) -> Pipeline:
                 dict(
                     model="initial_rotnet_model",
                     training_data="unannotated_data",
-                    learning_phases="params:learning_phases",
+                    learning_phases="params:rotnet_learning_phases",
                     tensorboard_output_dir="params:tensorboard_output_dir",
                     histogram_period="params:histogram_period",
                     update_period="params:update_period",
-                    lr_patience_epochs="params:lr_patience_epochs",
-                    min_lr="params:min_lr",
                 ),
                 "pretrained_rotnet_model",
             ),

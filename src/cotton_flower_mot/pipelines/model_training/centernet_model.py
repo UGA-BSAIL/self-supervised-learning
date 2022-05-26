@@ -15,7 +15,7 @@ from .layers import BnActConv, PeakLayer
 from .layers.efficientnet import efficientnet
 
 # Use mixed precision to speed up training.
-# tf.keras.mixed_precision.set_global_policy("mixed_float16")
+tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
 
 def _build_prediction_head(

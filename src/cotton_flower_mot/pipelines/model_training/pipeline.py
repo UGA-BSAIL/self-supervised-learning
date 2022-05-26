@@ -30,8 +30,6 @@ def create_pipeline(**kwargs):
                     heatmap_period="params:heatmap_period",
                     num_heatmap_batches="params:num_heatmap_batches",
                     num_heatmap_images="params:num_heatmap_images",
-                    lr_patience_epochs="params:lr_patience_epochs",
-                    min_lr="params:min_lr",
                 ),
                 "trained_model",
             ),
