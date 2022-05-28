@@ -35,6 +35,9 @@ def register_pipelines() -> Dict[str, Pipeline]:
     eda_pipeline = eda.create_pipeline()
     data_load_pipeline = config_pipeline + model_data_load.create_pipeline()
     training_pipeline = data_load_pipeline + model_training.create_pipeline()
+    training_pipeline_rotnet_init = (
+        data_load_pipeline + model_training.create_pipeline(init_rotnet=True)
+    )
     rotnet_pipeline = data_load_pipeline + train_rotnet.create_pipeline()
     evaluation_pipeline = (
         data_load_pipeline + model_evaluation.create_pipeline()
@@ -48,6 +51,7 @@ def register_pipelines() -> Dict[str, Pipeline]:
         "build_unannotated_tfrecords": unannotated_pipeline,
         "eda": eda_pipeline,
         "model_training": training_pipeline,
+        "model_training_rotnet_init": training_pipeline_rotnet_init,
         "model_evaluation": evaluation_pipeline,
         "convert_annotations": conversion_pipeline,
         "auto_annotation": annotation_pipeline,

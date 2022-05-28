@@ -3,14 +3,15 @@ Nodes for the model training pipeline.
 """
 
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import tensorflow as tf
 from loguru import logger
+from tensorflow.keras import layers
 
 from ..callbacks import LogHeatmaps
 from ..config import ModelConfig
-from ..schemas import ModelTargets
+from ..schemas import ModelInputs, ModelTargets
 from ..training_utils import (
     get_log_dir,
     make_common_callbacks,
@@ -21,18 +22,67 @@ from .losses import make_losses
 from .metrics import make_metrics
 
 
-def create_model(config: ModelConfig) -> tf.keras.Model:
+def prepare_pretrained_encoder(
+    encoder: tf.keras.Model, config: ModelConfig
+) -> tf.keras.Model:
+    """
+    Prepares a custom pretrained model to be used as an encoder. In this case,
+    the model is expected to be an EfficientNetV2 model. It will be frozen and
+    have the proper layers extracted.
+
+    Args:
+        encoder: The model to use as the encoder.
+        config: The model configuration.
+
+    Returns:
+        A modified model.
+
+    """
+    logger.info("Using a custom pre-trained encoder.")
+
+    # Change the input size of the model.
+    new_input = layers.Input(
+        shape=config.detection_model_input_shape,
+        name=ModelInputs.DETECTIONS_FRAME.value,
+    )
+    new_encoder = tf.keras.models.clone_model(
+        encoder, input_tensors=[new_input]
+    )
+    # Copy over the pre-trained weights.
+    for new_layer, old_layer in zip(
+        new_encoder.layers[1:], encoder.layers[1:]
+    ):
+        new_layer.set_weights(old_layer.get_weights())
+
+    new_encoder.trainable = False
+
+    # Extract the layers that we need.
+    block2 = new_encoder.get_layer("block2d_add").get_output_at(0)
+    block3 = new_encoder.get_layer("block3d_add").get_output_at(0)
+    block5 = new_encoder.get_layer("block5i_add").get_output_at(0)
+    top = new_encoder.get_layer("top_activation").get_output_at(0)
+
+    return tf.keras.Model(
+        inputs=new_encoder.inputs, outputs=[block2, block3, block5, top]
+    )
+
+
+def create_model(
+    config: ModelConfig, encoder: Optional[tf.keras.Model] = None
+) -> tf.keras.Model:
     """
     Builds the model to use.
 
     Args:
         config: The model configuration.
+        encoder: A custom pretrained encoder which will be used for feature
+            extraction.
 
     Returns:
         The model that it created.
 
     """
-    model = build_detection_model(config)
+    model = build_detection_model(config, encoder=encoder)
     logger.info("Model has {} parameters.", model.count_params())
 
     return model

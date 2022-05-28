@@ -60,4 +60,4 @@ ml cuDNN/8.1.0.77-CUDA-11.2.1
 export PYTHONHASHSEED=0
 
 # Run the training.
-poetry run kedro run --pipeline=model_training "$@"
+poetry run kedro run --pipeline=model_training_rotnet_init "$@"

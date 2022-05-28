@@ -23,7 +23,7 @@ def create_pipeline(**_) -> Pipeline:
                     histogram_period="params:histogram_period",
                     update_period="params:update_period",
                 ),
-                "pretrained_rotnet_model",
+                "pretrained_rotnet_model_output",
             ),
         ]
     )

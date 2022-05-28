@@ -5,14 +5,46 @@ Pipeline definition for model training.
 from kedro.pipeline import Pipeline, node
 
 from ..training_utils import set_check_numerics
-from .nodes import create_model, train_model
+from .nodes import create_model, prepare_pretrained_encoder, train_model
 
 
-def create_pipeline(**kwargs):
-    return Pipeline(
+def create_pipeline(init_rotnet: bool = False):
+    """
+    Args:
+        init_rotnet: If true, will build a pipeline that initializes from
+            a pretrained RotNet model.
+
+    Returns:
+
+    """
+    if not init_rotnet:
+        # This is the default model loading process.
+        init_pipeline = Pipeline(
+            [node(create_model, "model_config", "initial_model")]
+        )
+    else:
+        # This is the model loading process using a pretrained RotNet encoder.
+        init_pipeline = Pipeline(
+            [
+                node(
+                    prepare_pretrained_encoder,
+                    dict(
+                        encoder="pretrained_rotnet_model",
+                        config="model_config",
+                    ),
+                    "encoder_model",
+                ),
+                node(
+                    create_model,
+                    dict(config="model_config", encoder="encoder_model"),
+                    "initial_model",
+                ),
+            ],
+        )
+
+    return init_pipeline + Pipeline(
         [
             node(set_check_numerics, "params:enable_numeric_checks", None),
-            node(create_model, "model_config", "initial_model"),
             node(
                 train_model,
                 dict(
@@ -33,5 +65,5 @@ def create_pipeline(**kwargs):
                 ),
                 "trained_model",
             ),
-        ]
+        ],
     )

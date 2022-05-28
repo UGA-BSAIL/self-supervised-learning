@@ -7,15 +7,119 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 from tensorflow.keras import layers
-from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2S
+from tensorflow.keras.layers import (
+    BatchNormalization,
+    Concatenate,
+    Conv2D,
+    Cropping2D,
+    Dropout,
+    ReLU,
+    UpSampling2D,
+)
+from tensorflow.python.keras.regularizers import l2
 
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets, RotNetTargets
 from .layers import BnActConv, PeakLayer
-from .layers.efficientnet import efficientnet
+from .layers.feature_extractors import efficientnet
 
 # Use mixed precision to speed up training.
 tf.keras.mixed_precision.set_global_policy("mixed_float16")
+
+
+def _build_decoder(
+    multi_scale_features: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
+) -> tf.Tensor:
+    """
+    Builds the decoder portion of the network. This is typically used on top
+    of a pre-trained feature extractor in a transfer-learning setup.
+
+    Args:
+        multi_scale_features: Features extracted from different layers of the
+            encoder. Each set of features is expected to be half the spatial
+            resolution of the previous one.
+
+    Returns:
+        The decoder features.
+
+    """
+    scale1, scale2, scale3, scale4 = multi_scale_features
+
+    scale4 = Dropout(rate=0.5)(scale4)
+    scale3 = Dropout(rate=0.4)(scale3)
+    scale2 = Dropout(rate=0.3)(scale2)
+    scale1 = Dropout(rate=0.2)(scale1)
+    x = scale4
+
+    # decoder
+    x = Conv2D(
+        256,
+        1,
+        padding="same",
+        use_bias=False,
+        kernel_initializer="he_normal",
+        kernel_regularizer=l2(5e-4),
+    )(UpSampling2D()(x))
+    x = BatchNormalization()(x)
+    x = ReLU()(x)
+    x = Concatenate()([scale3, x])
+    x = Conv2D(
+        256,
+        3,
+        padding="same",
+        use_bias=False,
+        kernel_initializer="he_normal",
+        kernel_regularizer=l2(5e-4),
+    )(x)
+    x = BatchNormalization()(x)
+    x = ReLU()(x)
+
+    x = Conv2D(
+        128,
+        1,
+        padding="same",
+        use_bias=False,
+        kernel_initializer="he_normal",
+        kernel_regularizer=l2(5e-4),
+    )(UpSampling2D()(x))
+    x = BatchNormalization()(x)
+    x = ReLU()(x)
+    x = Concatenate()([scale2, x])
+    x = Conv2D(
+        128,
+        3,
+        padding="same",
+        use_bias=False,
+        kernel_initializer="he_normal",
+        kernel_regularizer=l2(5e-4),
+    )(x)
+    x = BatchNormalization()(x)
+    x = ReLU()(x)
+
+    x = Conv2D(
+        64,
+        1,
+        padding="same",
+        use_bias=False,
+        kernel_initializer="he_normal",
+        kernel_regularizer=l2(5e-4),
+    )(UpSampling2D()(x))
+    x = BatchNormalization()(x)
+    x = ReLU()(x)
+    # Because of the way the resnet layer sizes shake out, we need to add
+    # some slight cropping here.
+    x = Cropping2D(cropping=((1, 0), (0, 0)))(x)
+    x = Concatenate()([scale1, x])
+    x = Conv2D(
+        64,
+        3,
+        padding="same",
+        use_bias=False,
+        kernel_initializer="he_normal",
+        kernel_regularizer=l2(5e-4),
+    )(x)
+    x = BatchNormalization()(x)
+    return ReLU()(x)
 
 
 def _build_prediction_head(
@@ -110,7 +214,9 @@ def compute_sparse_predictions(
 
 
 def _build_common(
-    input_shape: Tuple[int, int, int], pretrained: bool = True
+    input_shape: Tuple[int, int, int],
+    pretrained: bool = True,
+    encoder: Optional[tf.keras.Model] = None,
 ) -> Tuple[tf.keras.Input, tf.Tensor]:
     """
     Builds the portions of the model that are common to all setups.
@@ -118,6 +224,8 @@ def _build_common(
     Args:
         input_shape: The shape of the image input to the model.
         pretrained: Whether to initialize with pretrained `ImageNet` weights.
+        encoder: A custom pretrained encoder which will be used for feature
+            extraction.
 
     Returns:
         The input layer, and the final extracted features.
@@ -137,25 +245,36 @@ def _build_common(
     normalized = layers.Lambda(_normalize, name="normalize")(images)
 
     # Build the model.
-    # features = _build_backbone(normalized, config=config)
-    return images, efficientnet(
-        image_input=normalized, input_shape=input_shape, pretrained=pretrained
-    )
+    if encoder is not None:
+        encoder_features = encoder(normalized)
+    else:
+        encoder_features = efficientnet(
+            image_input=normalized,
+            input_shape=input_shape,
+            pretrained=pretrained,
+        )
+    decoder_features = _build_decoder(encoder_features)
+
+    return images, decoder_features
 
 
-def build_detection_model(config: ModelConfig) -> tf.keras.Model:
+def build_detection_model(
+    config: ModelConfig, encoder: Optional[tf.keras.Model] = None
+) -> tf.keras.Model:
     """
     Builds the detection model.
 
     Args:
         config: The model configuration.
+        encoder: A custom pretrained encoder which will be used for feature
+            extraction.
 
     Returns:
         The model that it created.
 
     """
     images, features = _build_common(
-        input_shape=config.detection_model_input_shape
+        input_shape=config.detection_model_input_shape, encoder=encoder
     )
 
     heatmap = _build_prediction_head(features, output_channels=1)
@@ -203,13 +322,11 @@ def build_rotnet_model(config: ModelConfig) -> tf.keras.Model:
         name=ModelInputs.DETECTIONS_FRAME.value,
     )
 
-    backbone = EfficientNetV2S(
-        include_top=False,
-        input_tensor=images,
+    _, _, _, features = efficientnet(
+        image_input=images,
         input_shape=config.rot_net_input_shape,
-        weights=None,
+        pretrained=False,
     )
-    features = backbone.get_layer("top_activation").get_output_at(0)
 
     # Add the classification head.
     class_head = BnActConv(4, 1, activation="relu", padding="same")(features)
