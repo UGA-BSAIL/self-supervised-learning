@@ -65,3 +65,7 @@
 ### v0.9.0 (2021-11-24)
 
 - Support for latest version of CVAT.
+
+### v0.9.1 (2022-05-29)
+
+- Correctly lazy-initialize CVAT connection.
