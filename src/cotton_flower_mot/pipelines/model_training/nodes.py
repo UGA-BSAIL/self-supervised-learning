@@ -23,7 +23,7 @@ from .metrics import make_metrics
 
 
 def prepare_pretrained_encoder(
-    encoder: tf.keras.Model, config: ModelConfig
+    encoder: tf.keras.Model, config: ModelConfig, freeze_fraction: float = 1.0
 ) -> tf.keras.Model:
     """
     Prepares a custom pretrained model to be used as an encoder. In this case,
@@ -33,12 +33,20 @@ def prepare_pretrained_encoder(
     Args:
         encoder: The model to use as the encoder.
         config: The model configuration.
+        freeze_fraction: Fraction of the layers to freeze. A number <1 will
+            allow layers at the top to be trained while keeping the bottom
+            frozen.
 
     Returns:
         A modified model.
 
     """
     logger.info("Using a custom pre-trained encoder.")
+
+    # Calculate how many layers to freeze.
+    num_layers = len(encoder.layers)
+    num_to_freeze = int(num_layers * freeze_fraction)
+    logger.debug("Freezing {} layers out of {}.", num_to_freeze, num_layers)
 
     # Change the input size of the model.
     new_input = layers.Input(
@@ -49,12 +57,11 @@ def prepare_pretrained_encoder(
         encoder, input_tensors=[new_input]
     )
     # Copy over the pre-trained weights.
-    for new_layer, old_layer in zip(
-        new_encoder.layers[1:], encoder.layers[1:]
+    for i, (new_layer, old_layer) in enumerate(
+        zip(new_encoder.layers[1:], encoder.layers[1:])
     ):
         new_layer.set_weights(old_layer.get_weights())
-
-    new_encoder.trainable = False
+        new_layer.trainable = i > num_to_freeze
 
     # Extract the layers that we need.
     block2 = new_encoder.get_layer("block2d_add").get_output_at(0)

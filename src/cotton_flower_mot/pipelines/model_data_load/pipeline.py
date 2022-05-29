@@ -12,10 +12,9 @@ from ..dataset_io import (
     inputs_and_targets_from_datasets,
     rot_net_inputs_and_targets_from_dataset,
 )
-from .nodes import build_rotnet_pipeline
 
 
-def create_pipeline(**kwargs):
+def create_pipeline(**_):
     # Preset for loading training data.
     load_datasets = partial(
         inputs_and_targets_from_datasets,

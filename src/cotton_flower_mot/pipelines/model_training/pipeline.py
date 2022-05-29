@@ -31,6 +31,7 @@ def create_pipeline(init_rotnet: bool = False):
                     dict(
                         encoder="pretrained_rotnet_model",
                         config="model_config",
+                        freeze_fraction="params:freeze_fraction",
                     ),
                     "encoder_model",
                 ),
