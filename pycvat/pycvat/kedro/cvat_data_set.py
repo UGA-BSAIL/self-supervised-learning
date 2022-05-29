@@ -45,12 +45,10 @@ class CvatDataSet(AbstractDataSet):
             "password" in credentials
         ), "'password' must be specified in CVAT credentials."
 
-        username = credentials["username"]
-        password = credentials["password"]
-        self.__api = make_api_client(
-            username=username, password=password, host=host, **kwargs
-        )
-
+        self.__username = credentials["username"]
+        self.__password = credentials["password"]
+        self.__host = host
+        self.__config_kwargs = kwargs
         self.__task_id = task_id
 
         # CVAT data is lazy-loaded, so this specifies whether the connection
@@ -77,11 +75,16 @@ class CvatDataSet(AbstractDataSet):
 
         self.__connected_to_cvat = True
 
+        api = make_api_client(
+            username=self.__username,
+            password=self.__password,
+            host=self.__host,
+            **self.__config_kwargs
+        )
+
         with ExitStack() as exit_stack:
             handle = exit_stack.enter_context(
-                Task.init_and_upload(
-                    task_id=self.__task_id, api_client=self.__api
-                )
+                Task.init_and_upload(task_id=self.__task_id, api_client=api)
             )
 
             context = exit_stack.pop_all()
@@ -128,4 +131,4 @@ class CvatDataSet(AbstractDataSet):
 
     # Not tested, because Kedro doesn't provide a public API for this.
     def _describe(self) -> Dict[str, Any]:  # pragma: no cover
-        return dict(task_id=self.__task_id, host=self.__api.configuration.host)
+        return dict(task_id=self.__task_id, host=self.__host)

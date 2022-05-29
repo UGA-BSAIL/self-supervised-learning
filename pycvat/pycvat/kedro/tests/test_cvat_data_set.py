@@ -89,21 +89,6 @@ class TestCvatDataSet:
         # needs the mocks to be active to work.
         data_set.__del__()
 
-    def test_init(self, config: ConfigForTests) -> None:
-        """
-        Tests that the initialization process works correctly.
-
-        Args:
-            config: The configuration to use for testing.
-
-        """
-        # Assert.
-        config.mock_make_api_client.assert_called_once_with(
-            username=config.username,
-            password=config.password,
-            host=config.host,
-        )
-
     @pytest.mark.parametrize(
         "cvat_connected",
         [False, True],
@@ -148,6 +133,13 @@ class TestCvatDataSet:
         got_data = config.data_set.load()
 
         # Assert.
+        # It should have initialized the connection.
+        config.mock_make_api_client.assert_called_once_with(
+            username=config.username,
+            password=config.password,
+            host=config.host,
+        )
+
         # It should have set up the Task.
         mock_api = config.mock_make_api_client.return_value
         config.mock_task_class.init_and_upload.assert_called_once_with(
