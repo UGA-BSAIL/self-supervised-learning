@@ -1,4 +1,1 @@
-# Initial untrained model. We don't bother saving this to the disk.
-initial_model:
-  type: MemoryDataSet
-  copy_mode: assign
+

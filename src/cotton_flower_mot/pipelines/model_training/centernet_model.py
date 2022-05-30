@@ -332,7 +332,7 @@ def build_rotnet_model(config: ModelConfig) -> tf.keras.Model:
     class_head = BnActConv(4, 1, activation="relu", padding="same")(features)
     average_pool = layers.GlobalAveragePooling2D()(class_head)
     rotation_class = layers.Activation(
-        "softmax", name=RotNetTargets.ROTATION_CLASS.value
+        "softmax", dtype=tf.float32, name=RotNetTargets.ROTATION_CLASS.value
     )(average_pool)
 
     return tf.keras.Model(inputs=images, outputs=rotation_class)
