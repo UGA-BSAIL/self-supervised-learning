@@ -62,6 +62,8 @@ learning_phases:
       lr_patience_epochs: 20
       # Minimum learning rate to hit.
       min_learning_rate: 0.00001
+      # Number of LR warmup steps. Setting this to zero disables warmup.
+      warmup_steps: 100
     # The momentum to use for the phase.
     momentum: 0.9
     # Number of epochs to train for in this phase.
@@ -87,6 +89,8 @@ rotnet_learning_phases:
       lr_patience_epochs: 2
       # Minimum learning rate to hit.
       min_learning_rate: 0.00001
+      # Number of LR warmup steps. Setting this to zero disables warmup.
+      warmup_steps: 0
     # The momentum to use for the phase.
     momentum: 0.9
     # Number of epochs to train for in this phase.

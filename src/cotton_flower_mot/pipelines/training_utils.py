@@ -14,6 +14,7 @@ import tensorflow.keras.optimizers.schedules as schedules
 from loguru import logger
 
 from .callbacks import ClearMemory
+from .schedules import Warmup
 
 
 def make_learning_rate(
@@ -31,19 +32,24 @@ def make_learning_rate(
 
     """
     initial_rate = config["initial"]
-    if not config.get("decay", False):
-        # No decay is configured.
-        logger.debug("Using fixed learning rate of {}.", initial_rate)
-        return initial_rate
+    if config.get("decay", False):
+        logger.debug("Using decaying learning rate.")
+        return tf.keras.experimental.CosineDecayRestarts(
+            initial_rate,
+            config["decay_steps"],
+            t_mul=config["t_mul"],
+            m_mul=config["m_mul"],
+            alpha=config["min_learning_rate"],
+        )
 
-    logger.debug("Using decaying learning rate.")
-    return tf.keras.experimental.CosineDecayRestarts(
-        initial_rate,
-        config["decay_steps"],
-        t_mul=config["t_mul"],
-        m_mul=config["m_mul"],
-        alpha=config["min_learning_rate"],
-    )
+    warmup_steps = config.get("warmup_steps", 0)
+    if warmup_steps != 0:
+        logger.debug("Using LR warmup.")
+        return Warmup(max_learning_rate=initial_rate, num_steps=warmup_steps)
+
+    # No decay is configured.
+    logger.debug("Using fixed learning rate of {}.", initial_rate)
+    return initial_rate
 
 
 def set_check_numerics(enable: bool) -> None:
