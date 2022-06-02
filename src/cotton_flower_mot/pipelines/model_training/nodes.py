@@ -44,37 +44,24 @@ def prepare_pretrained_encoder(
     """
     logger.info("Using a custom pre-trained encoder.")
 
-    new_input = layers.Input(
-        shape=config.detection_model_input_shape,
-        name=ModelInputs.DETECTIONS_FRAME.value,
-    )
-    encoder = EfficientNetV2S(
-        include_top=False,
-        input_tensor=new_input,
-        input_shape=config.detection_model_input_shape,
-    )
-    new_encoder = encoder
-
     # Calculate how many layers to freeze.
     num_layers = len(encoder.layers)
     num_to_freeze = int(num_layers * freeze_fraction)
     logger.debug("Freezing {} layers out of {}.", num_to_freeze, num_layers)
 
     # Change the input size of the model.
-    # new_input = layers.Input(
-    #     shape=config.detection_model_input_shape,
-    #     name=ModelInputs.DETECTIONS_FRAME.value,
-    # )
-    # new_encoder = tf.keras.models.clone_model(
-    #     encoder, input_tensors=[new_input]
-    # )
+    new_input = layers.Input(
+        shape=config.detection_model_input_shape,
+        name=ModelInputs.DETECTIONS_FRAME.value,
+    )
+    new_encoder = tf.keras.models.clone_model(
+        encoder, input_tensors=[new_input]
+    )
     # Copy over the pre-trained weights.
-    # for i, (new_layer, old_layer) in enumerate(
-    #     zip(new_encoder.layers[1:], encoder.layers[1:])
-    # ):
-    #     new_layer.set_weights(old_layer.get_weights())
-    #     new_layer.trainable = i > num_to_freeze
-    for i, new_layer in enumerate(new_encoder.layers[1:]):
+    for i, (new_layer, old_layer) in enumerate(
+        zip(new_encoder.layers[1:], encoder.layers[1:])
+    ):
+        new_layer.set_weights(old_layer.get_weights())
         new_layer.trainable = i > num_to_freeze
 
     # Extract the layers that we need.

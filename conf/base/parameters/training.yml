@@ -94,4 +94,4 @@ rotnet_learning_phases:
     # The momentum to use for the phase.
     momentum: 0.9
     # Number of epochs to train for in this phase.
-    num_epochs: 6
+    num_epochs: 1
