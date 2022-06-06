@@ -61,8 +61,11 @@ def prepare_pretrained_encoder(
     for i, (new_layer, old_layer) in enumerate(
         zip(new_encoder.layers[1:], encoder.layers[1:])
     ):
-        new_layer.set_weights(old_layer.get_weights())
-        new_layer.trainable = i > num_to_freeze
+        if i <= num_to_freeze:
+            new_layer.set_weights(old_layer.get_weights())
+            new_layer.trainable = False
+        else:
+            new_layer.trainable = True
 
     # Extract the layers that we need.
     block2 = new_encoder.get_layer("block2d_add").get_output_at(0)
