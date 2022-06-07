@@ -9,9 +9,9 @@ from pydantic.dataclasses import dataclass
 from .assignment import construct_gt_sinkhorn_matrix
 from .config import ModelConfig
 from .heat_maps import make_object_heat_map
-from .schemas import ModelInputs, ModelTargets
+from .schemas import ColorizationTargets, ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
-from .schemas import RotNetTargets, ColorizationTargets
+from .schemas import RotNetTargets
 from .schemas import UnannotatedFeatures as Uf
 
 _OTF_FEATURE_DESCRIPTION = {
@@ -425,9 +425,17 @@ def _compute_histograms(
         input pixel.
 
     """
+    input_shape = tf.shape(image_channel)
     image_channel = tf.expand_dims(tf.expand_dims(image_channel, 0), -1)
+
+    # First, pre-bin all the values in the image.
+    binned = tf.histogram_fixed_width_bins(
+        image_channel, value_range=[0.0, 1.0], nbins=num_bins
+    )
+
+    # Extract patches.
     patches = tf.image.extract_patches(
-        image_channel,
+        binned,
         sizes=[1, window_size, window_size, 1],
         strides=[1] * 4,
         rates=[1] * 4,
@@ -439,21 +447,15 @@ def _compute_histograms(
     patches = tf.reshape(patches, tf.stack((num_patches, -1)))
 
     # Compute histograms of each patch.
-    histograms = tf.map_fn(
-        lambda p: tf.histogram_fixed_width(
-            p, values_range=[0.0, 1.0], nbins=num_bins
-        ),
-        patches,
-        fn_output_signature=tf.TensorSpec([None], tf.int32),
-    )
+    patches_sorted = tf.sort(patches, axis=1)
+    histograms = tf.math.bincount(patches_sorted, axis=-1, minlength=num_bins)
 
     # Reshape to correspond with the image.
-    image_shape = tf.shape(image_channel)
-    return tf.reshape(histograms, tf.concat((image_shape, -1), axis=0))
+    return tf.reshape(histograms, tf.concat((input_shape, [-1]), axis=0))
 
 
 def _load_colorization(
-        unannotated_features: Feature, *, config: ModelConfig
+    unannotated_features: Feature, *, config: ModelConfig
 ) -> Tuple[Feature, Feature]:
     """
     Extracts colorization features from the unannotated TFRecords.
@@ -479,6 +481,7 @@ def _load_colorization(
     chroma_histograms = _compute_histograms(image_hcl[:, :, 1])
 
     lightness = image_hcl[:, :, 2]
+    lightness = tf.cast(lightness * 255, tf.uint8)
     return {ModelInputs.DETECTIONS_FRAME.value: lightness}, {
         ColorizationTargets.HUE_HIST.value: hue_histograms,
         ColorizationTargets.CHROMA_HIST.value: chroma_histograms,
@@ -529,7 +532,7 @@ def _get_geometric_features(
 
         # Compute the offset.
         center_points_px = tf.stack([center_x, center_y], axis=1)
-        down_sample_factor = tf.constant(2**config.num_reduction_stages)
+        down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
         offsets = (
             tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
         )
@@ -1213,8 +1216,9 @@ def _batch_and_prefetch(
     return prefetched.with_options(options)
 
 
-def _shuffle_and_deserialize(dataset: tf.data.Dataset,
-                             num_shards: int = 100) -> tf.data.Dataset:
+def _shuffle_and_deserialize(
+    dataset: tf.data.Dataset, num_shards: int = 100
+) -> tf.data.Dataset:
     """
     Shuffles a dataset, and deserializes TFRecords.
 
@@ -1277,11 +1281,11 @@ def rot_net_inputs_and_targets_from_dataset(
 
 
 def colorization_inputs_and_targets_from_dataset(
-        unannotated_dataset: tf.data.Dataset,
-        *,
-        config: ModelConfig,
-        batch_size: int = 8,
-        num_prefetch_batches: int = 1,
+    unannotated_dataset: tf.data.Dataset,
+    *,
+    config: ModelConfig,
+    batch_size: int = 8,
+    num_prefetch_batches: int = 1,
 ) -> tf.data.Dataset:
     """
     Loads colorization input features from a dataset of unannotated images.
@@ -1301,7 +1305,8 @@ def colorization_inputs_and_targets_from_dataset(
 
     # Extract the colorization features.
     rot_net_dataset = deserialized.map(
-        partial(_load_colorization, config=config), num_parallel_calls=_NUM_THREADS
+        partial(_load_colorization, config=config),
+        num_parallel_calls=_NUM_THREADS,
     )
 
     # Batch and prefetch.
