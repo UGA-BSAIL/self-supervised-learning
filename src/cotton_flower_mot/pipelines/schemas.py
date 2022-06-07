@@ -271,3 +271,19 @@ class RotNetTargets(enum.Enum):
     """
     The predicted rotation class for an input.
     """
+
+
+@enum.unique
+class ColorizationTargets(enum.Enum):
+    """
+    Key names for the colorization model targets.
+    """
+
+    CHROMA_HIST = "chroma_histogram"
+    """
+    The predicted chroma histogram.
+    """
+    HUE_HIST = "hue_histogram"
+    """
+    The predicted hue histogram.
+    """

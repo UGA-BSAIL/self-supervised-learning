@@ -20,6 +20,8 @@ class ModelConfig:
         rot_net_input_shape: The shape of the input to use for RotNet
             pretraining. Should be square so rotated images can be stored in a
             single tensor. (height, width, channels)
+        colorization_input_shape: The shape of the input to use for colorization
+            pretraining.
         num_reduction_stages: How many initial reduction stages to add to the
             detector. Every stage will reduce the size of the heatmap output
             by a factor of 2.
@@ -41,6 +43,7 @@ class ModelConfig:
     frame_input_shape: Tuple[int, int, int]
     detection_model_input_shape: Tuple[int, int, int]
     rot_net_input_shape: Tuple[int, int, int]
+    colorization_input_shape: Tuple[int, int, int]
     num_reduction_stages: int
     detection_sigma: float
 

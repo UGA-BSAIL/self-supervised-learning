@@ -11,7 +11,7 @@ from .config import ModelConfig
 from .heat_maps import make_object_heat_map
 from .schemas import ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
-from .schemas import RotNetTargets
+from .schemas import RotNetTargets, ColorizationTargets
 from .schemas import UnannotatedFeatures as Uf
 
 _OTF_FEATURE_DESCRIPTION = {
@@ -132,22 +132,6 @@ class FeatureName(enum.Enum):
     SEQUENCE_ID = "sequence_id"
     """
     The sequence ID of the clip.
-    """
-
-
-@enum.unique
-class RotNetFeatureName(enum.Enum):
-    """
-    Standard key names for processed RotNet features.
-    """
-
-    IMAGE = "image"
-    """
-    The complete image.
-    """
-    PREDICTIONS = "predictions"
-    """
-    Integer specifying the rotation class label of this image.
     """
 
 
@@ -378,8 +362,7 @@ def _load_rot_net(
         config: The model configuration to use.
 
     Returns:
-        Equivalent RotNet features. Will match the spec set out in
-        `RotNetFeatureName`. Will return input and target features.
+        Equivalent RotNet features. Will return input and target features.
 
     """
     # Decode the image.
@@ -394,6 +377,111 @@ def _load_rot_net(
     rotations = _extract_rotations(image)
     return {ModelInputs.DETECTIONS_FRAME.value: rotations}, {
         RotNetTargets.ROTATION_CLASS.value: labels,
+    }
+
+
+def _to_hcl(image: tf.Tensor) -> tf.Tensor:
+    """
+    Converts an image to the hue, chroma, lightness space.
+
+    Args:
+        image: The image to convert.
+
+    Returns: The HCL image.
+
+    """
+    # Convert the image to floats.
+    float_image = tf.cast(image, tf.float32)
+    rescaled_image = float_image / 255.0
+
+    hsv = tf.image.rgb_to_hsv(rescaled_image)
+
+    # Convert HSV to HCL.
+    hue = hsv[:, :, 0]
+    chroma = hsv[:, :, 1] * hsv[:, :, 2]
+    lightness = hsv[:, :, 2] - chroma / 2.0
+
+    return tf.stack([hue, chroma, lightness], axis=-1)
+
+
+def _compute_histograms(
+    image_channel: tf.Tensor,
+    window_size: int = 7,
+    num_bins: int = 32,
+) -> tf.Tensor:
+    """
+    Computes the histogram of an image, using color information
+    from a window around each pixel.
+
+    Args:
+        image_channel: The single-channel image to compute histograms for.
+            Should be rank 2.
+        window_size: The size of the window to use, in pixels.
+        num_bins: The number of bins to use for the histogram.
+
+    Returns:
+        The histograms it computed. Will be a 3D matrix of shape
+        [num_rows, num_columns, num_bins], containing the histograms for each
+        input pixel.
+
+    """
+    image_channel = tf.expand_dims(tf.expand_dims(image_channel, 0), -1)
+    patches = tf.image.extract_patches(
+        image_channel,
+        sizes=[1, window_size, window_size, 1],
+        strides=[1] * 4,
+        rates=[1] * 4,
+        padding="SAME",
+    )
+    # There will be only one batch dimension, so get rid of it. We also
+    # flatten everything into a single matrix where each row is a patch.
+    num_patches = tf.reduce_prod(patches.shape[:3])
+    patches = tf.reshape(patches, tf.stack((num_patches, -1)))
+
+    # Compute histograms of each patch.
+    histograms = tf.map_fn(
+        lambda p: tf.histogram_fixed_width(
+            p, values_range=[0.0, 1.0], nbins=num_bins
+        ),
+        patches,
+        fn_output_signature=tf.TensorSpec([None], tf.int32),
+    )
+
+    # Reshape to correspond with the image.
+    image_shape = tf.shape(image_channel)
+    return tf.reshape(histograms, tf.concat((image_shape, -1), axis=0))
+
+
+def _load_colorization(
+        unannotated_features: Feature, *, config: ModelConfig
+) -> Tuple[Feature, Feature]:
+    """
+    Extracts colorization features from the unannotated TFRecords.
+
+    Args:
+        unannotated_features: The raw unannotated features.
+        config: The model configuration to use.
+
+    Returns:
+        Equivalent Colorization features. Will return input and target features.
+
+    """
+    # Decode the image.
+    image_encoded = unannotated_features[Uf.IMAGE_ENCODED.value]
+    image = _decode_image(image_encoded, ratio=2)
+
+    # Crop to the colorization input shape.
+    image = tf.image.random_crop(image, size=config.colorization_input_shape)
+
+    # Generate histograms.
+    image_hcl = _to_hcl(image)
+    hue_histograms = _compute_histograms(image_hcl[:, :, 0])
+    chroma_histograms = _compute_histograms(image_hcl[:, :, 1])
+
+    lightness = image_hcl[:, :, 2]
+    return {ModelInputs.DETECTIONS_FRAME.value: lightness}, {
+        ColorizationTargets.HUE_HIST.value: hue_histograms,
+        ColorizationTargets.CHROMA_HIST.value: chroma_histograms,
     }
 
 
@@ -1125,13 +1213,40 @@ def _batch_and_prefetch(
     return prefetched.with_options(options)
 
 
+def _shuffle_and_deserialize(dataset: tf.data.Dataset,
+                             num_shards: int = 100) -> tf.data.Dataset:
+    """
+    Shuffles a dataset, and deserializes TFRecords.
+
+    Args:
+        dataset: The dataset to process.
+        num_shards: The number of shards to use when randomizing. A larger
+            number improves randomness, but may risk exhausting the maximum
+            number of open files.
+
+    Returns:
+        The processed dataset.
+
+    """
+    # Shuffle all the clips together through sharding.
+    sharded_datasets = []
+    for i in range(0, num_shards):
+        sharded_datasets.append(dataset.shard(num_shards, i))
+    shuffled_dataset = tf.data.Dataset.sample_from_datasets(sharded_datasets)
+
+    # Deserialize it.
+    return shuffled_dataset.map(
+        lambda s: tf.io.parse_single_example(s, _UF_FEATURE_DESCRIPTION),
+        num_parallel_calls=_NUM_THREADS,
+    )
+
+
 def rot_net_inputs_and_targets_from_dataset(
     unannotated_dataset: tf.data.Dataset,
     *,
     config: ModelConfig,
     batch_size: int = 8,
     num_prefetch_batches: int = 1,
-    num_shards: int = 100,
 ) -> tf.data.Dataset:
     """
     Loads RotNet input features from a dataset of unannotated images.
@@ -1142,25 +1257,12 @@ def rot_net_inputs_and_targets_from_dataset(
         batch_size: The batch size to use. The actual batch size will be
             multiplied by four. because it will include all four rotations.
         num_prefetch_batches: The number of batches to prefetch.
-        num_shards: The number of shards to use when randomizing. A larger
-            number improves randomness, but may risk exhausting the maximum
-            number of open files.
 
     Returns:
         A dataset that produces input images and target classes.
 
     """
-    # Shuffle all the clips together through sharding.
-    sharded_datasets = []
-    for i in range(0, num_shards):
-        sharded_datasets.append(unannotated_dataset.shard(num_shards, i))
-    shuffled_dataset = tf.data.Dataset.sample_from_datasets(sharded_datasets)
-
-    # Deserialize it.
-    deserialized = shuffled_dataset.map(
-        lambda s: tf.io.parse_single_example(s, _UF_FEATURE_DESCRIPTION),
-        num_parallel_calls=_NUM_THREADS,
-    )
+    deserialized = _shuffle_and_deserialize(unannotated_dataset)
 
     # Extract the rotations.
     rot_net_dataset = deserialized.map(
@@ -1168,6 +1270,39 @@ def rot_net_inputs_and_targets_from_dataset(
     )
     # Unbatch to separate all the rotations.
     rot_net_dataset = rot_net_dataset.unbatch()
+
+    # Batch and prefetch.
+    batched = rot_net_dataset.batch(batch_size * 4)
+    return batched.prefetch(num_prefetch_batches)
+
+
+def colorization_inputs_and_targets_from_dataset(
+        unannotated_dataset: tf.data.Dataset,
+        *,
+        config: ModelConfig,
+        batch_size: int = 8,
+        num_prefetch_batches: int = 1,
+) -> tf.data.Dataset:
+    """
+    Loads colorization input features from a dataset of unannotated images.
+
+    Args:
+        unannotated_dataset: The dataset of unannotated images.
+        config: Model configuration we are loading data for.
+        batch_size: The batch size to use. The actual batch size will be
+            multiplied by four. because it will include all four rotations.
+        num_prefetch_batches: The number of batches to prefetch.
+
+    Returns:
+        A dataset that produces input images and target classes.
+
+    """
+    deserialized = _shuffle_and_deserialize(unannotated_dataset)
+
+    # Extract the colorization features.
+    rot_net_dataset = deserialized.map(
+        partial(_load_colorization, config=config), num_parallel_calls=_NUM_THREADS
+    )
 
     # Batch and prefetch.
     batched = rot_net_dataset.batch(batch_size * 4)
