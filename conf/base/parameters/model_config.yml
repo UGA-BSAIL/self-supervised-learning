@@ -6,6 +6,11 @@ frame_input_shape: [1080, 1920, 3]
 detection_model_input_shape: [540, 960, 3]
 # Shape of the input to the RotNet model.
 rot_net_input_shape: [360, 360, 3]
+# Shape of the input to the colorization model.
+colorization_input_shape: [270, 480, 1]
+# Shape of the output from the colorization model. The last dimension
+# is the number of bins in the histograms.
+colorization_output_shape: [72, 120, 32]
 # Number of appearance features to generate.
 num_appearance_features: 128
 # Number of GCN output channels to use.

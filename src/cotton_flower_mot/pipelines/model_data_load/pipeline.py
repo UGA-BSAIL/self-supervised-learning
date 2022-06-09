@@ -11,7 +11,9 @@ from ..dataset_io import (
     HeatMapSource,
     inputs_and_targets_from_datasets,
     rot_net_inputs_and_targets_from_dataset,
+    colorization_inputs_and_targets_from_dataset,
 )
+from .nodes import concat_datasets
 
 
 def create_pipeline(**_):
@@ -99,7 +101,24 @@ def create_pipeline(**_):
                     config="model_config",
                     batch_size="params:rot_net_batch_size",
                 ),
-                "unannotated_data",
+                "rotnet_unannotated_data",
+            ),
+            node(
+                concat_datasets,
+                [
+                    "tfrecord_unannotated_no_wheel_combined",
+                    "tfrecord_unannotated_wheel_combined",
+                ],
+                "tfrecord_unannotated_all",
+            ),
+            node(
+                colorization_inputs_and_targets_from_dataset,
+                dict(
+                    unannotated_dataset="tfrecord_unannotated_all",
+                    config="model_config",
+                    batch_size="params:colorization_batch_size",
+                ),
+                "colorization_unannotated_data",
             ),
         ]
     )

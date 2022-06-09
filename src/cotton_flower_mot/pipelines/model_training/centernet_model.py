@@ -19,7 +19,12 @@ from tensorflow.keras.layers import (
 from tensorflow.python.keras.regularizers import l2
 
 from ..config import ModelConfig
-from ..schemas import ModelInputs, ModelTargets, RotNetTargets
+from ..schemas import (
+    ModelInputs,
+    ModelTargets,
+    RotNetTargets,
+    ColorizationTargets,
+)
 from .layers import BnActConv, PeakLayer
 from .layers.feature_extractors import efficientnet
 
@@ -106,9 +111,6 @@ def _build_decoder(
     )(UpSampling2D()(x))
     x = BatchNormalization()(x)
     x = ReLU()(x)
-    # Because of the way the resnet layer sizes shake out, we need to add
-    # some slight cropping here.
-    x = Cropping2D(cropping=((1, 0), (0, 0)))(x)
     x = Concatenate()([scale1, x])
     x = Conv2D(
         64,
@@ -217,7 +219,7 @@ def _build_common(
     input_shape: Tuple[int, int, int],
     pretrained: bool = True,
     encoder: Optional[tf.keras.Model] = None,
-) -> Tuple[tf.keras.Input, tf.Tensor]:
+) -> Tuple[tf.keras.Input, Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]]:
     """
     Builds the portions of the model that are common to all setups.
 
@@ -253,9 +255,8 @@ def _build_common(
             input_shape=input_shape,
             pretrained=pretrained,
         )
-    decoder_features = _build_decoder(encoder_features)
 
-    return images, decoder_features
+    return images, encoder_features
 
 
 def build_detection_model(
@@ -273,13 +274,19 @@ def build_detection_model(
         The model that it created.
 
     """
-    images, features = _build_common(
+    images, encoder_features = _build_common(
         input_shape=config.detection_model_input_shape, encoder=encoder
     )
 
-    heatmap = _build_prediction_head(features, output_channels=1)
-    sizes = _build_prediction_head(features, output_channels=2)
-    offsets = _build_prediction_head(features, output_channels=2)
+    # Pad the encoder features correctly.
+    scale1, scale2, scale3, scale4 = encoder_features
+    scale1 = layers.ZeroPadding2D(((0, 1), (0, 0)))(scale1)
+
+    decoder_features = _build_decoder((scale1, scale2, scale3, scale4))
+
+    heatmap = _build_prediction_head(decoder_features, output_channels=1)
+    sizes = _build_prediction_head(decoder_features, output_channels=2)
+    offsets = _build_prediction_head(decoder_features, output_channels=2)
 
     # The loss expects sizes and offsets to be merged.
     geometry = layers.Concatenate(
@@ -336,3 +343,45 @@ def build_rotnet_model(config: ModelConfig) -> tf.keras.Model:
     )(average_pool)
 
     return tf.keras.Model(inputs=images, outputs=rotation_class)
+
+
+def build_colorization_model(config: ModelConfig) -> tf.keras.Model:
+    """
+    Builds the model to use for RotNet pre-training.
+
+    Args:
+        config: The model configuration.
+
+    Returns:
+        The model that it created.
+
+    """
+    images, encoder_features = _build_common(
+        input_shape=config.colorization_input_shape, pretrained=False
+    )
+
+    # Pad the encoder features correctly.
+    scale1, scale2, scale3, scale4 = encoder_features
+    scale1 = layers.ZeroPadding2D(((2, 2), (0, 0)))(scale1)
+    scale2 = layers.ZeroPadding2D(((1, 1), (0, 0)))(scale2)
+    scale3 = layers.ZeroPadding2D(((0, 1), (0, 0)))(scale3)
+
+    decoder_features = _build_decoder((scale1, scale2, scale3, scale4))
+
+    # Add the prediction head.
+    hue = _build_prediction_head(
+        decoder_features,
+        output_channels=32,
+    )
+    chroma = _build_prediction_head(
+        decoder_features,
+        output_channels=32,
+    )
+    hue = layers.Activation(
+        "linear", dtype=tf.float32, name=ColorizationTargets.HUE_HIST.value
+    )(hue)
+    chroma = layers.Activation(
+        "linear", dtype=tf.float32, name=ColorizationTargets.CHROMA_HIST.value
+    )(chroma)
+
+    return tf.keras.Model(inputs=images, outputs=[hue, chroma])

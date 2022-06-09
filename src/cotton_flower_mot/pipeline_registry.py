@@ -14,6 +14,7 @@ from .pipelines import (
     model_evaluation,
     model_training,
     train_rotnet,
+    train_colorization,
 )
 
 
@@ -39,6 +40,9 @@ def register_pipelines() -> Dict[str, Pipeline]:
         data_load_pipeline + model_training.create_pipeline(init_rotnet=True)
     )
     rotnet_pipeline = data_load_pipeline + train_rotnet.create_pipeline()
+    colorization_pipeline = (
+        data_load_pipeline + train_colorization.create_pipeline()
+    )
     evaluation_pipeline = (
         data_load_pipeline + model_evaluation.create_pipeline()
     )
@@ -56,4 +60,5 @@ def register_pipelines() -> Dict[str, Pipeline]:
         "convert_annotations": conversion_pipeline,
         "auto_annotation": annotation_pipeline,
         "train_rotnet": rotnet_pipeline,
+        "train_colorization": colorization_pipeline,
     }

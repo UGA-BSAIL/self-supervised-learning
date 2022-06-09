@@ -2,6 +2,8 @@
 batch_size: 16
 # Batch size to use for training RotNet
 rot_net_batch_size: 8
+# Batch size to use for training colorization.
+colorization_batch_size: 16
 
 # Tensorboard parameters.
 # Log directory.
@@ -71,6 +73,34 @@ learning_phases:
 
 # Learning phases for training RotNet.
 rotnet_learning_phases:
+  # The initial learning rate to use for the phase.
+  - learning_rate:
+      # Initial learning rate value.
+      initial: 0.001
+      # Specify that we want to decay over time.
+      decay: false
+      # Number of steps to decay over.
+      # (440 steps per epoch)
+      decay_steps: 1320
+      # Used to derive the number of iterations in the i-th period.
+      t_mul: 2.0
+      # Used to derive the initial learning rate of the i-th period.
+      m_mul: 1.0
+      # How many epochs of no improvement we tolerate before reducing the LR,
+      # if we are not using SGDR.
+      lr_patience_epochs: 2
+      # Minimum learning rate to hit.
+      min_learning_rate: 0.00001
+      # Number of LR warmup steps. Setting this to zero disables warmup.
+      warmup_steps: 0
+    # The momentum to use for the phase.
+    momentum: 0.9
+    # Number of epochs to train for in this phase.
+    num_epochs: 1
+
+
+# Learning phases for training colorization.
+colorization_learning_phases:
   # The initial learning rate to use for the phase.
   - learning_rate:
       # Initial learning rate value.

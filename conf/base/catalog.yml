@@ -54,6 +54,11 @@ tfrecord_unannotated_wheel_combined:
   type: cotton_flower_mot.data_sets.TfRecordsDataSet
   filepath: data/05_model_input/unannotated/wheel
 
+# Encompasses all unannotated data.
+tfrecord_unannotated_all:
+  type: MemoryDataSet
+  copy_mode: assign
+
 # Intermediate TF Datasets containing pre-processed data.
 training_data:
   type: MemoryDataSet
@@ -67,7 +72,11 @@ validation_data:
   type: MemoryDataSet
   copy_mode: assign
 
-unannotated_data:
+rotnet_unannotated_data:
+  type: MemoryDataSet
+  copy_mode: assign
+
+colorization_unannotated_data:
   type: MemoryDataSet
   copy_mode: assign
 
@@ -101,6 +110,10 @@ initial_rotnet_model:
   type: MemoryDataSet
   copy_mode: assign
 
+initial_colorization_model:
+  type: MemoryDataSet
+  copy_mode: assign
+
 encoder_model:
   type: MemoryDataSet
   copy_mode: assign
@@ -118,4 +131,14 @@ pretrained_rotnet_model_output:
 # Same, but a version used as input for transfer learning.
 pretrained_rotnet_model:
   filepath: data/06_models/pretrained_rotnet.hd5
+  << : *model_args
+
+# Saved model, produced at the end of RotNet pre-training.
+pretrained_colorization_model_output:
+  filepath: ${output_data_dir}/06_models/pretrained_colorization.hd5
+  << : *model_args
+
+# Same, but a version used as input for transfer learning.
+pretrained_colorization_model:
+  filepath: data/06_models/pretrained_colorization.hd5
   << : *model_args

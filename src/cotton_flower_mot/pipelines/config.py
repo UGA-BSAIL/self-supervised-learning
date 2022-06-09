@@ -22,6 +22,9 @@ class ModelConfig:
             single tensor. (height, width, channels)
         colorization_input_shape: The shape of the input to use for colorization
             pretraining.
+        colorization_output_shape: The shape of the outputs from the
+            colorization network. The last dimension is the number of
+            histogram bins.
         num_reduction_stages: How many initial reduction stages to add to the
             detector. Every stage will reduce the size of the heatmap output
             by a factor of 2.
@@ -44,6 +47,7 @@ class ModelConfig:
     detection_model_input_shape: Tuple[int, int, int]
     rot_net_input_shape: Tuple[int, int, int]
     colorization_input_shape: Tuple[int, int, int]
+    colorization_output_shape: Tuple[int, int, int]
     num_reduction_stages: int
     detection_sigma: float
 

@@ -11,27 +11,19 @@ from tqdm import tqdm
 from ..dataset_io import rot_net_inputs_and_targets_from_dataset
 
 
-def build_rotnet_pipeline(
-    unannotated_datasets: Dict[str, Callable[[], tf.data.Dataset]],
-    **kwargs: Any
-) -> tf.data.Dataset:
+def concat_datasets(*args: Any) -> tf.data.Dataset:
     """
-    Builds the pipeline for loading `RotNet` data.
+    Concatenates the specified datasets.
 
     Args:
-        unannotated_datasets: The raw, unannotated data to use as input.
-        **kwargs: Will be forwarded to
-            `rot_net_inputs_and_targets_from_dataset`.
+        *args: The datasets to concatenate.
 
     Returns:
-        The dataset for training `RotNet`.
+        The concatenated dataset.
 
     """
-    # Load the actual datasets.
-    datasets = []
-    for loader in tqdm(
-        unannotated_datasets.values(), desc="Loading unannotated clips"
-    ):
-        datasets.append(loader())
+    combined = args[0]
+    for dataset in args[1:]:
+        combined = combined.concatenate(dataset)
 
-    return rot_net_inputs_and_targets_from_dataset(datasets, **kwargs)
+    return combined

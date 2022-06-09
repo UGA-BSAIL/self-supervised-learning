@@ -155,7 +155,7 @@ class HeatMapSource(enum.Enum):
     """
 
 
-_NUM_THREADS = 2
+_NUM_THREADS = 4
 """
 Number of threads to use for multi-threaded operations.
 """
@@ -430,7 +430,7 @@ def _compute_histograms(
 
     # First, pre-bin all the values in the image.
     binned = tf.histogram_fixed_width_bins(
-        image_channel, value_range=[0.0, 1.0], nbins=num_bins
+        image_channel, value_range=[0.0, 1.0], nbins=num_bins, dtype=tf.uint8
     )
 
     # Extract patches.
@@ -473,15 +473,24 @@ def _load_colorization(
     image = _decode_image(image_encoded, ratio=2)
 
     # Crop to the colorization input shape.
-    image = tf.image.random_crop(image, size=config.colorization_input_shape)
-
-    # Generate histograms.
+    input_shape_color = config.colorization_input_shape[:2] + (3,)
+    image = tf.image.random_crop(image, size=input_shape_color)
     image_hcl = _to_hcl(image)
-    hue_histograms = _compute_histograms(image_hcl[:, :, 0])
-    chroma_histograms = _compute_histograms(image_hcl[:, :, 1])
+
+    # Make sure the output has the correct shape.
+    height, width, num_bins = config.colorization_output_shape
+    image_hcl_small = tf.image.resize(image_hcl, (height, width))
+    # Generate histograms.
+    hue_histograms = _compute_histograms(
+        image_hcl_small[:, :, 0], num_bins=num_bins
+    )
+    chroma_histograms = _compute_histograms(
+        image_hcl_small[:, :, 1], num_bins=num_bins
+    )
 
     lightness = image_hcl[:, :, 2]
     lightness = tf.cast(lightness * 255, tf.uint8)
+    lightness = tf.expand_dims(lightness, axis=-1)
     return {ModelInputs.DETECTIONS_FRAME.value: lightness}, {
         ColorizationTargets.HUE_HIST.value: hue_histograms,
         ColorizationTargets.CHROMA_HIST.value: chroma_histograms,
@@ -532,7 +541,7 @@ def _get_geometric_features(
 
         # Compute the offset.
         center_points_px = tf.stack([center_x, center_y], axis=1)
-        down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
+        down_sample_factor = tf.constant(2**config.num_reduction_stages)
         offsets = (
             tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
         )
@@ -1310,7 +1319,7 @@ def colorization_inputs_and_targets_from_dataset(
     )
 
     # Batch and prefetch.
-    batched = rot_net_dataset.batch(batch_size * 4)
+    batched = rot_net_dataset.batch(batch_size)
     return batched.prefetch(num_prefetch_batches)
 
 
