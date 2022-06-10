@@ -52,6 +52,9 @@ def train_model(
         The trained model.
 
     """
+    # Temporarily restrict the amount of training data for rapid development.
+    training_data = training_data.take(20000)
+
     for phase in learning_phases:
         logger.info("Starting new training phase.")
         logger.debug("Using phase parameters: {}", phase)

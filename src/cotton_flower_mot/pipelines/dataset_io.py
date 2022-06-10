@@ -155,7 +155,7 @@ class HeatMapSource(enum.Enum):
     """
 
 
-_NUM_THREADS = 4
+_NUM_THREADS = 8
 """
 Number of threads to use for multi-threaded operations.
 """
