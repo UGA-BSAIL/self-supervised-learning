@@ -5,6 +5,7 @@ Nodes for the model training pipeline.
 
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import tensorflow as tf
 from loguru import logger
 from tensorflow.keras import layers
@@ -44,25 +45,38 @@ def prepare_pretrained_encoder(
     """
     logger.info("Using a custom pre-trained encoder.")
 
-    # Calculate how many layers to freeze.
-    num_layers = len(encoder.layers)
-    num_to_freeze = int(num_layers * freeze_fraction)
-    logger.debug("Freezing {} layers out of {}.", num_to_freeze, num_layers)
-
     # Change the input size of the model.
     new_input = layers.Input(
         shape=config.detection_model_input_shape,
         name=ModelInputs.DETECTIONS_FRAME.value,
     )
-    new_encoder = tf.keras.models.clone_model(
-        encoder, input_tensors=[new_input]
+    # It's easiest here to create a fresh encoder and manually copy pre-trained
+    # weights.
+    new_encoder = EfficientNetV2S(
+        include_top=False,
+        input_tensor=new_input,
+        input_shape=config.detection_model_input_shape,
+        weights=None,
     )
+
+    # Calculate how many layers to freeze.
+    num_layers = len(new_encoder.layers)
+    num_to_freeze = int(num_layers * freeze_fraction)
+    logger.debug("Freezing {} layers out of {}.", num_to_freeze, num_layers)
+
     # Copy over the pre-trained weights.
-    for i, (new_layer, old_layer) in enumerate(
-        zip(new_encoder.layers[1:], encoder.layers[1:])
-    ):
+    for i, new_layer in enumerate(new_encoder.layers[1:]):
+        old_layer = encoder.get_layer(new_layer.name)
+
         if i <= num_to_freeze:
-            new_layer.set_weights(old_layer.get_weights())
+            weights = old_layer.get_weights()
+            if new_layer.name == "stem_conv" and weights[0].shape[2] == 1:
+                # For a colorization model, expand the weights to support
+                # color input.
+                logger.debug("Expanding model weights for color input.")
+                weights[0] = np.concatenate([weights[0]] * 3, axis=2) / 3.0
+
+            new_layer.set_weights(weights)
             new_layer.trainable = False
         else:
             new_layer.trainable = True

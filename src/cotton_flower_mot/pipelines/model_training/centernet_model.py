@@ -20,10 +20,10 @@ from tensorflow.python.keras.regularizers import l2
 
 from ..config import ModelConfig
 from ..schemas import (
+    ColorizationTargets,
     ModelInputs,
     ModelTargets,
     RotNetTargets,
-    ColorizationTargets,
 )
 from .layers import BnActConv, PeakLayer
 from .layers.feature_extractors import efficientnet
@@ -111,6 +111,9 @@ def _build_decoder(
     )(UpSampling2D()(x))
     x = BatchNormalization()(x)
     x = ReLU()(x)
+    # Because of the way the resnet layer sizes shake out, we need to add
+    # some slight cropping here.
+    x = Cropping2D(cropping=((1, 0), (0, 0)))(x)
     x = Concatenate()([scale1, x])
     x = Conv2D(
         64,
@@ -278,11 +281,7 @@ def build_detection_model(
         input_shape=config.detection_model_input_shape, encoder=encoder
     )
 
-    # Pad the encoder features correctly.
-    scale1, scale2, scale3, scale4 = encoder_features
-    scale1 = layers.ZeroPadding2D(((0, 1), (0, 0)))(scale1)
-
-    decoder_features = _build_decoder((scale1, scale2, scale3, scale4))
+    decoder_features = _build_decoder(encoder_features)
 
     heatmap = _build_prediction_head(decoder_features, output_channels=1)
     sizes = _build_prediction_head(decoder_features, output_channels=2)
@@ -362,7 +361,7 @@ def build_colorization_model(config: ModelConfig) -> tf.keras.Model:
 
     # Pad the encoder features correctly.
     scale1, scale2, scale3, scale4 = encoder_features
-    scale1 = layers.ZeroPadding2D(((2, 2), (0, 0)))(scale1)
+    scale1 = layers.ZeroPadding2D(((2, 1), (0, 0)))(scale1)
     scale2 = layers.ZeroPadding2D(((1, 1), (0, 0)))(scale2)
     scale3 = layers.ZeroPadding2D(((0, 1), (0, 0)))(scale3)
 

@@ -2,34 +2,60 @@
 Pipeline definition for model training.
 """
 
+
+import enum
+
 from kedro.pipeline import Pipeline, node
 
 from ..training_utils import set_check_numerics
 from .nodes import create_model, prepare_pretrained_encoder, train_model
 
 
-def create_pipeline(init_rotnet: bool = False):
+@enum.unique
+class ModelInit(enum.IntEnum):
+    """
+    How to initialize the model before training.
+    """
+
+    IMAGENET = enum.auto()
+    """
+    Initialize with ImageNet weights.
+    """
+    ROTNET = enum.auto()
+    """
+    Initialize with RotNet weights.
+    """
+    COLORIZATION = enum.auto()
+    """
+    Initialize with colorization weights.
+    """
+
+
+def create_pipeline(model_init: ModelInit = ModelInit.IMAGENET):
     """
     Args:
-        init_rotnet: If true, will build a pipeline that initializes from
-            a pretrained RotNet model.
+        model_init: Specifies how to initialize the model weights.
 
     Returns:
 
     """
-    if not init_rotnet:
+    if model_init == ModelInit.IMAGENET:
         # This is the default model loading process.
         init_pipeline = Pipeline(
             [node(create_model, "model_config", "initial_model")]
         )
     else:
-        # This is the model loading process using a pretrained RotNet encoder.
+        # This is the model loading process using a custom pretrained encoder.
+        encoder_model = "pretrained_rotnet_model"
+        if model_init == ModelInit.COLORIZATION:
+            encoder_model = "pretrained_colorization_model"
+
         init_pipeline = Pipeline(
             [
                 node(
                     prepare_pretrained_encoder,
                     dict(
-                        encoder="pretrained_rotnet_model",
+                        encoder=encoder_model,
                         config="model_config",
                         freeze_fraction="params:freeze_fraction",
                     ),
