@@ -56,7 +56,7 @@ def prepare_pretrained_encoder(
         include_top=False,
         input_tensor=new_input,
         input_shape=config.detection_model_input_shape,
-        weights=None,
+        weights="imagenet",
     )
 
     # Calculate how many layers to freeze.

@@ -42,7 +42,7 @@ geometry_loss_weight: 0.1
 
 # Fraction of pre-trained layers to keep frozen when performing
 # transfer learning.
-freeze_fraction: 1.0
+freeze_fraction: 0.5
 
 # Learning phases to use for training the model.
 learning_phases:
