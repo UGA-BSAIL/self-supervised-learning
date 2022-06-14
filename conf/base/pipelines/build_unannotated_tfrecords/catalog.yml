@@ -6,58 +6,94 @@ _video_args: &video_args
     bgr_color: false
 
 # Raw video inputs.
-mars_2021-08-25_left:
+mars_2021-08-25_left_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-08-25/left/
+  path: ${mars_data_dir}/2021-08-25/left/no_wheel/
 
-mars_2021-08-25_right:
+mars_2021-08-25_right_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-08-25/right/
+  path: ${mars_data_dir}/2021-08-25/right/no_wheel/
 
 # Skip 2021-09-02 because it doesn't contain any video data.
 
-mars_2021-09-03_left:
+mars_2021-09-03_left_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-09-03/left/
+  path: ${mars_data_dir}/2021-09-03/left/wheel/
 
-mars_2021-09-03_right:
+mars_2021-09-03_right_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-09-03/right/
+  path: ${mars_data_dir}/2021-09-03/right/no_wheel/
 
-mars_2021-09-10_left:
+mars_2021-09-03_right_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-09-10/left/
+  path: ${mars_data_dir}/2021-09-03/right/wheel/
 
-mars_2021-09-10_right:
+mars_2021-09-10_left_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-09-10/right/
+  path: ${mars_data_dir}/2021-09-10/left/no_wheel/
 
-mars_2021-09-24_left:
+mars_2021-09-10_left_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-09-24/left/
+  path: ${mars_data_dir}/2021-09-10/left/wheel/
 
-mars_2021-09-24_right:
+mars_2021-09-10_right_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-09-24/right/
+  path: ${mars_data_dir}/2021-09-10/right/no_wheel/
+
+mars_2021-09-10_right_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-10/right/wheel/
+
+mars_2021-09-24_left_no_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-24/left/no_wheel/
+
+mars_2021-09-24_left_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-24/left/wheel/
+
+mars_2021-09-24_right_no_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-24/right/no_wheel/
+
+mars_2021-09-24_right_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-09-24/right/wheel/
 
 # Skip 2021-10-01 left because the camera is sideways.
 
-mars_2021-10-01_right:
+mars_2021-10-01_right_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-10-01/right/
+  path: ${mars_data_dir}/2021-10-01/right/no_wheel/
 
-mars_2021-10-15_left:
+mars_2021-10-15_left_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-10-15/left/
+  path: ${mars_data_dir}/2021-10-15/left/no_wheel/
 
-mars_2021-10-15_right:
+mars_2021-10-15_left_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-10-15/right/
+  path: ${mars_data_dir}/2021-10-15/left/wheel/
 
-mars_2021-10-22_left:
+mars_2021-10-15_right_no_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-10-22/left/
+  path: ${mars_data_dir}/2021-10-15/right/no_wheel/
 
-mars_2021-10-22_right:
+mars_2021-10-15_right_wheel:
   << : *video_args
-  path: ${mars_data_dir}/2021-10-15/right/
+  path: ${mars_data_dir}/2021-10-15/right/wheel/
+
+mars_2021-10-22_left_no_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-22/left/no_wheel/
+
+mars_2021-10-22_left_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-22/left/wheel/
+
+mars_2021-10-22_right_no_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-15/right/no_wheel/
+
+mars_2021-10-22_right_wheel:
+  << : *video_args
+  path: ${mars_data_dir}/2021-10-15/right/wheel/

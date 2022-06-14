@@ -2,3 +2,7 @@
 clip_length: 300
 # How many frames to skip at the beginning of each clip.
 skip_initial_frames: 900
+# Size to save the unannotated frames at, in form (height, width).
+unannotated_frame_shape: [540, 960]
+# Size to save the histograms at, in form (height, width, num_bins).
+histogram_shape: [72, 120, 32]

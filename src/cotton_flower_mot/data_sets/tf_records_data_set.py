@@ -6,6 +6,7 @@ A custom `DataSet` for creating TFRecords files.
 import random
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional
+from functools import partial
 
 import tensorflow as tf
 from kedro.io import AbstractVersionedDataSet, Version
@@ -22,6 +23,7 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
         filepath: PurePosixPath,
         version: Optional[Version] = None,
         verbose: bool = True,
+        compressed: bool = False,
     ):
         """
         Args:
@@ -29,10 +31,12 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
             version: The version information for the `DataSet`.
             verbose: Whether to provide logging output every time a dataset
                 is saved or loaded.
+            compressed: If true, the saved files will be compressed.
         """
         super().__init__(PurePosixPath(filepath), version)
 
         self.__verbose = verbose
+        self.__compressed = compressed
 
     def _load(self) -> tf.data.TFRecordDataset:
         """
@@ -80,7 +84,11 @@ class TfRecordsDataSet(AbstractVersionedDataSet):
         save_dir = Path(save_path).parent
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        with tf.io.TFRecordWriter(save_path.as_posix()) as writer:
+        create_writer = partial(tf.io.TFRecordWriter, save_path.as_posix())
+        if self.__compressed:
+            options = tf.io.TFRecordOptions(compression_type="GZIP")
+            create_writer = partial(create_writer, options=options)
+        with create_writer() as writer:
             for example in examples:
                 serialized = example.SerializeToString()
                 writer.write(serialized)

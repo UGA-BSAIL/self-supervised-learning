@@ -13,6 +13,7 @@ from .schemas import ColorizationTargets, ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
 from .schemas import RotNetTargets
 from .schemas import UnannotatedFeatures as Uf
+from .color_utils import rgb_to_hcl
 
 _OTF_FEATURE_DESCRIPTION = {
     Otf.IMAGE_HEIGHT.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),
@@ -380,30 +381,6 @@ def _load_rot_net(
     }
 
 
-def _to_hcl(image: tf.Tensor) -> tf.Tensor:
-    """
-    Converts an image to the hue, chroma, lightness space.
-
-    Args:
-        image: The image to convert.
-
-    Returns: The HCL image.
-
-    """
-    # Convert the image to floats.
-    float_image = tf.cast(image, tf.float32)
-    rescaled_image = float_image / 255.0
-
-    hsv = tf.image.rgb_to_hsv(rescaled_image)
-
-    # Convert HSV to HCL.
-    hue = hsv[:, :, 0]
-    chroma = hsv[:, :, 1] * hsv[:, :, 2]
-    lightness = hsv[:, :, 2] - chroma / 2.0
-
-    return tf.stack([hue, chroma, lightness], axis=-1)
-
-
 def _compute_histograms(
     image_channel: tf.Tensor,
     window_size: int = 7,
@@ -475,7 +452,7 @@ def _load_colorization(
     # Crop to the colorization input shape.
     input_shape_color = config.colorization_input_shape[:2] + (3,)
     image = tf.image.random_crop(image, size=input_shape_color)
-    image_hcl = _to_hcl(image)
+    image_hcl = rgb_to_hcl(image)
 
     # Make sure the output has the correct shape.
     height, width, num_bins = config.colorization_output_shape

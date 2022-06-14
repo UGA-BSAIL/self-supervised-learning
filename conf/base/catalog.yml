@@ -33,7 +33,7 @@ tfrecord_unannotated_no_wheel:
   type: PartitionedDataSet
   dataset:
     type: cotton_flower_mot.data_sets.TfRecordsDataSet
-    verbose: false
+    compressed: true
   path: data/05_model_input/unannotated/no_wheel
 
 # Same, but with the robot structure visible.
@@ -41,6 +41,7 @@ tfrecord_unannotated_wheel:
   type: PartitionedDataSet
   dataset:
     type: cotton_flower_mot.data_sets.TfRecordsDataSet
+    compressed: true
   path: data/05_model_input/unannotated/wheel
 
 # A version of the unannotated datasets to use for loading. This can

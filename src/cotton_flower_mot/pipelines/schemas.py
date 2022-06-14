@@ -177,6 +177,14 @@ class UnannotatedFeatures(enum.Enum):
     """
     Encoded image data.
     """
+    IMAGE_HUE_HISTOGRAMS = "hue_histograms"
+    """
+    The hue channel pixel-level histograms for the image.
+    """
+    IMAGE_CHROMA_HISTOGRAMS = "chroma_histograms"
+    """
+    The chroma channel pixel-level histograms for the image.
+    """
 
     IMAGE_SEQUENCE_ID = ObjectTrackingFeatures.IMAGE_SEQUENCE_ID.value
     """
