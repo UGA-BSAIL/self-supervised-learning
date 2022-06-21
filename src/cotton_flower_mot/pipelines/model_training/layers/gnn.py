@@ -199,17 +199,19 @@ class ResidualCensNet(layers.Layer):
         self._add_edges = layers.Add(name="add_edges")
 
     def build(
-        self, input_shape: Tuple[tf.TensorShape, tf.TensorShape]
+        self, input_shape: Tuple[tf.TensorShape, Tuple, tf.TensorShape]
     ) -> None:
         # Add the additional convolution layer if the sizes don't match.
-        node_shape, _ = input_shape
-        num_input_channels = node_shape[-1]
-        if num_input_channels != self._node_channels:
+        node_shape, _, edge_shape = input_shape
+        num_node_input_channels = node_shape[-1]
+        num_edge_input_channels = edge_shape[-1]
+
+        if num_node_input_channels != self._node_channels:
             logger.debug(
                 "Adding extra convolution to {} to "
-                "convert from {} channels to {}.",
+                "convert from {} node channels to {}.",
                 self.name,
-                num_input_channels,
+                num_node_input_channels,
                 self._node_channels,
             )
 
@@ -217,7 +219,19 @@ class ResidualCensNet(layers.Layer):
             # since the input has 3 channels and the first 2 should always be
             # the same.
             self._node_conv1_1 = layers.Conv1D(
-                self._node_channels, 1, padding="same", name="adapt_outputs"
+                self._node_channels, 1, padding="same", name="adapt_nodes"
+            )
+        if num_edge_input_channels != self._edge_channels:
+            logger.debug(
+                "Adding extra convolution to {} to "
+                "convert from {} edge channels to {}.",
+                self.name,
+                num_edge_input_channels,
+                self._edge_channels,
+            )
+
+            self._edge_conv1_1 = layers.Conv1D(
+                self._edge_conv1_1, 1, padding="same", name="adapt_edges"
             )
 
         super().build(input_shape)
@@ -253,4 +267,6 @@ class ResidualCensNet(layers.Layer):
         node_channels = config.pop("node_channels")
         edge_channels = config.pop("edge_channels")
 
-        return cls(node_channels, edge_channels, *gcn_args, **gcn_kwargs, **config)
+        return cls(
+            node_channels, edge_channels, *gcn_args, **gcn_kwargs, **config
+        )

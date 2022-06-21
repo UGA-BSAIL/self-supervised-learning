@@ -32,7 +32,10 @@ class ModelConfig:
 
         num_appearance_features: The number of appearance features to extract
             from each image.
-        num_gcn_channels: Number of output channels to use for the GCN blocks.
+        num_node_features: Number of output node features to use for the
+            CensNet blocks.
+        num_edge_features: Number of output edge features to use for the
+            CensNet blocks.
 
         sinkhorn_lambda: The lambda parameter to use for Sinkhorn normalization.
 
@@ -52,7 +55,8 @@ class ModelConfig:
     detection_sigma: float
 
     num_appearance_features: int
-    num_gcn_channels: int
+    num_node_features: int
+    num_edge_features: int
 
     sinkhorn_lambda: float
 
@@ -85,7 +89,7 @@ class ModelConfig:
             `(width, height)`.
 
         """
-        down_sample_factor = 2**self.num_reduction_stages
+        down_sample_factor = 2 ** self.num_reduction_stages
         input_height, input_width, _ = self.detection_model_input_shape
         return (
             input_width // down_sample_factor,

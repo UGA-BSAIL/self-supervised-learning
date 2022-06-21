@@ -123,6 +123,7 @@ def _build_edge_mlp(
     *,
     geometric_features: Tuple[tf.Tensor, tf.Tensor],
     appearance_features: Tuple[tf.Tensor, tf.Tensor],
+    config: ModelConfig,
 ) -> tf.Tensor:
     """
     Builds the MLP that computes edge features.
@@ -137,7 +138,7 @@ def _build_edge_mlp(
 
     Returns:
         The computed edge features. It will be a tensor of shape
-        `[batch_size, n_left_nodes, n_right_nodes, 1]`.
+        `[batch_size, n_left_nodes, n_right_nodes, n_features]`.
 
     """
 
@@ -173,9 +174,8 @@ def _build_edge_mlp(
         (geometric_combined, appearance_combined)
     )
 
-    # Apply the MLP. We need to use a feature size of one for the output,
-    # since these values are going directly in the affinity matrix.
-    return BnActConv(1, 1)(all_features)
+    # Apply the MLP.
+    return BnActConv(config.num_edge_features, 1)(all_features)
 
 
 def _build_affinity_mlp(
@@ -264,18 +264,22 @@ def _build_affinity_mlp(
 
 def _build_gnn(
     *,
-    adjacency_matrix: tf.Tensor,
+    graph_structure: Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
     node_features: tf.Tensor,
+    edge_features: tf.Tensor,
     config: ModelConfig,
 ) -> tf.Tensor:
     """
     Builds the GNN for performing feature association.
 
     Args:
-        adjacency_matrix: The initial affinity matrix. Should have the shape
-            `[batch_size, n_nodes, n_nodes, 1]`.
+        graph_structure: The pre-processed matrices describing the structure
+            of the graph. These can be generated using
+            `CensNetConv.preprocess()`.
         node_features: The input node features. Should have the shape
             `[batch_size, n_nodes, n_features]`.
+        edge_features: The input edge features. Should have the shape
+            `[batch_size, n_edges, n_features]`.
         config: The model configuration.
 
     Returns:
@@ -284,17 +288,16 @@ def _build_gnn(
 
     """
     # Remove the final dimension from the adjacency matrix, since it's just 1.
-    adjacency_matrix = adjacency_matrix[:, :, :, 0]
+    graph_structure = graph_structure[:, :, :, 0]
 
-    gcn1_1 = ResidualCensNet(config.num_gcn_channels)(
-        (node_features, adjacency_matrix)
-    )
-    gcn1_2 = ResidualCensNet(config.num_gcn_channels)(
-        gcn1_1, skip_edge_update=True
-    )
+    nodes1_1, edges1_1 = ResidualCensNet(
+        config.num_node_features, config.num_edge_features
+    )((node_features, graph_structure, edge_features))
+    nodes1_2, _ = ResidualCensNet(
+        config.num_node_features, config.num_edge_features
+    )(nodes1_1, graph_structure, edges1_1)
 
-    nodes, _ = gcn1_2
-    return nodes
+    return nodes1_2
 
 
 def extract_appearance_features(
@@ -442,7 +445,7 @@ def extract_interaction_features(
         (tracklets_app_features, detections_app_features)
     )
     final_node_features = _build_gnn(
-        adjacency_matrix=adjacency_matrix,
+        graph_structure=adjacency_matrix,
         node_features=combined_app_features,
         config=config,
     )

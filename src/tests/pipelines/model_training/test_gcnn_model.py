@@ -154,7 +154,7 @@ def test_extract_interaction_features_smoke(faker: Faker) -> None:
     tracklet_shape = tf.shape(got_tracklet_features).numpy()
     assert len(detection_shape) == len(tracklet_shape) == 3
     # It should have the correct number of features.
-    assert detection_shape[2] == tracklet_shape[2] == config.num_gcn_channels
+    assert detection_shape[2] == tracklet_shape[2] == config.num_node_features
     # It should have the correct number of nodes.
     assert detection_shape[1] == np.max(detections.row_lengths().numpy())
     assert tracklet_shape[1] == np.max(tracklets.row_lengths().numpy())
