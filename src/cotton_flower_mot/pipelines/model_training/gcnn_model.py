@@ -20,7 +20,7 @@ from .layers import (
     AssociationLayer,
     BnActConv,
     HdaStage,
-    ResidualGcn,
+    ResidualCensNet,
     TransitionLayer,
 )
 from .similarity_utils import (
@@ -286,10 +286,10 @@ def _build_gnn(
     # Remove the final dimension from the adjacency matrix, since it's just 1.
     adjacency_matrix = adjacency_matrix[:, :, :, 0]
 
-    gcn1_1 = ResidualGcn(config.num_gcn_channels)(
+    gcn1_1 = ResidualCensNet(config.num_gcn_channels)(
         (node_features, adjacency_matrix)
     )
-    gcn1_2 = ResidualGcn(config.num_gcn_channels)(
+    gcn1_2 = ResidualCensNet(config.num_gcn_channels)(
         gcn1_1, skip_edge_update=True
     )
 

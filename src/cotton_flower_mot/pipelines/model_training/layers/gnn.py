@@ -160,35 +160,41 @@ class DynamicEdgeGcn(layers.Layer):
         return cls(*gcn_args, **gcn_kwargs, **config)
 
 
-class ResidualGcn(layers.Layer):
+class ResidualCensNet(layers.Layer):
     """
     An extension to `DynamicEdgeGcn` that uses it as part of a residual block.
     """
 
     def __init__(
         self,
-        channels: int,
+        node_channels: int,
+        edge_channels: int,
         *args: Any,
         name: Optional[str] = None,
         **kwargs: Any
     ):
         """
         Args:
-            channels: Number of output channels for the GCN layer.
-            *args: Will be forwarded to the `DynamicEdgeGcn` layer.
+            node_channels: Number of output channels for the node features.
+            edge_channels: Number of output channels for the edge features.
+            *args: Will be forwarded to the `CensNetConv` layer.
             name: The name of this layer.
-            **kwargs: Will be forwarded to the `DynamicEdgeGcn` layer.
+            **kwargs: Will be forwarded to the `CensNetConv` layer.
         """
         super().__init__(name=name)
 
         self._gcn_args = args
         self._gcn_kwargs = kwargs
-        self._num_channels = channels
+        self._node_channels = node_channels
+        self._edge_channels = edge_channels
 
         # Pre-create the sub-layers.
-        self._conv1_1 = None
+        self._node_conv1_1 = None
+        self._edge_conv1_1 = None
 
-        self._gcn1_1 = DynamicEdgeGcn(channels, *args, **kwargs)
+        self._gcn1_1 = spektral.layers.CensNetConv(
+            node_channels, edge_channels, *args, **kwargs
+        )
         self._add_nodes = layers.Add(name="add_nodes")
         self._add_edges = layers.Add(name="add_edges")
 
@@ -198,20 +204,20 @@ class ResidualGcn(layers.Layer):
         # Add the additional convolution layer if the sizes don't match.
         node_shape, _ = input_shape
         num_input_channels = node_shape[-1]
-        if num_input_channels != self._num_channels:
+        if num_input_channels != self._node_channels:
             logger.debug(
                 "Adding extra convolution to {} to "
                 "convert from {} channels to {}.",
                 self.name,
                 num_input_channels,
-                self._num_channels,
+                self._node_channels,
             )
 
             # We bring the number of channels in-line with a 1D convolution,
             # since the input has 3 channels and the first 2 should always be
             # the same.
-            self._conv1_1 = layers.Conv1D(
-                self._num_channels, 1, padding="same", name="adapt_outputs"
+            self._node_conv1_1 = layers.Conv1D(
+                self._node_channels, 1, padding="same", name="adapt_outputs"
             )
 
         super().build(input_shape)
@@ -222,9 +228,9 @@ class ResidualGcn(layers.Layer):
         nodes, edges = inputs
         nodes_res, edges_res = self._gcn1_1(inputs, **kwargs)
 
-        if self._conv1_1 is not None:
+        if self._node_conv1_1 is not None:
             # Adapt the input size so it matches up.
-            nodes = self._conv1_1(nodes)
+            nodes = self._node_conv1_1(nodes)
 
         # Compute the residual.
         new_nodes = self._add_nodes([nodes, nodes_res])
@@ -235,14 +241,16 @@ class ResidualGcn(layers.Layer):
         return dict(
             gcn_args=self._gcn_args,
             gcn_kwargs=self._gcn_kwargs,
-            channels=self._num_channels,
+            node_channels=self._node_channels,
+            edge_channels=self._edge_channels,
             name=self.name,
         )
 
     @classmethod
-    def from_config(cls, config) -> "ResidualGcn":
+    def from_config(cls, config) -> "ResidualCensNet":
         gcn_args = config.pop("gcn_args")
         gcn_kwargs = config.pop("gcn_kwargs")
-        channels = config.pop("channels")
+        node_channels = config.pop("node_channels")
+        edge_channels = config.pop("edge_channels")
 
-        return cls(channels, *gcn_args, **gcn_kwargs, **config)
+        return cls(node_channels, edge_channels, *gcn_args, **gcn_kwargs, **config)
