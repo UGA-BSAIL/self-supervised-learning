@@ -166,6 +166,96 @@ def make_adjacency_matrix(edge_features: tf.Tensor) -> tf.Tensor:
         return tf.pad(edge_features, paddings)
 
 
+def _single_complete_bipartite_adjacency_matrix(
+    num_left_nodes: tf.Tensor,
+    num_right_nodes: tf.Tensor,
+    *,
+    adjacency_shape: tf.Tensor,
+) -> tf.Tensor:
+    """
+    Creates the binary adjacency matrix for a complete bipartite graph.
+
+    Args:
+        num_left_nodes: The number of nodes on the left side. Should be a
+            0D tensor.
+        num_right_nodes: The number of nodes on the right side. Should be a
+            0D tensor.
+        adjacency_shape: The shape to use for the output dense adjacency matrix.
+            This can be specified to a shape larger than necessary to facilitate
+            batching the output of this function across multiple graphs.
+
+    Returns:
+        The binary adjacency matrix that it created, which will have the shape
+        `[n_left_nodes + n_right_nodes, n_left_nodes + n_right_nodes]`.
+
+    """
+    num_left_nodes = tf.ensure_shape(num_left_nodes, ())
+    num_right_nodes = tf.ensure_shape(num_right_nodes, ())
+
+    # Enumerate all possible pairings between left and right.
+    x, y = tf.meshgrid(
+        tf.range(num_left_nodes, dtype=tf.int64),
+        # Left nodes have the lower half of the indices in our adjacency
+        # matrix. Right nodes have the upper half.
+        tf.range(
+            num_left_nodes, num_left_nodes + num_right_nodes, dtype=tf.int64
+        ),
+        indexing="ij",
+    )
+    x = tf.reshape(x, (-1,))
+    y = tf.reshape(y, (-1,))
+    edge_indices = tf.stack([x, y], axis=-1)
+    num_edges = tf.shape(edge_indices)[0]
+
+    adjacency_shape = tf.cast(adjacency_shape, tf.int64)
+    adjacency_sparse = tf.SparseTensor(
+        edge_indices,
+        values=tf.ones(tf.expand_dims(num_edges, 0), dtype=tf.float32),
+        dense_shape=adjacency_shape,
+    )
+    dense_adjacency = tf.sparse.to_dense(adjacency_sparse)
+
+    # We've only produced the upper half of the adjacency matrix, so make it
+    # symmetric now.
+    return dense_adjacency + tf.transpose(dense_adjacency)
+
+
+def make_complete_bipartite_adjacency_matrices(
+    num_left_nodes: tf.Tensor, num_right_nodes: tf.Tensor
+) -> tf.Tensor:
+    """
+    Creates the binary adjacency matrices for a batch of complete bipartite
+    graphs.
+
+    Args:
+        num_left_nodes: A vector, representing the number of nodes on the
+            left side of each graph.
+        num_right_nodes: A vector, representing the number of nodes on the
+            right side of each graph.
+
+    Returns:
+        The binary adjacency matrices that it created, which will have the shape
+        `[batch_size, max_n_left_nodes + max_n_right_nodes, max_n_left_nodes +
+          max_n_right_nodes]`
+
+    """
+    num_left_nodes = tf.convert_to_tensor(num_left_nodes)
+    num_right_nodes = tf.convert_to_tensor(num_right_nodes)
+
+    # Our output has to be large enough to hold the largest adjacency matrix.
+    max_num_left_nodes = tf.reduce_max(num_left_nodes)
+    max_num_right_nodes = tf.reduce_max(num_right_nodes)
+    output_shape = tf.stack([max_num_left_nodes + max_num_right_nodes] * 2)
+
+    return tf.map_fn(
+        lambda n: _single_complete_bipartite_adjacency_matrix(
+            n[0], n[1], adjacency_shape=output_shape
+        ),
+        (num_left_nodes, num_right_nodes),
+        fn_output_signature=tf.TensorSpec([None, None], dtype=tf.float32),
+    )
+
+
 def augment_adjacency_matrix(
     *, adjacency_matrix: tf.Tensor, node_features: tf.Tensor
 ) -> tf.Tensor:

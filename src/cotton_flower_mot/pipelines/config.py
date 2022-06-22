@@ -89,7 +89,7 @@ class ModelConfig:
             `(width, height)`.
 
         """
-        down_sample_factor = 2 ** self.num_reduction_stages
+        down_sample_factor = 2**self.num_reduction_stages
         input_height, input_width, _ = self.detection_model_input_shape
         return (
             input_width // down_sample_factor,

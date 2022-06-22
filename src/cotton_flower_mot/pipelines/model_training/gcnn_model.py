@@ -8,13 +8,15 @@ from typing import Callable, Tuple
 import tensorflow as tf
 from loguru import logger
 from tensorflow.keras import layers
+from spektral.utils.convolution import incidence_matrix, line_graph
 
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
 from .graph_utils import (
     compute_bipartite_edge_features,
     compute_pairwise_similarities,
-    make_adjacency_matrix,
+    gcn_filter,
+    make_complete_bipartite_adjacency_matrices,
 )
 from .layers import (
     AssociationLayer,
@@ -300,6 +302,28 @@ def _build_gnn(
     return nodes1_2
 
 
+def _preprocess_adjacency(
+    adjacency_matrices: tf.Tensor,
+) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    """
+    Pre-processes that adjacency matrix for `CensNet`. Equivalent to
+    `CensNetConv.preprocess()` except that it works on tensors.
+
+    Args:
+        adjacency_matrices: The binary adjacency matrix. Should have shape
+            `[[batch_size], n_nodes, n_nodes]`.
+
+    Returns:
+        The node Laplacian, edge Laplacian, and incidence matrix.
+
+    """
+    node_laplacian = gcn_filter(adjacency_matrices)
+    incidence = incidence_matrix(adjacency_matrices)
+    edge_laplacian = gcn_filter(line_graph(incidence))
+
+    return node_laplacian, edge_laplacian, incidence
+
+
 def extract_appearance_features(
     *,
     detections: tf.RaggedTensor,
@@ -433,20 +457,27 @@ def extract_interaction_features(
     edge_features = _build_edge_mlp(
         geometric_features=(detections_geom_features, tracklets_geom_features),
         appearance_features=(detections_app_features, tracklets_app_features),
+        config=config,
     )
 
     # Create the adjacency matrix and build the GCN.
-    adjacency_matrix = layers.Lambda(
-        lambda f: make_adjacency_matrix(f),
-        name="adjacency_matrix",
-    )(edge_features)
+    num_detections = detections_geometry.row_lengths()
+    num_tracklets = tracklets_geometry.row_lengths()
+    adjacency_matrices = layers.Lambda(
+        lambda n: make_complete_bipartite_adjacency_matrices(n[0], n[1]),
+        name="adjacency_matrices",
+    )((num_detections, num_tracklets))
+    # Compute CensNet graph structure inputs.
+    graph_structure = _preprocess_adjacency(adjacency_matrices)
+
     # Note that the order of concatenation is important here.
     combined_app_features = layers.Concatenate(axis=1)(
         (tracklets_app_features, detections_app_features)
     )
     final_node_features = _build_gnn(
-        graph_structure=adjacency_matrix,
+        graph_structure=graph_structure,
         node_features=combined_app_features,
+        edge_features=edge_features,
         config=config,
     )
 

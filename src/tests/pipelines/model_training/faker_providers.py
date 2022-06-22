@@ -4,6 +4,8 @@ Contains custom `Faker` providers.
 
 
 from typing import Any, Iterable, Optional, Reversible, Tuple
+from functools import partial
+import math
 
 import numpy as np
 import tensorflow as tf
@@ -28,8 +30,8 @@ class TensorProvider(BaseProvider):
     def tensor(
         self,
         shape: Reversible[int],
-        min_value: Optional[float] = None,
-        max_value: Optional[float] = None,
+        min_value: float = -100.0,
+        max_value: float = 100.0,
     ) -> tf.Tensor:
         """
         Creates a fake tensor with arbitrary values and the given shape.
@@ -158,9 +160,13 @@ class TensorProvider(BaseProvider):
         return ModelConfig(
             image_input_shape=image_shape,
             detection_model_input_shape=detection_input_shape,
+            rot_net_input_shape=detection_input_shape,
+            colorization_input_shape=detection_input_shape,
+            colorization_output_shape=detection_input_shape,
             frame_input_shape=frame_shape,
             num_appearance_features=self.random_int(min=1, max=256),
-            num_gcn_channels=self.random_int(min=1, max=256),
+            num_node_features=self.random_int(min=1, max=256),
+            num_edge_features=self.random_int(min=1, max=256),
             sinkhorn_lambda=self.__faker.pyfloat(min_value=1, max_value=1000),
             num_reduction_stages=self.random_element([2, 3, 4]),
             detection_sigma=self.random_element([1, 3, 5]),
