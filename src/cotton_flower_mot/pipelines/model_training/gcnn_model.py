@@ -3,12 +3,13 @@ Implements a model inspired by GCNNTrack.
 https://arxiv.org/pdf/2010.00067.pdf
 """
 
-from typing import Callable, Tuple
+from functools import partial
+from typing import Tuple
 
 import tensorflow as tf
 from loguru import logger
+from spektral.utils.convolution import line_graph
 from tensorflow.keras import layers
-from spektral.utils.convolution import incidence_matrix, line_graph
 
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
@@ -140,14 +141,14 @@ def _build_edge_mlp(
 
     Returns:
         The computed edge features. It will be a tensor of shape
-        `[batch_size, n_left_nodes, n_right_nodes, n_features]`.
+        `[batch_size, n_edges, n_features]`.
 
     """
 
     def _combine_input_impl(
-        features: Tuple[tf.Tensor, tf.Tensor]
+        _features: Tuple[tf.Tensor, tf.Tensor]
     ) -> tf.Tensor:
-        detections, tracklets = features
+        detections, tracklets = _features
         input_edge_features = compute_bipartite_edge_features(
             left_nodes=tracklets, right_nodes=detections
         )
@@ -177,7 +178,21 @@ def _build_edge_mlp(
     )
 
     # Apply the MLP.
-    return BnActConv(config.num_edge_features, 1)(all_features)
+    features = BnActConv(config.num_edge_features, 1)(all_features)
+
+    def _reshape_outputs(_features: tf.Tensor) -> tf.Tensor:
+        # Since our graph is complete and bipartite, to get the output shape we
+        # want, we just have to fuse the inner two dimensions.
+        feature_shape = tf.shape(_features)
+        output_shape = tf.stack([feature_shape[0], -1, feature_shape[-1]])
+        reshaped = tf.reshape(_features, output_shape)
+
+        # We should know part of the shape statically.
+        return tf.ensure_shape(reshaped, [None, None, _features.shape[3]])
+
+    return layers.Lambda(_reshape_outputs, name="reshape_edge_features")(
+        features
+    )
 
 
 def _build_affinity_mlp(
@@ -289,9 +304,6 @@ def _build_gnn(
         `[batch_size, n_nodes, n_gcn_channels]`.
 
     """
-    # Remove the final dimension from the adjacency matrix, since it's just 1.
-    graph_structure = graph_structure[:, :, :, 0]
-
     nodes1_1, edges1_1 = ResidualCensNet(
         config.num_node_features, config.num_edge_features
     )((node_features, graph_structure, edge_features))
@@ -300,6 +312,112 @@ def _build_gnn(
     )(nodes1_1, graph_structure, edges1_1)
 
     return nodes1_2
+
+
+def _triangular_adjacency(adjacency):
+    """
+    Gets the triangular version of the adjacency matrix, removing redundant
+    values.
+
+    :param adjacency: The full adjacency matrix, with shape
+        ([batch], n_nodes, n_nodes).
+    :return: The upper triangle of the adjacency matrix, with the lower
+        triangle set to zero.
+    """
+    return tf.linalg.band_part(adjacency, 0, -1)
+
+
+def _incidence_matrix_single(triangular_adjacency, *, num_edges):
+    """
+    Creates the corresponding incidence matrix for a graph with a particular
+    adjacency matrix.
+
+    :param triangular_adjacency: The binary adjacency matrix. Should have shape
+        (n_nodes, n_nodes), and be triangular.
+    :param num_edges: The number of edges to use in the output. Should be large
+        enough to accommodate all the edges in the adjacency matrix.
+
+    :return: The computed incidence matrix. It will have a shape of
+        (n_nodes, n_edges).
+    """
+    # The adjacency matrix should be sparse, so get the indices of the edges.
+    connected_node_indices = tf.where(triangular_adjacency)
+
+    # Match each edge with one of the nodes connected by that edge. We refer
+    # to the two nodes connected by each edge as "right" and "left",
+    # for convenience.
+    edge_indices = tf.range(
+        tf.shape(connected_node_indices)[0], dtype=tf.int64
+    )
+    edges_with_left_nodes = tf.stack(
+        [connected_node_indices[:, 0], edge_indices], axis=1
+    )
+    edges_with_right_nodes = tf.stack(
+        [connected_node_indices[:, 1], edge_indices], axis=1
+    )
+
+    # We now have all the points that should go in the sparse binary
+    # transformation matrix.
+    edge_indicators = tf.ones_like(edge_indices, dtype=tf.float32)
+    num_nodes = tf.cast(tf.shape(triangular_adjacency)[0], tf.int64)
+    output_shape = tf.stack([num_nodes, num_edges])
+    left_sparse = tf.SparseTensor(
+        indices=edges_with_left_nodes,
+        values=edge_indicators,
+        dense_shape=output_shape,
+    )
+    left_sparse = tf.sparse.reorder(left_sparse)
+    right_sparse = tf.SparseTensor(
+        indices=edges_with_right_nodes,
+        values=edge_indicators,
+        dense_shape=output_shape,
+    )
+    right_sparse = tf.sparse.reorder(right_sparse)
+    # Combine the matrices for the left and right nodes.
+    combined_sparse = tf.sparse.maximum(left_sparse, right_sparse)
+
+    return tf.sparse.to_dense(combined_sparse)
+
+
+def _incidence_matrix(adjacency):
+    """
+    Creates the corresponding incidence matrices for graphs with particular
+    adjacency matrices.
+
+    :param adjacency: The binary adjacency matrices. Should have shape
+        ([batch], n_nodes, n_nodes).
+    :return: The computed incidence matrices. It will have a shape of
+        ([batch], n_nodes, n_edges).
+    """
+    adjacency = tf.convert_to_tensor(adjacency, dtype=tf.float32)
+    added_batch = False
+    if len(adjacency.shape) == 2:
+        # Add the extra batch dimension if needed.
+        adjacency = tf.expand_dims(adjacency, axis=0)
+        added_batch = True
+
+    # Compute the maximum number of edges. We will pad everything in the
+    # batch to this dimension.
+    adjacency_upper = _triangular_adjacency(adjacency)
+    num_edges = tf.math.count_nonzero(adjacency_upper, axis=(1, 2))
+    max_num_edges = tf.reduce_max(num_edges)
+
+    # Compute all the transformation matrices.
+    make_single_matrix = partial(
+        _incidence_matrix_single, num_edges=max_num_edges
+    )
+    transformation_matrices = tf.map_fn(
+        make_single_matrix,
+        adjacency_upper,
+        fn_output_signature=tf.TensorSpec(
+            shape=[None, None], dtype=tf.float32
+        ),
+    )
+
+    if added_batch:
+        # Remove the extra batch dimension before returning.
+        transformation_matrices = transformation_matrices[0]
+    return transformation_matrices
 
 
 def _preprocess_adjacency(
@@ -317,11 +435,19 @@ def _preprocess_adjacency(
         The node Laplacian, edge Laplacian, and incidence matrix.
 
     """
+    # Force use of float32 here, but convert back once finished.
+    input_dtype = adjacency_matrices.dtype
+    adjacency_matrices = tf.cast(adjacency_matrices, tf.float32)
+
     node_laplacian = gcn_filter(adjacency_matrices)
-    incidence = incidence_matrix(adjacency_matrices)
+    incidence = _incidence_matrix(adjacency_matrices)
     edge_laplacian = gcn_filter(line_graph(incidence))
 
-    return node_laplacian, edge_laplacian, incidence
+    return (
+        tf.cast(node_laplacian, input_dtype),
+        tf.cast(edge_laplacian, input_dtype),
+        tf.cast(incidence, input_dtype),
+    )
 
 
 def extract_appearance_features(
@@ -466,9 +592,11 @@ def extract_interaction_features(
     adjacency_matrices = layers.Lambda(
         lambda n: make_complete_bipartite_adjacency_matrices(n[0], n[1]),
         name="adjacency_matrices",
-    )((num_detections, num_tracklets))
+    )((num_tracklets, num_detections))
     # Compute CensNet graph structure inputs.
-    graph_structure = _preprocess_adjacency(adjacency_matrices)
+    graph_structure = layers.Lambda(
+        _preprocess_adjacency, name="preprocess_cens_net"
+    )(adjacency_matrices)
 
     # Note that the order of concatenation is important here.
     combined_app_features = layers.Concatenate(axis=1)(

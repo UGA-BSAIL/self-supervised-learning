@@ -237,9 +237,9 @@ class ResidualCensNet(layers.Layer):
         super().build(input_shape)
 
     def call(
-        self, inputs: Tuple[tf.Tensor, tf.Tensor], **kwargs: Any
+        self, inputs: Tuple[tf.Tensor, tf.Tensor, tf.Tensor], **kwargs: Any
     ) -> Tuple[tf.Tensor, tf.Tensor]:
-        nodes, edges = inputs
+        nodes, _, edges = inputs
         nodes_res, edges_res = self._gcn1_1(inputs, **kwargs)
 
         if self._node_conv1_1 is not None:
