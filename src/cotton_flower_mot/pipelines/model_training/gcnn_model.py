@@ -309,7 +309,7 @@ def _build_gnn(
     )((node_features, graph_structure, edge_features))
     nodes1_2, _ = ResidualCensNet(
         config.num_node_features, config.num_edge_features
-    )(nodes1_1, graph_structure, edges1_1)
+    )((nodes1_1, graph_structure, edges1_1))
 
     return nodes1_2
 

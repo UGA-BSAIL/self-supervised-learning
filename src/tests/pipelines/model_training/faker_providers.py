@@ -127,26 +127,50 @@ class TensorProvider(BaseProvider):
         return tf.cast(detections, tf.uint8)
 
     def model_config(
-        self, *, image_shape: Tuple[int, int, int]
+        self,
+        image_shape: Optional[Tuple[int, int, int]] = None,
+        detection_input_shape: Optional[Tuple[int, int, int]] = None,
     ) -> ModelConfig:
         """
         Creates fake model configurations.
 
         Args:
             image_shape: The image shape to use.
+            detection_input_shape: The shape to use for the detection model
+                input.
 
         Returns:
             The configuration that it created.
 
         """
-        # Our detection input shape will be some multiple of the input shape.
+        if image_shape is None and detection_input_shape is None:
+            raise ValueError(
+                "Either 'image_shape' or 'detection_input_shape' must be "
+                "specified."
+            )
+
         detection_shape_multiple = self.random_int(min=1, max=10)
-        image_height, image_width, image_channels = image_shape
-        detection_input_shape = (
-            image_height * detection_shape_multiple,
-            image_width * detection_shape_multiple,
-            image_channels,
-        )
+        if detection_input_shape is None:
+            # Our detection input shape will be some multiple of the input
+            # shape.
+            image_height, image_width, image_channels = image_shape
+            detection_input_shape = (
+                image_height * detection_shape_multiple,
+                image_width * detection_shape_multiple,
+                image_channels,
+            )
+        elif image_shape is None:
+            # Our image shape will be a fraction of the detection input shape.
+            (
+                detection_height,
+                detection_width,
+                detection_channels,
+            ) = detection_input_shape
+            image_shape = (
+                detection_height // detection_shape_multiple,
+                detection_width // detection_shape_multiple,
+                detection_channels,
+            )
 
         # Same with our frame shame.
         frame_shape_multiple = self.random_int(min=1, max=3)
@@ -157,10 +181,14 @@ class TensorProvider(BaseProvider):
             input_channels,
         )
 
+        # RotNet input has to be square.
+        rot_net_side_length = self.random_int(min=100, max=1000)
+        rot_net_shape = (rot_net_side_length, rot_net_side_length, 3)
+
         return ModelConfig(
             image_input_shape=image_shape,
             detection_model_input_shape=detection_input_shape,
-            rot_net_input_shape=detection_input_shape,
+            rot_net_input_shape=rot_net_shape,
             colorization_input_shape=detection_input_shape,
             colorization_output_shape=detection_input_shape,
             frame_input_shape=frame_shape,

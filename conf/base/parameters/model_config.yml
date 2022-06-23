@@ -13,8 +13,10 @@ colorization_input_shape: [270, 480, 1]
 colorization_output_shape: [72, 120, 32]
 # Number of appearance features to generate.
 num_appearance_features: 128
-# Number of GCN output channels to use.
-num_gcn_channels: 128
+# Number of node features to use in the CensNet layers.
+num_node_features: 128
+# Number of edge features to use in the CensNet layers.
+num_edge_features: 128
 # Sinkhorn normalization Lambda value.
 sinkhorn_lambda: 10.0
 # Number of reduction stages to include in the detection model.
