@@ -441,7 +441,11 @@ def _preprocess_adjacency(
 
     node_laplacian = gcn_filter(adjacency_matrices)
     incidence = _incidence_matrix(adjacency_matrices)
-    edge_laplacian = gcn_filter(line_graph(incidence))
+    line_graph_adjacency = line_graph(incidence)
+    # Cut off anything below zero. These are artifacts that appear when we try
+    # to compute the line graph of a graph that has unconnected nodes.
+    line_graph_adjacency = tf.maximum(0.0, line_graph_adjacency)
+    edge_laplacian = gcn_filter(line_graph_adjacency)
 
     return (
         tf.cast(node_laplacian, input_dtype),
