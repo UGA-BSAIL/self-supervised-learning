@@ -9,14 +9,8 @@ import tensorflow as tf
 
 from ..heat_maps import make_point_annotation_map, trim_out_of_bounds
 from ..schemas import ModelTargets
-from .graph_utils import compute_pairwise_similarities
 from .loss_metric_utilities import MaybeRagged, correct_ragged_mismatch
 from .ragged_utils import ragged_map_fn
-from .similarity_utils import (
-    aspect_ratio_penalty,
-    compute_ious,
-    distance_penalty,
-)
 
 
 class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
@@ -311,15 +305,15 @@ def make_losses(
 
     """
     return {
-        # ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
-        ModelTargets.HEATMAP.value: HeatMapFocalLoss(
-            alpha=alpha,
-            beta=beta,
-            name="heatmap_loss",
-        ),
-        ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
-            size_weight=size_weight,
-            offset_weight=offset_weight,
-            name="geometry_loss",
-        ),
+        ModelTargets.SINKHORN.value: WeightedBinaryCrossEntropy(),
+        # ModelTargets.HEATMAP.value: HeatMapFocalLoss(
+        #     alpha=alpha,
+        #     beta=beta,
+        #     name="heatmap_loss",
+        # ),
+        # ModelTargets.GEOMETRY_DENSE_PRED.value: GeometryL1Loss(
+        #     size_weight=size_weight,
+        #     offset_weight=offset_weight,
+        #     name="geometry_loss",
+        # ),
     }

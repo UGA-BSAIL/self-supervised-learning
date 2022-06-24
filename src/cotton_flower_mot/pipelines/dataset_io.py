@@ -118,6 +118,10 @@ class FeatureName(enum.Enum):
     """
     Pixel offsets for the detections in the heatmap.
     """
+    DETECTIONS = "detections"
+    """
+    Extracted detection crops.
+    """
     GEOMETRY = "geometry"
     """
     Geometric features.
@@ -177,6 +181,9 @@ class DataAugmentationConfig:
         min_saturation: Minimum saturation factor to use.
         max_saturation: Maximum saturation factor to use.
 
+        max_bbox_jitter: Maximum amount of bounding box jitter to add, in
+            fractions of a frame.
+
         flip: Whether to allow horizontal and vertical flipping.
     """
 
@@ -188,6 +195,8 @@ class DataAugmentationConfig:
 
     min_saturation: Optional[float] = None
     max_saturation: Optional[float] = None
+
+    max_bbox_jitter: float = 0.0
 
     flip: bool = False
 
@@ -282,6 +291,72 @@ def _random_flip(
     return image, heatmap, geometry
 
 
+def _add_bbox_jitter(
+    bbox_coords: tf.Tensor,
+    *,
+    max_fractional_change: float = 0.05,
+    image_shape: tf.Tensor,
+) -> tf.Tensor:
+    """
+    Adds uniform random jitter to bounding box coordinates.
+    Args:
+        bbox_coords: The bounding box coordinates. Should have the shape
+            `[N, 4]`, where each row takes the form
+            `[min_y, min_x, max_y, max_x]`, in pixels.
+        max_fractional_change: The maximum absolute amount that a coordinate
+            can change, as a fraction of the original coordinate value.
+        image_shape: A 1D vector describing the shape of the corresponding
+            image.
+    Returns:
+        The bounding box coordinates with jitter.
+    """
+    # Calculate maximum change in pixels.
+    image_height_width = tf.cast(image_shape[:2], tf.float32)
+    max_absolute_change = image_height_width * max_fractional_change
+    # Expand it so it aligns with both the corner points.
+    max_absolute_change = tf.tile(max_absolute_change, (2,))
+
+    # Generate random jitters.
+    jitter_magnitude = tf.random.uniform(
+        tf.shape(bbox_coords),
+        minval=-max_absolute_change,
+        maxval=max_absolute_change,
+    )
+
+    # Apply the jitters.
+    return bbox_coords + jitter_magnitude
+
+
+def _augment_images(
+    images: tf.Tensor, config: DataAugmentationConfig
+) -> tf.Tensor:
+    """
+    Applies data augmentation to images.
+    Args:
+        images: The images to augment.
+        config: Configuration for data augmentation.
+    Returns:
+        The augmented images.
+    """
+    # Convert to floats once so we're not doing many redundant conversions.
+    images = tf.cast(images, tf.float32)
+
+    images = tf.image.random_brightness(images, config.max_brightness_delta)
+    images = tf.image.random_hue(images, config.max_hue_delta)
+
+    if config.min_contrast is not None and config.max_contrast is not None:
+        images = tf.image.random_contrast(
+            images, config.min_contrast, config.max_contrast
+        )
+    if config.min_saturation is not None and config.max_saturation is not None:
+        images = tf.image.random_saturation(
+            images, config.min_saturation, config.max_saturation
+        )
+
+    images = tf.clip_by_value(images, 0.0, 255.0)
+    return tf.cast(images, tf.uint8)
+
+
 def _augment_inputs(
     *,
     image: tf.Tensor,
@@ -304,22 +379,7 @@ def _augment_inputs(
 
     """
     # Convert to floats once so we're not doing many redundant conversions.
-    image = tf.cast(image, tf.float32)
-
-    image = tf.image.random_brightness(image, config.max_brightness_delta)
-    image = tf.image.random_hue(image, config.max_hue_delta)
-
-    if config.min_contrast is not None and config.max_contrast is not None:
-        image = tf.image.random_contrast(
-            image, config.min_contrast, config.max_contrast
-        )
-    if config.min_saturation is not None and config.max_saturation is not None:
-        image = tf.image.random_saturation(
-            image, config.min_saturation, config.max_saturation
-        )
-
-    image = tf.clip_by_value(image, 0.0, 255.0)
-    image = tf.cast(image, tf.uint8)
+    image = _augment_images(image, config)
 
     # Perform flipping.
     if config.flip:
@@ -636,6 +696,7 @@ def _load_single_image_features(
     config: ModelConfig,
     include_frame: bool = False,
     heat_map_source: HeatMapSource = HeatMapSource.LOAD,
+    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -645,6 +706,7 @@ def _load_single_image_features(
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
         heat_map_source: Where to get the detection heatmap from.
+        augmentation_config: Configuration for data augmentation.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -654,6 +716,24 @@ def _load_single_image_features(
 
     def _process_image(feature_dict: Feature) -> Feature:
         bbox_coords = _extract_bbox_coords(feature_dict)
+
+        # Decode the image.
+        image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
+        image = tf.io.decode_jpeg(image_encoded[0])
+
+        # Add random jitter.
+        bbox_coords = _add_bbox_jitter(
+            bbox_coords,
+            image_shape=tf.shape(image),
+            max_fractional_change=augmentation_config.max_bbox_jitter,
+        )
+
+        # Extract the detection crops.
+        detections = _extract_detection_images(
+            bbox_coords=bbox_coords, image=image, config=config
+        )
+        # Augment the crops.
+        detections = _augment_images(detections, augmentation_config)
 
         # Compute the geometric features.
         image = feature_dict[Otf.IMAGE_ENCODED.value]
@@ -667,6 +747,7 @@ def _load_single_image_features(
         sequence_id = feature_dict[Otf.IMAGE_SEQUENCE_ID.value][0]
 
         loaded_features = {
+            FeatureName.DETECTIONS.value: detections,
             FeatureName.GEOMETRY.value: geometric_features,
             FeatureName.OBJECT_IDS.value: object_ids,
             FeatureName.FRAME_NUM.value: frame_num,
@@ -739,6 +820,7 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         pair_features: Feature,
     ) -> Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
         object_ids = pair_features[FeatureName.OBJECT_IDS.value]
+        detections = pair_features[FeatureName.DETECTIONS.value]
         geometry = pair_features[FeatureName.GEOMETRY.value]
         sequence_ids = pair_features[FeatureName.SEQUENCE_ID.value]
         frame_images = pair_features.get(FeatureName.FRAME_IMAGE.value, None)
@@ -756,11 +838,15 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         # float.
         assignment = tf.cast(sinkhorn, tf.bool)
 
+        tracklets = detections[0]
+        detections = detections[1]
         tracklet_geometry = geometry[0]
         detection_geometry = geometry[1]
 
         # Merge everything into input and target feature dictionaries.
         inputs = {
+            ModelInputs.DETECTIONS.value: detections,
+            ModelInputs.TRACKLETS.value: tracklets,
             # For tracking, we don't need the offsets in the geometric features.
             ModelInputs.DETECTION_GEOMETRY.value: detection_geometry[:, :4],
             ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry[:, :4],
@@ -1126,6 +1212,7 @@ def _inputs_and_targets_from_dataset(
         config=config,
         include_frame=include_frame,
         heat_map_source=heat_map_source,
+        augmentation_config=augmentation_config,
     )
     # Break into pairs.
     image_pairs = _window_to_nested(
@@ -1139,12 +1226,12 @@ def _inputs_and_targets_from_dataset(
         pair_features = _filter_empty(pair_features)
 
     # Decode the images.
-    pair_features = _decode_images(
-        pair_features,
-        augmentation_config=augmentation_config,
-        model_config=config,
-        heat_map_source=heat_map_source,
-    )
+    # pair_features = _decode_images(
+    #     pair_features,
+    #     augmentation_config=augmentation_config,
+    #     model_config=config,
+    #     heat_map_source=heat_map_source,
+    # )
 
     return pair_features
 

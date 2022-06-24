@@ -53,4 +53,4 @@ prepare_environment
 source scripts/load_common.sh
 
 # Run the training.
-poetry run kedro run --pipeline=model_training_colorization_init "$@"
+poetry run kedro run --pipeline=model_training "$@"

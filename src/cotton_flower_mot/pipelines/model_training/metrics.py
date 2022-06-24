@@ -303,8 +303,8 @@ def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
         The metrics that it created.
 
     """
-    # return {ModelTargets.ASSIGNMENT.value: IdSwitches()}
-    return {
-        ModelTargets.GEOMETRY_SPARSE_PRED.value: AveragePrecision(),
-        ModelTargets.HEATMAP.value: MaxConfidence(),
-    }
+    return {ModelTargets.ASSIGNMENT.value: IdSwitches()}
+    # return {
+    #     ModelTargets.GEOMETRY_SPARSE_PRED.value: AveragePrecision(),
+    #     ModelTargets.HEATMAP.value: MaxConfidence(),
+    # }

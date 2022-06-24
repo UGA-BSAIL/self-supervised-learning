@@ -20,8 +20,8 @@ def create_pipeline(**_):
     # Preset for loading training data.
     load_datasets = partial(
         inputs_and_targets_from_datasets,
-        include_frame=True,
-        heat_map_source=HeatMapSource.LOAD,
+        # include_frame=True,
+        heat_map_source=HeatMapSource.NONE,
     )
     # Preset for loading testing and validation data that doesn't randomize
     # or interleave clips.
@@ -53,6 +53,7 @@ def create_pipeline(**_):
                     min_saturation="params:min_saturation",
                     max_saturation="params:max_saturation",
                     flip="params:flip",
+                    max_bbox_jitter="params:bbox_jitter_fraction",
                 ),
                 "data_augmentation_config",
             ),
