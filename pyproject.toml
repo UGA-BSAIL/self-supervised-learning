@@ -11,7 +11,7 @@ kedro = {extras = ["matplotlib", "pandas"], version = "^0.18.1"}
 pycvat = {path = "pycvat", develop = false}
 pandas = "1.4.2"
 loguru = "^0.5.3"
-spektral = {git = "https://github.com/danielegrattarola/spektral.git", rev = "72ce3ad"}
+spektral = {git = "https://github.com/danielegrattarola/spektral.git", rev = "1dbdf9"}
 seaborn = "^0.11.1"
 matplotlib = "^3.3.4"
 pydantic = "^1.8.1"
