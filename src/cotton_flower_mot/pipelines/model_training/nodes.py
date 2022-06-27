@@ -232,8 +232,9 @@ def train_model(
             **kwargs,
         )
 
-        optimizer = tf.keras.optimizers.Adam(
+        optimizer = tf.keras.optimizers.SGD(
             learning_rate=make_learning_rate(phase["learning_rate"]),
+            momentum=phase["momentum"],
         )
         model.compile(
             optimizer=optimizer,

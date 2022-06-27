@@ -49,12 +49,12 @@ learning_phases:
   # The initial learning rate to use for the phase.
   - learning_rate:
       # Initial learning rate value.
-      initial: 0.001
+      initial: 0.004
       # Specify that we want to decay over time.
-      decay: false
+      decay: true
       # Number of steps to decay over.
-      # (440 steps per epoch)
-      decay_steps: 1320
+      # (422 steps per epoch)
+      decay_steps: 1266
       # Used to derive the number of iterations in the i-th period.
       t_mul: 2.0
       # Used to derive the initial learning rate of the i-th period.
@@ -63,13 +63,13 @@ learning_phases:
       # if we are not using SGDR.
       lr_patience_epochs: 20
       # Minimum learning rate to hit.
-      min_learning_rate: 0.00001
+      min_learning_rate: 0.000001
       # Number of LR warmup steps. Setting this to zero disables warmup.
       warmup_steps: 0
     # The momentum to use for the phase.
     momentum: 0.9
     # Number of epochs to train for in this phase.
-    num_epochs: 150
+    num_epochs: 45
 
 # Learning phases for training RotNet.
 rotnet_learning_phases:
