@@ -34,7 +34,7 @@ from .similarity_utils import (
 )
 
 # Use mixed precision to speed up training.
-tf.keras.mixed_precision.set_global_policy("mixed_float16")
+# tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
 
 def _build_appearance_feature_extractor(
@@ -379,14 +379,21 @@ def _incidence_matrix_single(triangular_adjacency, *, num_edges):
     return tf.sparse.to_dense(combined_sparse)
 
 
-def _incidence_matrix(adjacency):
+def _incidence_matrix(
+    adjacency: tf.Tensor, *, num_edges: tf.Tensor
+) -> tf.Tensor:
     """
     Creates the corresponding incidence matrices for graphs with particular
     adjacency matrices.
 
-    :param adjacency: The binary adjacency matrices. Should have shape
-        ([batch], n_nodes, n_nodes).
-    :return: The computed incidence matrices. It will have a shape of
+    Args:
+        adjacency: The binary adjacency matrices. Should have shape
+            ([batch], n_nodes, n_nodes).
+        num_edges: The number of edges to use for the incidence matrix. This
+            will add padding as necessary.
+
+    Returns:
+        The computed incidence matrices. It will have a shape of
         ([batch], n_nodes, n_edges).
     """
     adjacency = tf.convert_to_tensor(adjacency, dtype=tf.float32)
@@ -399,13 +406,9 @@ def _incidence_matrix(adjacency):
     # Compute the maximum number of edges. We will pad everything in the
     # batch to this dimension.
     adjacency_upper = _triangular_adjacency(adjacency)
-    num_edges = tf.math.count_nonzero(adjacency_upper, axis=(1, 2))
-    max_num_edges = tf.reduce_max(num_edges)
 
     # Compute all the transformation matrices.
-    make_single_matrix = partial(
-        _incidence_matrix_single, num_edges=max_num_edges
-    )
+    make_single_matrix = partial(_incidence_matrix_single, num_edges=num_edges)
     transformation_matrices = tf.map_fn(
         make_single_matrix,
         adjacency_upper,
@@ -422,6 +425,9 @@ def _incidence_matrix(adjacency):
 
 def _preprocess_adjacency(
     adjacency_matrices: tf.Tensor,
+    *,
+    num_tracklets: tf.Tensor,
+    num_detections: tf.Tensor,
 ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
     """
     Pre-processes that adjacency matrix for `CensNet`. Equivalent to
@@ -430,17 +436,24 @@ def _preprocess_adjacency(
     Args:
         adjacency_matrices: The binary adjacency matrix. Should have shape
             `[[batch_size], n_nodes, n_nodes]`.
+        num_tracklets: The number of tracklets for each graph, as a vector.
+        num_detections: The number of detections for each graph, as a vector.
 
     Returns:
         The node Laplacian, edge Laplacian, and incidence matrix.
 
     """
+    # Compute the maximum number of edges we should have.
+    max_num_edges = tf.reduce_max(num_tracklets) * tf.reduce_max(
+        num_detections
+    )
+
     # Force use of float32 here, but convert back once finished.
     input_dtype = adjacency_matrices.dtype
     adjacency_matrices = tf.cast(adjacency_matrices, tf.float32)
 
     node_laplacian = gcn_filter(adjacency_matrices)
-    incidence = _incidence_matrix(adjacency_matrices)
+    incidence = _incidence_matrix(adjacency_matrices, num_edges=max_num_edges)
     line_graph_adjacency = line_graph(incidence)
     # Cut off anything below zero. These are artifacts that appear when we try
     # to compute the line graph of a graph that has unconnected nodes.
@@ -599,8 +612,11 @@ def extract_interaction_features(
     )((num_tracklets, num_detections))
     # Compute CensNet graph structure inputs.
     graph_structure = layers.Lambda(
-        _preprocess_adjacency, name="preprocess_cens_net"
-    )(adjacency_matrices)
+        lambda a: _preprocess_adjacency(
+            a[0], num_tracklets=a[1], num_detections=a[2]
+        ),
+        name="preprocess_cens_net",
+    )((adjacency_matrices, num_tracklets, num_detections))
 
     # Note that the order of concatenation is important here.
     combined_app_features = layers.Concatenate(axis=1)(

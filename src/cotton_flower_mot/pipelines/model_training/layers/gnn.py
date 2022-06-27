@@ -3,7 +3,7 @@ Layers for graph neural networks.
 """
 
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 import spektral
 import tensorflow as tf
@@ -171,6 +171,7 @@ class ResidualCensNet(layers.Layer):
         edge_channels: int,
         *args: Any,
         name: Optional[str] = None,
+        edge_output: bool = True,
         **kwargs: Any
     ):
         """
@@ -179,6 +180,7 @@ class ResidualCensNet(layers.Layer):
             edge_channels: Number of output channels for the edge features.
             *args: Will be forwarded to the `CensNetConv` layer.
             name: The name of this layer.
+            edge_output: Whether to include an edge ouput from the layer.
             **kwargs: Will be forwarded to the `CensNetConv` layer.
         """
         super().__init__(name=name)
@@ -187,13 +189,18 @@ class ResidualCensNet(layers.Layer):
         self._gcn_kwargs = kwargs
         self._node_channels = node_channels
         self._edge_channels = edge_channels
+        self._edge_output = edge_output
 
         # Pre-create the sub-layers.
         self._node_conv1_1 = None
         self._edge_conv1_1 = None
 
         self._gcn1_1 = spektral.layers.CensNetConv(
-            node_channels, edge_channels, *args, **kwargs
+            node_channels,
+            edge_channels,
+            *args,
+            edge_output=edge_output,
+            **kwargs
         )
         self._add_nodes = layers.Add(name="add_nodes")
         self._add_edges = layers.Add(name="add_edges")
@@ -231,16 +238,24 @@ class ResidualCensNet(layers.Layer):
             )
 
             self._edge_conv1_1 = layers.Conv1D(
-                self._edge_conv1_1, 1, padding="same", name="adapt_edges"
+                self._edge_channels, 1, padding="same", name="adapt_edges"
             )
 
         super().build(input_shape)
 
     def call(
         self, inputs: Tuple[tf.Tensor, tf.Tensor, tf.Tensor], **kwargs: Any
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
+    ) -> Union[Tuple[tf.Tensor, tf.Tensor], tf.Tensor]:
         nodes, _, edges = inputs
-        nodes_res, edges_res = self._gcn1_1(inputs, **kwargs)
+        outputs = self._gcn1_1(inputs, **kwargs)
+        nodes_res = outputs
+        if self._edge_output:
+            # Compute edge residual.
+            nodes_res, edges_res = outputs
+
+            if self._edge_conv1_1 is not None:
+                edges = self._edge_conv1_1(edges)
+            new_edges = self._add_edges([edges, edges_res])
 
         if self._node_conv1_1 is not None:
             # Adapt the input size so it matches up.
@@ -248,8 +263,10 @@ class ResidualCensNet(layers.Layer):
 
         # Compute the residual.
         new_nodes = self._add_nodes([nodes, nodes_res])
-        new_edges = self._add_edges([edges, edges_res])
-        return new_nodes, new_edges
+        if self._edge_output:
+            return new_nodes, new_edges
+        else:
+            return new_nodes
 
     def get_config(self) -> Dict[str, Any]:
         return dict(
