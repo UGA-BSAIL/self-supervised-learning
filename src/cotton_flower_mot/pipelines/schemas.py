@@ -262,10 +262,10 @@ class ModelTargets(enum.Enum):
     """
     GEOMETRY_SPARSE_PRED = "geometry_sparse_pred"
     """
-    Contains the same information as `GEOMETRY_DENSE_PRED`. For the
-    ground-truth, these two should be the same. However, for the predictions,
-    this one is in sparse form, i.e. the predictions will have the form
-    `[center_x, center_y, width, height, confidence]`.
+    Contains the actual detected bounding boxes. For the ground-truth,
+    they should be the same as `GEOMETRY_DENSE_PRED`. However, for the
+    predictions, this one is in sparse form, i.e. the predictions will have
+    the form `[center_x, center_y, width, height, confidence]`.
     """
 
 

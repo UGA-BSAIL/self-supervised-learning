@@ -3,8 +3,9 @@ Custom pooling layers.
 """
 
 
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
+import keras.backend as K
 import tensorflow as tf
 from tensorflow.keras import layers
 
@@ -80,3 +81,79 @@ class PeakLayer(layers.Layer):
 
     def get_config(self) -> Dict[str, Any]:
         return {"with_confidence": self._with_confidence, "name": self.name}
+
+
+class RoiPooling(layers.Layer):
+    """ROI pooling layer for 2D inputs.
+    See Spatial Pyramid Pooling in Deep Convolutional Networks for Visual Recognition,
+    K. He, X. Zhang, S. Ren, J. Sun
+
+    This code is largely copied from here:
+    https://github.com/kbardool/keras-frcnn/blob/master/keras_frcnn/RoiPoolingConv.py
+
+    Args:
+        pool_size: Size of pooling region to use. pool_size = 7 will result
+            in a 7x7 region.
+
+    Input shape:
+        list of two 4D tensors [X_img,X_roi] with shape:
+        X_img: `(batch_size, rows, cols, channels)`
+        X_roi:
+            `(batch_size,num_rois,4)` list of rois, with ordering (x,y,w,h),
+                where the second dimension is ragged. These should be in
+                "normalized" coordinates, i.e. with the values in [0, 1].
+    Output shape:
+        5D tensor with shape:
+        `(batch_size, num_rois, pool_size, pool_size, channels)`, where the
+        second dimension is ragged.
+    """
+
+    def __init__(self, pool_size: int, **kwargs: Any):
+        self.__pool_size = pool_size
+
+        # Number of input channels. Will be set when the layer is built.
+        self.__num_input_channels = None
+
+        super().__init__(**kwargs)
+
+    def build(self, input_shape: Tuple[tf.TensorShape, tf.RaggedTensorSpec]):
+        self.__num_input_channels = input_shape[0][3]
+
+    def compute_output_shape(self, _: Any):
+        return (
+            None,
+            None,
+            self.__pool_size,
+            self.__pool_size,
+            self.__num_input_channels,
+        )
+
+    def call(self, inputs: Tuple[tf.Tensor, tf.RaggedTensor], **_: Any):
+        assert len(inputs) == 2, "ROI pooling should have two inputs."
+
+        images = inputs[0]
+        rois = inputs[1]
+
+        # Determine which boxes are for which images.
+        box_image_indices = rois.value_rowids()
+        box_image_indices = tf.cast(box_image_indices, tf.int32)
+        # ROIs need to be flat for use with cropping function.
+        flat_rois = rois.merge_dims(0, 1)
+
+        roi_crops = tf.image.crop_and_resize(
+            images,
+            boxes=flat_rois,
+            box_indices=box_image_indices,
+            crop_size=(self.__pool_size, self.__pool_size),
+        )
+
+        # Separate the batch and ROI dimensions again, which will make our
+        # final output ragged.
+        return tf.RaggedTensor.from_value_rowids(
+            roi_crops, box_image_indices, nrows=rois.nrows(out_type=tf.int32)
+        )
+
+    def get_config(self):
+        config = {"pool_size": self.__pool_size}
+        base_config = super().get_config()
+        return dict(**base_config, **config)

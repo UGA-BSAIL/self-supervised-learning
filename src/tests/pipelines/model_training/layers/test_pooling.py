@@ -141,3 +141,76 @@ class TestPeakLayer:
             result = result * tf.cast(tf.not_equal(heatmap, 0.0), result.dtype)
             # It should choose each point.
             np.testing.assert_array_equal(point_mask.numpy(), result.numpy())
+
+
+class TestRoiPoolingLayer:
+    """
+    Tests for the `RoiPooling` class.
+    """
+
+    @dataclass(frozen=True, config=ArbitraryTypesConfig)
+    class ConfigForTests:
+        """
+        Encapsulates standard configuration for most tests.
+
+        Attributes:
+            pooling_layer: The `RoiPooling` layer under test.
+            pool_size: The size that we are using for the pooled output.
+
+        """
+
+        pooling_layer: pooling.RoiPooling
+        pool_size: int
+
+    @classmethod
+    @pytest.fixture
+    def config(cls, faker: Faker) -> ConfigForTests:
+        """
+        Generates standard configuration for most tests.
+
+        Args:
+            faker: The fixture to use for generating fake data.
+
+        Returns:
+            The configuration that it generated.
+
+        """
+        pool_size = faker.random_int(max=11)
+        layer = pooling.RoiPooling(pool_size=pool_size)
+
+        return cls.ConfigForTests(pooling_layer=layer, pool_size=pool_size)
+
+    def test_pooling(self, config: ConfigForTests, faker: Faker) -> None:
+        """
+        Tests that the basic ROI pooling operation works.
+
+        Args:
+            config: The configuration to use for testing.
+            faker: The fixture to use for generating fake data.
+
+        """
+        # Arrange.
+        batch_size = faker.random_int(min=1, max=10)
+        # Create fake image features.
+        images = faker.tensor((batch_size, 100, 100, 3))
+
+        # Create fake ROIs.
+        row_lengths = [faker.random_int(max=10) for _ in range(batch_size)]
+        # Ensure there's at least one zero-length row for testing purposes.
+        row_lengths[-1] = 0
+        rois = faker.ragged_tensor(row_lengths=row_lengths, inner_shape=(4,))
+        # Convert to normalized coordinates.
+        rois -= tf.reduce_min(rois)
+        rois /= tf.reduce_max(rois)
+
+        # Act.
+        roi_crops = config.pooling_layer((images, rois))
+
+        # Assert.
+        # We should have the correct number of extracted crops for each image.
+        assert list(roi_crops.row_lengths()) == row_lengths
+        # The crops should be the correct size.
+        assert tuple(roi_crops.shape[-3:-1]) == (
+            config.pool_size,
+            config.pool_size,
+        )
