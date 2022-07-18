@@ -210,9 +210,13 @@ class ModelInputs(enum.Enum):
     """
     Extracted tracklet crops.
     """
-    DETECTIONS_FRAME = "frame"
+    DETECTIONS_FRAME = "detections_frame"
     """
     The raw frame image associated with the detections.
+    """
+    TRACKLETS_FRAME = "tracklets_frame"
+    """
+    The raw frame image associated with the tracklets.
     """
 
     DETECTION_GEOMETRY = "detection_geometry"
@@ -247,6 +251,10 @@ class ModelTargets(enum.Enum):
     The hard assignment matrix.
     """
 
+    FEATURES = "features"
+    """
+    The raw image features from the CNN.
+    """
     HEATMAP = "heatmap"
     """
     The heatmap indicating the location of the detection centers.

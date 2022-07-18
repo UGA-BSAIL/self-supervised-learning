@@ -11,6 +11,7 @@ from tensorflow.keras import layers
 from ..config import ModelConfig
 from ..schemas import ModelInputs
 from .centernet_model import build_detection_model
+from .gcnn_model import compute_association
 from .layers.pooling import RoiPooling
 from .layers.utility import BnActDense
 
@@ -81,6 +82,11 @@ def build_combined_model(
         shape=config.detection_model_input_shape,
         name=ModelInputs.DETECTIONS_FRAME.value,
     )
+    # Input for the previous video frame.
+    previous_frames = layers.Input(
+        shape=config.detection_model_input_shape,
+        name=ModelInputs.TRACKLETS_FRAME.value,
+    )
 
     geometry_input_shape = (None, 4)
     # In all cases, we need to manually provide the tracklet bounding boxes.
@@ -91,6 +97,7 @@ def build_combined_model(
         ragged=True,
         name=ModelInputs.TRACKLET_GEOMETRY.value,
     )
+    model_inputs = [current_frames, previous_frames, tracklet_geometry]
     if is_training:
         # Create the GT detection bounding box inputs, which are needed for
         # training.
@@ -99,17 +106,38 @@ def build_combined_model(
             ragged=True,
             name=ModelInputs.DETECTION_GEOMETRY.value,
         )
-
-        # Input for the previous video frame. This is needed when training.
-        previous_frames = layers.Input(
-            shape=config.detection_model_input_shape,
-            name=ModelInputs.DETECTIONS_FRAME.value,
-        )
+        model_inputs.append(detection_geometry)
     else:
-        # Input for the previous image features. These should be supplied
-        # during online inference for efficiency.
-
         # Just grab the bounding boxes from the detector.
         _, _, detection_geometry = detector(current_frames)
         # Remove the confidence scores.
         detection_geometry = detection_geometry[:, :, :4]
+
+    # Extract the image features.
+    current_frame_features = image_feature_extractor(current_frames)
+    previous_frame_features = image_feature_extractor(previous_frames)
+
+    # Extract the appearance features.
+    detection_features = _extract_appearance_features(
+        bbox_geometry=detection_geometry,
+        image_features=current_frame_features,
+        config=config,
+    )
+    tracklet_features = _extract_appearance_features(
+        bbox_geometry=tracklet_geometry,
+        image_features=previous_frame_features,
+        config=config,
+    )
+
+    sinkhorn, hungarian = compute_association(
+        detections_app_features=detection_features,
+        tracklets_app_features=tracklet_features,
+        detections_geometry=detection_geometry,
+        tracklets_geometry=tracklet_geometry,
+        config=config,
+    )
+    return tf.keras.Model(
+        inputs=model_inputs,
+        outputs=[sinkhorn, hungarian],
+        name="gcnnmatch_end_to_end",
+    )

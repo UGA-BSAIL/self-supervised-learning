@@ -514,48 +514,6 @@ def extract_appearance_features(
     return detections_features_ragged, tracklets_features_ragged
 
 
-def extract_dense_appearance_features(
-    *,
-    detections: tf.RaggedTensor,
-    tracklets: tf.RaggedTensor,
-    config: ModelConfig,
-) -> Tuple[tf.Tensor, tf.Tensor]:
-    """
-    Builds the portion of the system that extracts appearance features, and
-    produces features that are padded into a tensor.
-
-    Args:
-        detections: Extracted detection images. Should have the shape
-            `[batch_size, n_detections, height, width, channels]`, where the
-            second dimension is ragged.
-        tracklets: Extracted final images from each tracklet. Should have the
-            shape `[batch_size, n_tracklets, height, width, channels]`, where
-            the second dimension is ragged.
-        config: The model configuration.
-
-    Returns:
-        The extracted appearance features, for both the detections and
-        tracklets. Each set will have the shape
-        `[batch_size, max_num_nodes, n_features]`, where the second dimension is
-        padded.
-
-    """
-    # Extract the appearance features.
-    (
-        detections_app_features,
-        tracklets_app_features,
-    ) = extract_appearance_features(
-        detections=detections, tracklets=tracklets, config=config
-    )
-
-    # Pad them to dense tensors.
-    to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
-    detections_app_features = to_tensor(detections_app_features)
-    tracklets_app_features = to_tensor(tracklets_app_features)
-
-    return detections_app_features, tracklets_app_features
-
-
 def extract_interaction_features(
     *,
     detections_app_features: tf.Tensor,
@@ -638,8 +596,8 @@ def extract_interaction_features(
 
 def compute_association(
     *,
-    detections: tf.RaggedTensor,
-    tracklets: tf.RaggedTensor,
+    detections_app_features: tf.RaggedTensor,
+    tracklets_app_features: tf.RaggedTensor,
     detections_geometry: tf.RaggedTensor,
     tracklets_geometry: tf.RaggedTensor,
     config: ModelConfig,
@@ -648,12 +606,12 @@ def compute_association(
     Builds a model that computes associations between tracklets and detections.
 
     Args:
-        detections: Extracted detection images. Should have the shape
-            `[batch_size, n_detections, height, width, channels]`, where the
-            second dimension is ragged.
-        tracklets: Extracted final images from each tracklet. Should have the
-            shape `[batch_size, n_tracklets, height, width, channels]`, where
-            the second dimension is ragged.
+        detections_app_features: Detection appearance features. Should have the
+            shape `[bach_size, n_detections, n_features]`, where the second
+            dimension is ragged.
+        tracklets_app_features: Tracklet appearance features. Should have the
+            shape `[bach_size, n_tracklets, n_features]`, where the second
+            dimension is ragged.
         detections_geometry: The geometric features associated with the
             detections. Should have the shape
             `[batch_size, n_detections, n_features]`, where the second dimension
@@ -673,13 +631,11 @@ def compute_association(
         Hungarian algorithm.
 
     """
-    # Extract appearance features.
-    (
-        detections_app_features,
-        tracklets_app_features,
-    ) = extract_dense_appearance_features(
-        detections=detections, tracklets=tracklets, config=config
-    )
+    # Pad appearance features to dense tensors.
+    to_tensor = layers.Lambda(lambda rt: rt.to_tensor())
+    detections_app_features = to_tensor(detections_app_features)
+    tracklets_app_features = to_tensor(tracklets_app_features)
+
     # Extract interaction features.
     (
         tracklets_inter_features,
@@ -708,7 +664,11 @@ def compute_association(
 
     # Compute the association matrices.
     return AssociationLayer(sinkhorn_lambda=config.sinkhorn_lambda)(
-        (affinity_scores, detections.row_lengths(), tracklets.row_lengths())
+        (
+            affinity_scores,
+            detections_app_features.row_lengths(),
+            tracklets_app_features.row_lengths(),
+        )
     )
 
 
@@ -747,6 +707,13 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
         config, name=ModelInputs.DETECTIONS.value
     )
 
+    (
+        detections_app_features,
+        tracklets_app_features,
+    ) = extract_appearance_features(
+        detections=detection_input, tracklets=tracklet_input, config=config
+    )
+
     geometry_input_shape = (None, 4)
     detection_geometry_input = layers.Input(
         geometry_input_shape,
@@ -761,8 +728,8 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
 
     # Build the actual model.
     sinkhorn, assignment = compute_association(
-        detections=detection_input,
-        tracklets=tracklet_input,
+        detections_app_features=detections_app_features,
+        tracklets_app_features=tracklets_app_features,
         detections_geometry=detection_geometry_input,
         tracklets_geometry=tracklet_geometry_input,
         config=config,

@@ -124,7 +124,7 @@ def _build_decoder(
         kernel_regularizer=l2(5e-4),
     )(x)
     x = BatchNormalization()(x)
-    return ReLU()(x)
+    return ReLU(name=ModelTargets.FEATURES.value)(x)
 
 
 def _build_prediction_head(
