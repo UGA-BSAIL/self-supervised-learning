@@ -30,6 +30,8 @@ class ModelConfig:
             by a factor of 2.
         detection_sigma: Sigma to use for detection heatmaps.
 
+        roi_pooling_size: Size to use for the ROI pooling operation when
+            downsampling the detector features to appearance features.
         num_appearance_features: The number of appearance features to extract
             from each image.
         num_node_features: Number of output node features to use for the
@@ -54,6 +56,7 @@ class ModelConfig:
     num_reduction_stages: int
     detection_sigma: float
 
+    roi_pooling_size: int
     num_appearance_features: int
     num_node_features: int
     num_edge_features: int

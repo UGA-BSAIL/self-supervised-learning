@@ -309,8 +309,9 @@ def build_detection_model(
         name=ModelTargets.GEOMETRY_SPARSE_PRED.value,
     )((confidence_mask, sizes, offsets))
 
-    feature_extractor = tf.keras.Model(inputs=images, outputs=[
-        decoder_features])
+    feature_extractor = tf.keras.Model(
+        inputs=images, outputs=[decoder_features]
+    )
     detection_model = tf.keras.Model(
         inputs=images, outputs=[heatmap, geometry, bounding_boxes]
     )
