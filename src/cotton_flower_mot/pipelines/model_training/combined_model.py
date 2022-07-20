@@ -5,6 +5,7 @@ Implements a combined detection + tracking model.
 
 from typing import Optional, Tuple
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 
@@ -21,7 +22,7 @@ def _extract_appearance_features(
     bbox_geometry: tf.RaggedTensor,
     image_features: tf.Tensor,
     config: ModelConfig
-) -> Tuple[tf.RaggedTensor, tf.RaggedTensor]:
+) -> tf.RaggedTensor:
     """
     Extracts the appearance features for the detections or tracklets.
 
@@ -44,8 +45,16 @@ def _extract_appearance_features(
     )
 
     # Coerce the features to the correct shape.
-    features = layers.Lambda(lambda r: r.merge_dims(2, -1))(feature_crops)
-    return BnActDense(config.num_appearance_features, activation="relu")(
+    def _flatten_features(_features: tf.RaggedTensor) -> tf.RaggedTensor:
+        # We have to go through this annoying process to ensure that the
+        # static shape remains correct.
+        inner_shape = _features.shape[-3:]
+        num_flat_features = np.prod(inner_shape)
+        flat_features = tf.reshape(_features.values, (-1, num_flat_features))
+        return _features.with_values(flat_features)
+
+    features = layers.Lambda(_flatten_features)(feature_crops)
+    return layers.Dense(config.num_appearance_features, activation="relu")(
         features
     )
 
@@ -88,6 +97,11 @@ def build_combined_model(
         name=ModelInputs.TRACKLETS_FRAME.value,
     )
 
+    # Apply the detection model to the input frames.
+    detection_heatmap, detection_dense_geometry, detection_bboxes = detector(
+        current_frames
+    )
+
     geometry_input_shape = (None, 4)
     # In all cases, we need to manually provide the tracklet bounding boxes.
     # These can either be the ground-truth, during training, or the
@@ -97,21 +111,24 @@ def build_combined_model(
         ragged=True,
         name=ModelInputs.TRACKLET_GEOMETRY.value,
     )
+    # Default to using
     model_inputs = [current_frames, previous_frames, tracklet_geometry]
     if is_training:
         # Create the GT detection bounding box inputs, which are needed for
         # training.
-        detection_geometry = layers.Input(
+        detection_geometry_for_tracker = layers.Input(
             geometry_input_shape,
             ragged=True,
             name=ModelInputs.DETECTION_GEOMETRY.value,
         )
-        model_inputs.append(detection_geometry)
+        model_inputs.append(detection_geometry_for_tracker)
     else:
         # Just grab the bounding boxes from the detector.
-        _, _, detection_geometry = detector(current_frames)
+        _, _, detection_geometry_for_tracker = detection_bboxes
         # Remove the confidence scores.
-        detection_geometry = detection_geometry[:, :, :4]
+        detection_geometry_for_tracker = detection_geometry_for_tracker[
+            :, :, :4
+        ]
 
     # Extract the image features.
     current_frame_features = image_feature_extractor(current_frames)
@@ -119,7 +136,7 @@ def build_combined_model(
 
     # Extract the appearance features.
     detection_features = _extract_appearance_features(
-        bbox_geometry=detection_geometry,
+        bbox_geometry=detection_geometry_for_tracker,
         image_features=current_frame_features,
         config=config,
     )
@@ -132,12 +149,18 @@ def build_combined_model(
     sinkhorn, hungarian = compute_association(
         detections_app_features=detection_features,
         tracklets_app_features=tracklet_features,
-        detections_geometry=detection_geometry,
+        detections_geometry=detection_geometry_for_tracker,
         tracklets_geometry=tracklet_geometry,
         config=config,
     )
     return tf.keras.Model(
         inputs=model_inputs,
-        outputs=[sinkhorn, hungarian],
+        outputs=[
+            detection_heatmap,
+            detection_dense_geometry,
+            detection_bboxes,
+            sinkhorn,
+            hungarian,
+        ],
         name="gcnnmatch_end_to_end",
     )

@@ -96,7 +96,7 @@ class BnActConv(_BnActLayer):
         super().__init__(*args, layer=layers.Conv2D, **kwargs)
 
 
-class BnActDense(layers.Layer):
+class BnActDense(_BnActLayer):
     """
     Small helper layer that applies batch normalization, ReLU, and a dense
     layer in that order.

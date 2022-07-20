@@ -3,9 +3,9 @@ Contains custom `Faker` providers.
 """
 
 
-from typing import Any, Iterable, Optional, Reversible, Tuple
-from functools import partial
 import math
+from functools import partial
+from typing import Any, Iterable, Optional, Reversible, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -126,6 +126,38 @@ class TensorProvider(BaseProvider):
         # Convert to integers to simulate how actual images are.
         return tf.cast(detections, tf.uint8)
 
+    def bounding_boxes(
+        self, batch_size: Optional[int] = None
+    ) -> tf.RaggedTensor:
+        """
+        Creates a fake set of bounding boxes.
+
+        Args:
+            batch_size: The batch size to use. If not specified, it will be
+                chosen randomly.
+
+        Returns:
+            The fake bounding boxes that it created, in normalized
+            coordinates. It will have the shape `[batch_size, n_detections, 4]`,
+            where the last dimension is arranged `[x, y, width, height]`. The
+            second dimension will be ragged.
+
+        """
+        if batch_size is None:
+            batch_size = self.random_int(min=1, max=16)
+
+        row_lengths_bboxes = [
+            self.random_int(max=8) for _ in range(batch_size)
+        ]
+        bboxes = self.ragged_tensor(
+            row_lengths=row_lengths_bboxes,
+            inner_shape=(4,),
+            min_value=0.0,
+            max_value=1.0,
+        )
+
+        return bboxes
+
     def model_config(
         self,
         image_shape: Optional[Tuple[int, int, int]] = None,
@@ -202,5 +234,5 @@ class TensorProvider(BaseProvider):
                 self.__faker.pyfloat(min_value=0, max_value=1),
                 self.__faker.pyfloat(min_value=0, max_value=1),
             ),
-            roi_pooling_size=self.random_int(min=1, max=20)
+            roi_pooling_size=self.random_int(min=1, max=20),
         )

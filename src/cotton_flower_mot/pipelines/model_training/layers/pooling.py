@@ -146,6 +146,16 @@ class RoiPooling(layers.Layer):
             box_indices=box_image_indices,
             crop_size=(self.__pool_size, self.__pool_size),
         )
+        # Always nice to have the static shape...
+        roi_crops = tf.ensure_shape(
+            roi_crops,
+            (
+                None,
+                self.__pool_size,
+                self.__pool_size,
+                self.__num_input_channels,
+            ),
+        )
 
         # Separate the batch and ROI dimensions again, which will make our
         # final output ragged.
