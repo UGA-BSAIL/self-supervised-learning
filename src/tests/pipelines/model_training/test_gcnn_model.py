@@ -118,9 +118,15 @@ def test_extract_interaction_features_smoke(faker: Faker) -> None:
     (
         detection_app_features,
         tracklet_app_features,
-    ) = gcnn_model.extract_dense_appearance_features(
+    ) = gcnn_model.extract_appearance_features(
         detections=detection_input, tracklets=tracklet_input, config=config
     )
+
+    # Pad appearance features to dense tensors.
+    to_tensor = tf.keras.layers.Lambda(lambda rt: rt.to_tensor())
+    detection_app_features = to_tensor(detection_app_features)
+    tracklet_app_features = to_tensor(tracklet_app_features)
+
     (
         tracklet_inter_features,
         detection_inter_features,
@@ -171,13 +177,13 @@ def test_compute_association_smoke(faker: Faker) -> None:
 
     """
     # Arrange.
-    image_shape = (100, 100, 3)
+    app_feature_shape = (faker.random_int(max=200),)
     batch_size = faker.random_int(min=1, max=16)
     detections = faker.detected_objects(
-        image_shape=image_shape, batch_size=batch_size
+        image_shape=app_feature_shape, batch_size=batch_size
     )
     tracklets = faker.detected_objects(
-        image_shape=image_shape, batch_size=batch_size
+        image_shape=app_feature_shape, batch_size=batch_size
     )
 
     # Create fake geometry features.
@@ -185,13 +191,13 @@ def test_compute_association_smoke(faker: Faker) -> None:
         row_lengths=detections.row_lengths(), inner_shape=(4,)
     )
     tracklets_geometry = faker.ragged_tensor(
-        row_lengths=detections.row_lengths(), inner_shape=(4,)
+        row_lengths=tracklets.row_lengths(), inner_shape=(4,)
     )
 
-    config = faker.model_config(image_shape=image_shape)
+    config = faker.model_config(image_shape=(100, 100, 3))
 
     # Act.
-    input_shape = (None,) + image_shape
+    input_shape = (None,) + app_feature_shape
     detection_input = tf.keras.Input(input_shape, ragged=True)
     tracklet_input = tf.keras.Input(input_shape, ragged=True)
 
@@ -200,8 +206,8 @@ def test_compute_association_smoke(faker: Faker) -> None:
     tracklet_geometry_input = tf.keras.Input(geom_input_shape, ragged=True)
 
     sinkhorn, assigment = gcnn_model.compute_association(
-        detections=detection_input,
-        tracklets=tracklet_input,
+        detections_app_features=detection_input,
+        tracklets_app_features=tracklet_input,
         detections_geometry=detection_geometry_input,
         tracklets_geometry=tracklet_geometry_input,
         config=config,

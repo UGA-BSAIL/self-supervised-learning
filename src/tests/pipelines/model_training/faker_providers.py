@@ -96,7 +96,7 @@ class TensorProvider(BaseProvider):
 
     def detected_objects(
         self,
-        image_shape: Tuple[int, int, int] = (100, 100, 3),
+        image_shape: Tuple[int, ...] = (100, 100, 3),
         batch_size: Optional[int] = None,
     ) -> tf.RaggedTensor:
         """
@@ -202,4 +202,5 @@ class TensorProvider(BaseProvider):
                 self.__faker.pyfloat(min_value=0, max_value=1),
                 self.__faker.pyfloat(min_value=0, max_value=1),
             ),
+            roi_pooling_size=self.random_int(min=1, max=20)
         )

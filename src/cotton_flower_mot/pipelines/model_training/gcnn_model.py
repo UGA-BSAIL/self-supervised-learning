@@ -666,8 +666,8 @@ def compute_association(
     return AssociationLayer(sinkhorn_lambda=config.sinkhorn_lambda)(
         (
             affinity_scores,
-            detections_app_features.row_lengths(),
-            tracklets_app_features.row_lengths(),
+            detections_geometry.row_lengths(),
+            tracklets_geometry.row_lengths(),
         )
     )
 
