@@ -11,6 +11,9 @@ colorization_input_shape: [270, 480, 1]
 # Shape of the output from the colorization model. The last dimension
 # is the number of bins in the histograms.
 colorization_output_shape: [72, 120, 32]
+# Size to use for the ROI pooling operation when downsampling the detector
+# features to appearance features.
+roi_pooling_size: 7
 # Number of appearance features to generate.
 num_appearance_features: 128
 # Number of node features to use in the CensNet layers.

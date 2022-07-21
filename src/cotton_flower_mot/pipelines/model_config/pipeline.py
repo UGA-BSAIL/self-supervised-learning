@@ -27,6 +27,7 @@ def create_pipeline(**kwargs):
                     num_reduction_stages="params:num_reduction_stages",
                     detection_sigma="params:detection_sigma",
                     nominal_detection_size="params:nominal_detection_size",
+                    roi_pooling_size="params:roi_pooling_size",
                 ),
                 "model_config",
             ),

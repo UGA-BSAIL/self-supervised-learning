@@ -118,10 +118,6 @@ class FeatureName(enum.Enum):
     """
     Pixel offsets for the detections in the heatmap.
     """
-    DETECTIONS = "detections"
-    """
-    Extracted detection crops.
-    """
     GEOMETRY = "geometry"
     """
     Geometric features.
@@ -696,7 +692,6 @@ def _load_single_image_features(
     config: ModelConfig,
     include_frame: bool = False,
     heat_map_source: HeatMapSource = HeatMapSource.LOAD,
-    augmentation_config: DataAugmentationConfig = DataAugmentationConfig(),
 ) -> tf.data.Dataset:
     """
     Loads the features that can be extracted from a single image.
@@ -706,7 +701,6 @@ def _load_single_image_features(
         config: The model configuration to use.
         include_frame: If true, include the full frame image in the features.
         heat_map_source: Where to get the detection heatmap from.
-        augmentation_config: Configuration for data augmentation.
 
     Returns:
         A dataset with elements that are dictionaries with the single-image
@@ -716,24 +710,6 @@ def _load_single_image_features(
 
     def _process_image(feature_dict: Feature) -> Feature:
         bbox_coords = _extract_bbox_coords(feature_dict)
-
-        # Decode the image.
-        image_encoded = feature_dict[Otf.IMAGE_ENCODED.value]
-        image = tf.io.decode_jpeg(image_encoded[0])
-
-        # Add random jitter.
-        bbox_coords = _add_bbox_jitter(
-            bbox_coords,
-            image_shape=tf.shape(image),
-            max_fractional_change=augmentation_config.max_bbox_jitter,
-        )
-
-        # Extract the detection crops.
-        detections = _extract_detection_images(
-            bbox_coords=bbox_coords, image=image, config=config
-        )
-        # Augment the crops.
-        detections = _augment_images(detections, augmentation_config)
 
         # Compute the geometric features.
         image = feature_dict[Otf.IMAGE_ENCODED.value]
@@ -747,7 +723,6 @@ def _load_single_image_features(
         sequence_id = feature_dict[Otf.IMAGE_SEQUENCE_ID.value][0]
 
         loaded_features = {
-            FeatureName.DETECTIONS.value: detections,
             FeatureName.GEOMETRY.value: geometric_features,
             FeatureName.OBJECT_IDS.value: object_ids,
             FeatureName.FRAME_NUM.value: frame_num,
@@ -820,7 +795,6 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         pair_features: Feature,
     ) -> Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
         object_ids = pair_features[FeatureName.OBJECT_IDS.value]
-        detections = pair_features[FeatureName.DETECTIONS.value]
         geometry = pair_features[FeatureName.GEOMETRY.value]
         sequence_ids = pair_features[FeatureName.SEQUENCE_ID.value]
         frame_images = pair_features.get(FeatureName.FRAME_IMAGE.value, None)
@@ -838,22 +812,18 @@ def _load_pair_features(features: tf.data.Dataset) -> tf.data.Dataset:
         # float.
         assignment = tf.cast(sinkhorn, tf.bool)
 
-        tracklets = detections[0]
-        detections = detections[1]
         tracklet_geometry = geometry[0]
         detection_geometry = geometry[1]
 
         # Merge everything into input and target feature dictionaries.
         inputs = {
-            ModelInputs.DETECTIONS.value: detections,
-            ModelInputs.TRACKLETS.value: tracklets,
             # For tracking, we don't need the offsets in the geometric features.
             ModelInputs.DETECTION_GEOMETRY.value: detection_geometry[:, :4],
             ModelInputs.TRACKLET_GEOMETRY.value: tracklet_geometry[:, :4],
             ModelInputs.SEQUENCE_ID.value: sequence_ids,
         }
         if frame_images is not None:
-            # We only provide the current frame image.
+            inputs[ModelInputs.TRACKLETS_FRAME.value] = frame_images[0]
             inputs[ModelInputs.DETECTIONS_FRAME.value] = frame_images[1]
 
         targets = {
@@ -879,7 +849,7 @@ def _decode_images(
     heat_map_source: HeatMapSource = HeatMapSource.LOAD,
 ) -> tf.data.Dataset:
     """
-    Decodes images from pair features and does whatever processing that has
+    Decodes images from pair features and does whatever processing has
     been deferred while the images were encoded. Since this is the slowest
     and most memory-intensive step of the entire pipeline, it makes sense to
     do this as late as possible after we've had a chance to filter out
@@ -900,7 +870,8 @@ def _decode_images(
         inputs: Feature, targets: Feature
     ) -> Tuple[Feature, Feature]:
         # Get the image features.
-        frame = inputs.get(ModelInputs.DETECTIONS_FRAME.value, None)
+        detections_frame = inputs.get(ModelInputs.DETECTIONS_FRAME.value, None)
+        tracklets_frame = inputs.get(ModelInputs.TRACKLETS_FRAME.value, None)
         heatmap = targets.get(ModelTargets.HEATMAP.value, None)
         geometric_features = targets[ModelTargets.GEOMETRY_DENSE_PRED.value]
 
@@ -917,18 +888,20 @@ def _decode_images(
                 normalized=False,
             )
 
-        if frame is not None:
-            frame = _decode_image(frame, ratio=2)
+        if detections_frame is not None:
+            detections_frame = _decode_image(detections_frame, ratio=2)
+            tracklets_frame = _decode_image(tracklets_frame, ratio=2)
 
             # Perform data augmentation.
-            frame, heatmap, geometric_features = _augment_inputs(
-                image=frame,
+            detections_frame, heatmap, geometric_features = _augment_inputs(
+                image=detections_frame,
                 heatmap=heatmap,
                 geometry=geometric_features,
                 config=augmentation_config,
             )
 
-            inputs[ModelInputs.DETECTIONS_FRAME.value] = frame
+            inputs[ModelInputs.DETECTIONS_FRAME.value] = detections_frame
+            inputs[ModelInputs.TRACKLETS_FRAME.value] = tracklets_frame
             # Update all the geometry.
             inputs[ModelInputs.DETECTION_GEOMETRY.value] = geometric_features[
                 :, :4
@@ -1212,7 +1185,6 @@ def _inputs_and_targets_from_dataset(
         config=config,
         include_frame=include_frame,
         heat_map_source=heat_map_source,
-        augmentation_config=augmentation_config,
     )
     # Break into pairs.
     image_pairs = _window_to_nested(
@@ -1226,12 +1198,12 @@ def _inputs_and_targets_from_dataset(
         pair_features = _filter_empty(pair_features)
 
     # Decode the images.
-    # pair_features = _decode_images(
-    #     pair_features,
-    #     augmentation_config=augmentation_config,
-    #     model_config=config,
-    #     heat_map_source=heat_map_source,
-    # )
+    pair_features = _decode_images(
+        pair_features,
+        augmentation_config=augmentation_config,
+        model_config=config,
+        heat_map_source=heat_map_source,
+    )
 
     return pair_features
 
@@ -1475,76 +1447,3 @@ def inputs_and_targets_from_datasets(
         num_prefetch_batches=num_prefetch_batches,
         shuffle_buffer_size=shuffle_buffer_size,
     )
-
-
-def drop_detections(
-    inputs_dataset: tf.data.Dataset,
-    *,
-    drop_probability: float,
-    repeat_probability: float,
-) -> tf.data.Dataset:
-    """
-    Modifies a dataset in order to drop random detections.
-
-    Args:
-        inputs_dataset: The dataset to modify, containing just the inputs. It
-            is necessary that this dataset not be batched.
-        drop_probability: The probability of dropping a detection given that
-            it has not been dropped in the previous frame.
-        repeat_probability: The probability of dropping a detection given
-            that it has been dropped in the previous frame.
-
-    Returns:
-        The modified dataset.
-
-    """
-    # Width of the drop mask to generate. If there are more than this number
-    # of detections, the mask will be repeated.
-    _MASK_WIDTH = 8
-
-    def _drop_mask() -> Iterable[np.ndarray]:
-        """
-        Generator that produces an infinite sequence of booleans indicating
-        whether corresponding values should be dropped.
-
-        Yields:
-            Boolean array of length _MASK_WIDTH where each element indicates
-            whether a value should be dropped.
-
-        """
-        currently_dropping = np.zeros((_MASK_WIDTH,), dtype=np.bool)
-        while True:
-            threshold = np.where(
-                currently_dropping, repeat_probability, drop_probability
-            )
-
-            currently_dropping = np.random.rand(_MASK_WIDTH) < threshold
-            yield currently_dropping
-
-    # Combine the inputs with the drop mask.
-    drop_mask = tf.data.Dataset.from_generator(
-        _drop_mask, output_types=tf.bool
-    )
-    inputs_with_mask = tf.data.Dataset.zip((inputs_dataset, drop_mask))
-
-    def _apply_mask(inputs: Feature, _drop_mask: tf.Tensor) -> Feature:
-        detections = inputs[ModelInputs.DETECTIONS.value]
-        geometry = inputs[ModelInputs.DETECTION_GEOMETRY.value]
-
-        # Make sure the mask is the proper shape.
-        num_detections = tf.shape(detections)[0]
-        mask_multiples = num_detections // _MASK_WIDTH + 1
-        mask_tiled = tf.tile(_drop_mask, tf.expand_dims(mask_multiples))
-        mask_tiled = mask_tiled[:num_detections]
-
-        # Flip the mask because it tells us what to drop, not keep.
-        mask_flipped = tf.logical_not(mask_tiled)
-        detections = tf.boolean_mask(detections, mask_flipped)
-        geometry = tf.boolean_mask(geometry, mask_flipped)
-
-        features = inputs
-        features[ModelInputs.DETECTIONS.value] = detections
-        features[ModelInputs.DETECTION_GEOMETRY.value] = geometry
-        return features
-
-    return inputs_with_mask.map(_apply_mask)

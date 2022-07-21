@@ -75,14 +75,14 @@ def test_inputs_and_targets_from_dataset_smoke(
     inputs, targets = batch
 
     # Make sure we have the right inputs and targets.
-    expected_inputs = set(ModelInputs) - {
-        ModelInputs.DETECTIONS,
-        ModelInputs.TRACKLETS,
-    }
+    expected_inputs = set(ModelInputs)
     expected_targets = set(ModelTargets)
     if not include_frame:
         # We won't have a frame input in this case.
-        expected_inputs -= {ModelInputs.DETECTIONS_FRAME}
+        expected_inputs -= {
+            ModelInputs.DETECTIONS_FRAME,
+            ModelInputs.TRACKLETS_FRAME,
+        }
     if heat_map_source == HeatMapSource.NONE:
         expected_targets -= {ModelTargets.HEATMAP}
         expected_targets -= {ModelTargets.GEOMETRY_DENSE_PRED}
