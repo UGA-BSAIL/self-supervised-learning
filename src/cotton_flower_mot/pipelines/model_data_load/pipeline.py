@@ -9,9 +9,9 @@ from kedro.pipeline import Pipeline, node
 from ..dataset_io import (
     DataAugmentationConfig,
     HeatMapSource,
+    colorization_inputs_and_targets_from_dataset,
     inputs_and_targets_from_datasets,
     rot_net_inputs_and_targets_from_dataset,
-    colorization_inputs_and_targets_from_dataset,
 )
 from .nodes import concat_datasets
 
@@ -20,8 +20,8 @@ def create_pipeline(**_):
     # Preset for loading training data.
     load_datasets = partial(
         inputs_and_targets_from_datasets,
-        # include_frame=True,
-        heat_map_source=HeatMapSource.NONE,
+        include_frame=True,
+        heat_map_source=HeatMapSource.LOAD,
     )
     # Preset for loading testing and validation data that doesn't randomize
     # or interleave clips.

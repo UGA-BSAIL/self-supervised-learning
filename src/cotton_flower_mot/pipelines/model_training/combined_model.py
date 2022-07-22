@@ -10,11 +10,10 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 from ..config import ModelConfig
-from ..schemas import ModelInputs
+from ..schemas import ModelInputs, ModelTargets
 from .centernet_model import build_detection_model
 from .gcnn_model import compute_association
 from .layers.pooling import RoiPooling
-from .layers.utility import BnActDense
 
 
 def _extract_appearance_features(
@@ -59,6 +58,37 @@ def _extract_appearance_features(
     )
 
 
+def _apply_detector(
+    detector: tf.keras.Model, *, frames: tf.Tensor
+) -> Tuple[tf.Tensor, tf.Tensor, tf.RaggedTensor]:
+    """
+    Applies the detector model to an input.
+
+    Args:
+        detector: The detector model.
+        frames: The input frames.
+
+    Returns:
+        The heatmaps, dense geometry predictions, and bounding boxes.
+
+    """
+    heatmap, dense_geometry, bboxes = detector(frames)
+
+    # Ensure that the resulting layers have the correct names when we set
+    # them as outputs.
+    heatmap = layers.Lambda(lambda x: x, name=ModelTargets.HEATMAP.value)(
+        heatmap
+    )
+    dense_geometry = layers.Lambda(
+        lambda x: x, name=ModelTargets.GEOMETRY_DENSE_PRED.value
+    )(dense_geometry)
+    bboxes = layers.Lambda(
+        lambda x: x, name=ModelTargets.GEOMETRY_SPARSE_PRED.value
+    )(bboxes)
+
+    return heatmap, dense_geometry, bboxes
+
+
 def build_combined_model(
     config: ModelConfig,
     encoder: Optional[tf.keras.Model] = None,
@@ -98,9 +128,11 @@ def build_combined_model(
     )
 
     # Apply the detection model to the input frames.
-    detection_heatmap, detection_dense_geometry, detection_bboxes = detector(
-        current_frames
-    )
+    (
+        detection_heatmap,
+        detection_dense_geometry,
+        detection_bboxes,
+    ) = _apply_detector(detector, frames=current_frames)
 
     geometry_input_shape = (None, 4)
     # In all cases, we need to manually provide the tracklet bounding boxes.
@@ -124,7 +156,7 @@ def build_combined_model(
         model_inputs.append(detection_geometry_for_tracker)
     else:
         # Just grab the bounding boxes from the detector.
-        _, _, detection_geometry_for_tracker = detection_bboxes
+        detection_geometry_for_tracker = detection_bboxes
         # Remove the confidence scores.
         detection_geometry_for_tracker = detection_geometry_for_tracker[
             :, :, :4

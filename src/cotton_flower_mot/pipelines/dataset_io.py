@@ -7,13 +7,13 @@ import tensorflow as tf
 from pydantic.dataclasses import dataclass
 
 from .assignment import construct_gt_sinkhorn_matrix
+from .color_utils import rgb_to_hcl
 from .config import ModelConfig
 from .heat_maps import make_object_heat_map
 from .schemas import ColorizationTargets, ModelInputs, ModelTargets
 from .schemas import ObjectTrackingFeatures as Otf
 from .schemas import RotNetTargets
 from .schemas import UnannotatedFeatures as Uf
-from .color_utils import rgb_to_hcl
 
 _OTF_FEATURE_DESCRIPTION = {
     Otf.IMAGE_HEIGHT.value: tf.io.FixedLenFeature([1], tf.dtypes.int64),
@@ -79,6 +79,7 @@ Input features that the model expects to be `RaggedTensor`s.
 _NON_RAGGED_INPUTS = {
     ModelInputs.SEQUENCE_ID.value,
     ModelInputs.DETECTIONS_FRAME.value,
+    ModelInputs.TRACKLETS_FRAME.value,
 }
 """
 Input features that the model expects to be normal tensors.
@@ -574,7 +575,7 @@ def _get_geometric_features(
 
         # Compute the offset.
         center_points_px = tf.stack([center_x, center_y], axis=1)
-        down_sample_factor = tf.constant(2**config.num_reduction_stages)
+        down_sample_factor = tf.constant(2 ** config.num_reduction_stages)
         offsets = (
             tf.cast(tf.round(center_points_px), tf.int32) % down_sample_factor
         )
@@ -1117,7 +1118,7 @@ def _transform_features(
 
     """
 
-    def _ensure_element_ragged(
+    def _apply_transform(
         inputs: MaybeRaggedFeature, targets: MaybeRaggedFeature
     ) -> Tuple[MaybeRaggedFeature, MaybeRaggedFeature]:
         # Select only keys that exist in the data.
@@ -1131,9 +1132,7 @@ def _transform_features(
 
         return inputs, targets
 
-    return features.map(
-        _ensure_element_ragged, num_parallel_calls=_NUM_THREADS
-    )
+    return features.map(_apply_transform, num_parallel_calls=_NUM_THREADS)
 
 
 def _inputs_and_targets_from_dataset(

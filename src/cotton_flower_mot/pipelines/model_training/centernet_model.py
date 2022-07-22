@@ -197,7 +197,7 @@ def compute_sparse_predictions(
     batch_index = sparse_centers[:, 0]
     possible_indices = tf.expand_dims(tf.range(batch_size, dtype=tf.int64), 1)
     row_lengths = tf.reduce_sum(
-        tf.cast(batch_index == possible_indices, tf.int32), axis=1
+        tf.cast(batch_index == possible_indices, tf.int64), axis=1
     )
     ragged_center_points = tf.RaggedTensor.from_row_lengths(
         center_points[..., ::-1], row_lengths

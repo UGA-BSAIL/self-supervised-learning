@@ -663,13 +663,23 @@ def compute_association(
     )
 
     # Compute the association matrices.
-    return AssociationLayer(sinkhorn_lambda=config.sinkhorn_lambda)(
+    sinkhorn, assignment = AssociationLayer(
+        sinkhorn_lambda=config.sinkhorn_lambda
+    )(
         (
             affinity_scores,
             detections_geometry.row_lengths(),
             tracklets_geometry.row_lengths(),
         )
     )
+    # Ensure outputs have the right name.
+    sinkhorn = layers.Lambda(lambda x: x, name=ModelTargets.SINKHORN.value)(
+        sinkhorn
+    )
+    assignment = layers.Lambda(
+        lambda x: x, name=ModelTargets.ASSIGNMENT.value
+    )(assignment)
+    return sinkhorn, assignment
 
 
 def _make_image_input(config: ModelConfig, *, name: str) -> layers.Input:
@@ -741,9 +751,6 @@ def build_model(config: ModelConfig) -> tf.keras.Model:
             detection_geometry_input,
             tracklet_geometry_input,
         ],
-        outputs={
-            ModelTargets.SINKHORN.value: sinkhorn,
-            ModelTargets.ASSIGNMENT.value: assignment,
-        },
+        outputs=[sinkhorn, assignment],
         name="gcnnmatch",
     )

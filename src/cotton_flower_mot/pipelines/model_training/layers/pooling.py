@@ -109,23 +109,23 @@ class RoiPooling(layers.Layer):
     """
 
     def __init__(self, pool_size: int, **kwargs: Any):
-        self.__pool_size = pool_size
+        self._pool_size = pool_size
 
         # Number of input channels. Will be set when the layer is built.
-        self.__num_input_channels = None
+        self._num_input_channels = None
 
         super().__init__(**kwargs)
 
     def build(self, input_shape: Tuple[tf.TensorShape, tf.RaggedTensorSpec]):
-        self.__num_input_channels = input_shape[0][3]
+        self._num_input_channels = input_shape[0][3]
 
     def compute_output_shape(self, _: Any):
         return (
             None,
             None,
-            self.__pool_size,
-            self.__pool_size,
-            self.__num_input_channels,
+            self._pool_size,
+            self._pool_size,
+            self._num_input_channels,
         )
 
     def call(self, inputs: Tuple[tf.Tensor, tf.RaggedTensor], **_: Any):
@@ -144,16 +144,16 @@ class RoiPooling(layers.Layer):
             images,
             boxes=flat_rois,
             box_indices=box_image_indices,
-            crop_size=(self.__pool_size, self.__pool_size),
+            crop_size=(self._pool_size, self._pool_size),
         )
         # Always nice to have the static shape...
         roi_crops = tf.ensure_shape(
             roi_crops,
             (
                 None,
-                self.__pool_size,
-                self.__pool_size,
-                self.__num_input_channels,
+                self._pool_size,
+                self._pool_size,
+                self._num_input_channels,
             ),
         )
 
@@ -164,6 +164,6 @@ class RoiPooling(layers.Layer):
         )
 
     def get_config(self):
-        config = {"pool_size": self.__pool_size}
+        config = {"pool_size": self._pool_size}
         base_config = super().get_config()
         return dict(**base_config, **config)

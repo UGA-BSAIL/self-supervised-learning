@@ -107,7 +107,7 @@ def create_model(
         The model that it created.
 
     """
-    _, model = build_combined_model(config, encoder=encoder)
+    model = build_combined_model(config, encoder=encoder)
     logger.info("Model has {} parameters.", model.count_params())
 
     return model
