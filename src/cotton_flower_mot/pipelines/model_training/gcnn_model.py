@@ -672,12 +672,12 @@ def compute_association(
             tracklets_geometry.row_lengths(),
         )
     )
-    # Ensure outputs have the right name.
-    sinkhorn = layers.Lambda(lambda x: x, name=ModelTargets.SINKHORN.value)(
-        sinkhorn
-    )
-    assignment = layers.Lambda(
-        lambda x: x, name=ModelTargets.ASSIGNMENT.value
+    # Ensure outputs have the right name and dtype.
+    sinkhorn = layers.Activation(
+        "linear", name=ModelTargets.SINKHORN.value, dtype=tf.float32
+    )(sinkhorn)
+    assignment = layers.Activation(
+        "linear", name=ModelTargets.ASSIGNMENT.value
     )(assignment)
     return sinkhorn, assignment
 

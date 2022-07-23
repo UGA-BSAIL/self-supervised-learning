@@ -15,7 +15,7 @@ colorization_output_shape: [72, 120, 32]
 # features to appearance features.
 roi_pooling_size: 7
 # Number of appearance features to generate.
-num_appearance_features: 128
+num_appearance_features: 392
 # Number of node features to use in the CensNet layers.
 num_node_features: 128
 # Number of edge features to use in the CensNet layers.

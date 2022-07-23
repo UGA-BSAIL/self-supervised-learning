@@ -7,7 +7,7 @@ import enum
 
 from kedro.pipeline import Pipeline, node
 
-from ..training_utils import set_check_numerics
+from ..training_utils import set_check_numerics, set_mixed_precision
 from .nodes import create_model, prepare_pretrained_encoder, train_model
 
 
@@ -72,6 +72,7 @@ def create_pipeline(model_init: ModelInit = ModelInit.IMAGENET):
     return init_pipeline + Pipeline(
         [
             node(set_check_numerics, "params:enable_numeric_checks", None),
+            node(set_mixed_precision, "params:enable_mixed_precision", None),
             node(
                 train_model,
                 dict(

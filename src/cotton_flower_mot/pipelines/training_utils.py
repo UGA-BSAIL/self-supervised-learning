@@ -67,6 +67,22 @@ def set_check_numerics(enable: bool) -> None:
         tf.debugging.disable_check_numerics()
 
 
+def set_mixed_precision(enable: bool) -> None:
+    """
+    Sets whether to enable mixed-precision training.
+
+    Args:
+        enable: If true, will enable mixed precision.
+
+    """
+    if enable:
+        logger.info("Enabling mixed-precision training.")
+        tf.keras.mixed_precision.set_global_policy("mixed_float16")
+    else:
+        logger.warning("Disabling mixed precision; memory use might be high.")
+        tf.keras.mixed_precision.set_global_policy("float32")
+
+
 @lru_cache
 def get_log_dir(tensorboard_output_dir: str) -> Path:
     """

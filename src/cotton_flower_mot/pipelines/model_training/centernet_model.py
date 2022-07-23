@@ -28,9 +28,6 @@ from ..schemas import (
 from .layers import BnActConv, PeakLayer
 from .layers.feature_extractors import efficientnet
 
-# Use mixed precision to speed up training.
-# tf.keras.mixed_precision.set_global_policy("mixed_float16")
-
 
 def _build_decoder(
     multi_scale_features: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]

@@ -14,6 +14,7 @@ from ..schemas import ModelInputs, ModelTargets
 from .centernet_model import build_detection_model
 from .gcnn_model import compute_association
 from .layers.pooling import RoiPooling
+from .layers.utility import BnActConv
 
 
 def _extract_appearance_features(
@@ -39,6 +40,7 @@ def _extract_appearance_features(
         dimension is ragged.
 
     """
+    image_features = BnActConv(8, 1, activation="relu")(image_features)
     feature_crops = RoiPooling(config.roi_pooling_size)(
         (image_features, bbox_geometry)
     )
@@ -53,9 +55,10 @@ def _extract_appearance_features(
         return _features.with_values(flat_features)
 
     features = layers.Lambda(_flatten_features)(feature_crops)
-    return layers.Dense(config.num_appearance_features, activation="relu")(
-        features
-    )
+    # return layers.Dense(config.num_appearance_features, activation="relu")(
+    #     features
+    # )
+    return features
 
 
 def _apply_detector(
@@ -76,14 +79,16 @@ def _apply_detector(
 
     # Ensure that the resulting layers have the correct names when we set
     # them as outputs.
-    heatmap = layers.Lambda(lambda x: x, name=ModelTargets.HEATMAP.value)(
-        heatmap
-    )
-    dense_geometry = layers.Lambda(
-        lambda x: x, name=ModelTargets.GEOMETRY_DENSE_PRED.value
+    heatmap = layers.Activation(
+        "linear", name=ModelTargets.HEATMAP.value, dtype=tf.float32
+    )(heatmap)
+    dense_geometry = layers.Activation(
+        "linear", name=ModelTargets.GEOMETRY_DENSE_PRED.value, dtype=tf.float32
     )(dense_geometry)
-    bboxes = layers.Lambda(
-        lambda x: x, name=ModelTargets.GEOMETRY_SPARSE_PRED.value
+    bboxes = layers.Activation(
+        "linear",
+        name=ModelTargets.GEOMETRY_SPARSE_PRED.value,
+        dtype=tf.float32,
     )(bboxes)
 
     return heatmap, dense_geometry, bboxes

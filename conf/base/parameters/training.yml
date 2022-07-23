@@ -1,5 +1,5 @@
 # Batch size to use for training.
-batch_size: 16
+batch_size: 4
 # Batch size to use for training RotNet
 rot_net_batch_size: 8
 # Batch size to use for training colorization.
@@ -25,6 +25,9 @@ num_heatmap_images: 3
 # is very useful when trying to debug numerical issues, but it
 # slows down training a lot.
 enable_numeric_checks: false
+# Whether to enable mixed precision training, which can save memory and run
+# faster on newer hardware.
+enable_mixed_precision: false
 
 loss_params:
   # Alpha constant for heatmap focal loss.

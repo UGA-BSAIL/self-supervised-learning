@@ -138,7 +138,7 @@ class RoiPooling(layers.Layer):
         box_image_indices = rois.value_rowids()
         box_image_indices = tf.cast(box_image_indices, tf.int32)
         # ROIs need to be flat for use with cropping function.
-        flat_rois = rois.merge_dims(0, 1)
+        flat_rois = tf.cast(rois.merge_dims(0, 1), tf.float32)
 
         roi_crops = tf.image.crop_and_resize(
             images,
