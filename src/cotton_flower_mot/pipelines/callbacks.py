@@ -73,6 +73,15 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
         self.__log_period = log_period
         self.__num_images_per_batch = num_images_per_batch
 
+        # Filter all inputs except the frame.
+        self.__dataset = self.__dataset.map(
+            lambda i, _: {
+                ModelInputs.DETECTIONS_FRAME.value: i[
+                    ModelInputs.DETECTIONS_FRAME.value
+                ]
+            },
+        )
+
         if max_num_batches is not None:
             # Limit to a certain number of images per batch.
             self.__dataset = self.__dataset.unbatch().batch(
@@ -109,8 +118,7 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
     def _log_batch(
         self,
         *,
-        inputs: Dict[str, tf.Tensor],
-        targets: Dict[str, tf.Tensor],
+        image_batch: tf.Tensor,
         epoch: int,
         batch_num: int,
     ) -> None:
@@ -118,8 +126,7 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
         Logs data for a single batch.
 
         Args:
-            inputs: The input data that the model was run with.
-            targets: The corresponding target data.
+            image_batch: The input image to log data for.
             epoch: The epoch number.
             batch_num: The batch number.
 
@@ -133,13 +140,10 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
             "Logging with {} for epoch {}...", self.__class__.__name__, epoch
         )
 
-        for batch_num, (input_batch, target_batch) in enumerate(
-            self.__dataset
-        ):
+        for batch_num, input_batch in enumerate(self.__dataset):
             logger.debug("Logging for batch {}.", batch_num)
             self._log_batch(
-                inputs=input_batch,
-                targets=target_batch,
+                image_batch=input_batch[ModelInputs.DETECTIONS_FRAME.value],
                 epoch=epoch,
                 batch_num=batch_num,
             )
@@ -156,9 +160,11 @@ def _make_heatmap_extractor(model: tf.keras.Model) -> tf.keras.Model:
         A model that extracts only the heatmap.
 
     """
+    input_layer = model.get_layer(ModelInputs.DETECTIONS_FRAME.value)
+    frame_input = input_layer.get_input_at(0)
     activation_layer = model.get_layer(ModelTargets.HEATMAP.value)
     activation_output = activation_layer.get_output_at(0)
-    return tf.keras.Model(inputs=model.inputs, outputs=[activation_output])
+    return tf.keras.Model(inputs=[frame_input], outputs=[activation_output])
 
 
 class LogHeatmaps(_ImageLoggingCallback):
@@ -189,13 +195,10 @@ class LogHeatmaps(_ImageLoggingCallback):
     def _log_batch(
         self,
         *,
-        inputs: Dict[str, tf.Tensor],
-        targets: Dict[str, tf.Tensor],
+        image_batch: tf.Tensor,
         epoch: int,
         batch_num: int,
     ) -> None:
-        image_batch = inputs[ModelInputs.DETECTIONS_FRAME.value]
-
         # Retrieve the activations.
         activations = self.__extractor(image_batch)
 

@@ -31,7 +31,7 @@ from .layers.feature_extractors import efficientnet
 
 def _build_decoder(
     multi_scale_features: Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]
-) -> tf.Tensor:
+) -> Tuple[tf.Tensor, tf.Tensor]:
     """
     Builds the decoder portion of the network. This is typically used on top
     of a pre-trained feature extractor in a transfer-learning setup.
@@ -74,7 +74,7 @@ def _build_decoder(
         kernel_regularizer=l2(5e-4),
     )(x)
     x = BatchNormalization()(x)
-    x = ReLU()(x)
+    scale3_merged = ReLU()(x)
 
     x = Conv2D(
         128,
@@ -83,7 +83,7 @@ def _build_decoder(
         use_bias=False,
         kernel_initializer="he_normal",
         kernel_regularizer=l2(5e-4),
-    )(UpSampling2D()(x))
+    )(UpSampling2D()(scale3_merged))
     x = BatchNormalization()(x)
     x = ReLU()(x)
     x = Concatenate()([scale2, x])
@@ -121,7 +121,7 @@ def _build_decoder(
         kernel_regularizer=l2(5e-4),
     )(x)
     x = BatchNormalization()(x)
-    return ReLU()(x)
+    return ReLU()(x), scale3_merged
 
 
 def _build_prediction_head(
@@ -280,7 +280,7 @@ def build_detection_model(
         input_shape=config.detection_model_input_shape, encoder=encoder
     )
 
-    decoder_features = _build_decoder(encoder_features)
+    decoder_features, tracking_features = _build_decoder(encoder_features)
 
     heatmap = _build_prediction_head(decoder_features, output_channels=1)
     sizes = _build_prediction_head(decoder_features, output_channels=2)
@@ -307,7 +307,7 @@ def build_detection_model(
     )((confidence_mask, sizes, offsets))
 
     feature_extractor = tf.keras.Model(
-        inputs=images, outputs=[decoder_features]
+        inputs=images, outputs=[tracking_features]
     )
     detection_model = tf.keras.Model(
         inputs=images, outputs=[heatmap, geometry, bounding_boxes]

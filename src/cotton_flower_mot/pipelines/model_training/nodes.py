@@ -217,6 +217,7 @@ def train_model(
             loss_weights={
                 ModelTargets.HEATMAP.value: heatmap_loss_weight,
                 ModelTargets.GEOMETRY_DENSE_PRED.value: geometry_loss_weight,
+                ModelTargets.SINKHORN.value: 10.0,
             },
             metrics=make_metrics(),
         )

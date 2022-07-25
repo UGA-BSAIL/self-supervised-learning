@@ -116,6 +116,28 @@ class RoiPooling(layers.Layer):
 
         super().__init__(**kwargs)
 
+    @staticmethod
+    def _convert_to_two_corners(bboxes: tf.Tensor) -> tf.Tensor:
+        """
+        Converts bounding boxes from `[x, y, width, height]` format to
+        `[min_y, min_x, max_y, max_x]`.
+
+        Args:
+            bboxes: The bounding boxes, with shape `[n_boxes, 4]`
+
+        Returns:
+            The converted boxes.
+
+        """
+        center = bboxes[:, :2]
+        size = bboxes[:, 2:]
+
+        min_corner = center - size / 2.0
+        max_corner = center + size / 2.0
+
+        # The x and y coordinates need to be reversed.
+        return tf.concat([min_corner[:, ::-1], max_corner[:, ::-1]], axis=-1)
+
     def build(self, input_shape: Tuple[tf.TensorShape, tf.RaggedTensorSpec]):
         self._num_input_channels = input_shape[0][3]
 
@@ -130,15 +152,15 @@ class RoiPooling(layers.Layer):
 
     def call(self, inputs: Tuple[tf.Tensor, tf.RaggedTensor], **_: Any):
         assert len(inputs) == 2, "ROI pooling should have two inputs."
-
-        images = inputs[0]
-        rois = inputs[1]
+        images, rois = inputs
 
         # Determine which boxes are for which images.
         box_image_indices = rois.value_rowids()
         box_image_indices = tf.cast(box_image_indices, tf.int32)
         # ROIs need to be flat for use with cropping function.
         flat_rois = tf.cast(rois.merge_dims(0, 1), tf.float32)
+        # They also need to be in the expected format.
+        flat_rois = self._convert_to_two_corners(flat_rois)
 
         roi_crops = tf.image.crop_and_resize(
             images,
