@@ -1,5 +1,5 @@
 # Batch size to use for training.
-batch_size: 4
+batch_size: 16
 # Batch size to use for training RotNet
 rot_net_batch_size: 8
 # Batch size to use for training colorization.
@@ -27,7 +27,7 @@ num_heatmap_images: 3
 enable_numeric_checks: false
 # Whether to enable mixed precision training, which can save memory and run
 # faster on newer hardware.
-enable_mixed_precision: false
+enable_mixed_precision: true
 
 loss_params:
   # Alpha constant for heatmap focal loss.
@@ -42,6 +42,7 @@ loss_params:
 # Weights for each loss term.
 heatmap_loss_weight: 1.0
 geometry_loss_weight: 0.1
+sinkhorn_loss_weight: 10.0
 
 # Fraction of pre-trained layers to keep frozen when performing
 # transfer learning.
@@ -52,9 +53,9 @@ learning_phases:
   # The initial learning rate to use for the phase.
   - learning_rate:
       # Initial learning rate value.
-      initial: 0.004
+      initial: 0.001
       # Specify that we want to decay over time.
-      decay: true
+      decay: false
       # Number of steps to decay over.
       # (422 steps per epoch)
       decay_steps: 5064

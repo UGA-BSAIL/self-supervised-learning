@@ -83,6 +83,7 @@ def create_pipeline(model_init: ModelInit = ModelInit.IMAGENET):
                     loss_params="params:loss_params",
                     heatmap_loss_weight="params:heatmap_loss_weight",
                     geometry_loss_weight="params:geometry_loss_weight",
+                    sinkhorn_loss_weight="params:sinkhorn_loss_weight",
                     tensorboard_output_dir="params:tensorboard_output_dir",
                     histogram_period="params:histogram_period",
                     update_period="params:update_period",

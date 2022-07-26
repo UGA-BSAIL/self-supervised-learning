@@ -33,9 +33,6 @@ from .similarity_utils import (
     distance_penalty,
 )
 
-# Use mixed precision to speed up training.
-# tf.keras.mixed_precision.set_global_policy("mixed_float16")
-
 
 def _build_appearance_feature_extractor(
     normalized_input: tf.Tensor, *, config: ModelConfig
@@ -304,11 +301,20 @@ def _build_gnn(
         `[batch_size, n_nodes, n_gcn_channels]`.
 
     """
+    node_features = layers.BatchNormalization()(node_features)
+    edge_features = layers.BatchNormalization()(edge_features)
+
     nodes1_1, edges1_1 = ResidualCensNet(
-        config.num_node_features, config.num_edge_features
+        config.num_node_features,
+        config.num_edge_features,
+        activation="relu",
     )((node_features, graph_structure, edge_features))
+    nodes1_1 = layers.BatchNormalization()(nodes1_1)
+    edges1_1 = layers.BatchNormalization()(edges1_1)
     nodes1_2, _ = ResidualCensNet(
-        config.num_node_features, config.num_edge_features
+        config.num_node_features,
+        config.num_edge_features,
+        activation="relu",
     )((nodes1_1, graph_structure, edges1_1))
 
     return nodes1_2
@@ -459,6 +465,12 @@ def _preprocess_adjacency(
     # to compute the line graph of a graph that has unconnected nodes.
     line_graph_adjacency = tf.maximum(0.0, line_graph_adjacency)
     edge_laplacian = gcn_filter(line_graph_adjacency)
+
+    # We want to treat these as constants for the purposes of gradient
+    # computation.
+    node_laplacian = tf.stop_gradient(node_laplacian)
+    edge_laplacian = tf.stop_gradient(edge_laplacian)
+    incidence = tf.stop_gradient(incidence)
 
     return (
         tf.cast(node_laplacian, input_dtype),

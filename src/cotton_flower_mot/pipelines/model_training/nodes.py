@@ -173,6 +173,7 @@ def train_model(
     loss_params: Dict[str, Any],
     heatmap_loss_weight: float = 1.0,
     geometry_loss_weight: float = 1.0,
+    sinkhorn_loss_weight: float = 1.0,
     **kwargs: Any,
 ) -> tf.keras.Model:
     """
@@ -189,6 +190,7 @@ def train_model(
         loss_params: Parameters to pass to the loss functions.
         heatmap_loss_weight: The loss weight for the heatmap focal loss.
         geometry_loss_weight: The loss weight for the L1 geometry loss.
+        sinkhorn_loss_weight: The loss weight for the sinkhorn loss.
         **kwargs: Will be forwarded to `_make_callbacks()`.
 
     Returns:
@@ -206,18 +208,16 @@ def train_model(
             **kwargs,
         )
 
-        # optimizer = tf.keras.optimizers.SGD(
-        #     learning_rate=make_learning_rate(phase["learning_rate"]),
-        #     momentum=phase["momentum"],
-        # )
-        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        optimizer = tf.keras.optimizers.Adam(
+            learning_rate=phase["learning_rate"]["initial"]
+        )
         model.compile(
             optimizer=optimizer,
             loss=make_losses(**loss_params),
             loss_weights={
                 ModelTargets.HEATMAP.value: heatmap_loss_weight,
                 ModelTargets.GEOMETRY_DENSE_PRED.value: geometry_loss_weight,
-                ModelTargets.SINKHORN.value: 10.0,
+                ModelTargets.SINKHORN.value: sinkhorn_loss_weight,
             },
             metrics=make_metrics(),
         )

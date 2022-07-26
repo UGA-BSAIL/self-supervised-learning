@@ -233,8 +233,12 @@ def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
 
     """
     feature_dot = tf.reduce_sum(features1 * features2, axis=-1)
-    feature1_mag = tf.sqrt(tf.reduce_sum(tf.square(features1), axis=-1))
-    feature2_mag = tf.sqrt(tf.reduce_sum(tf.square(features2), axis=-1))
+    feature1_mag = tf.norm(features1, axis=-1)
+    feature2_mag = tf.norm(features2, axis=-1)
+    denominator = feature1_mag * feature2_mag
 
-    epsilon = tf.cast(_EPSILON, dtype=feature1_mag.dtype)
-    return feature_dot / (feature1_mag * feature2_mag + epsilon)
+    feature_dot = tf.clip_by_value(feature_dot, 1e-3, 100.0)
+    denominator = tf.clip_by_value(denominator, 1e-3, 100.0)
+    feature_dot = tf.debugging.assert_all_finite(feature_dot, "feature_dot")
+    denominator = tf.debugging.assert_all_finite(denominator, "denominator")
+    return feature_dot / denominator

@@ -60,7 +60,9 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
         else:
             num_total = tf.shape(y_true)[1]
         # Determine the weights.
-        negative_weights = num_positive / tf.cast(num_total, tf.float32)
+        negative_weights = num_positive / tf.maximum(
+            tf.cast(num_total, tf.float32), self._EPSILON
+        )
         negative_weights = tf.maximum(negative_weights, self._EPSILON)
         # Make sure it broadcasts correctly.
         negative_weights = tf.expand_dims(negative_weights, axis=-1)
