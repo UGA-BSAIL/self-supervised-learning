@@ -135,18 +135,18 @@ def make_common_callbacks(
 
     nan_termination = tf.keras.callbacks.TerminateOnNaN()
 
-    # reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
-    #     monitor=lr_monitor,
-    #     patience=training_params["learning_rate"]["lr_patience_epochs"],
-    #     verbose=1,
-    #     min_lr=training_params["learning_rate"]["min_learning_rate"],
-    # )
+    reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor=lr_monitor,
+        patience=training_params["learning_rate"]["lr_patience_epochs"],
+        verbose=1,
+        min_lr=training_params["learning_rate"]["min_learning_rate"],
+    )
 
     memory_callback = ClearMemory()
 
     return [
         tensorboard_callback,
         nan_termination,
-        # reduce_lr_callback,
+        reduce_lr_callback,
         memory_callback,
     ]

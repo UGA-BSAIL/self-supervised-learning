@@ -223,6 +223,13 @@ def _build_affinity_mlp(
         Will have a shape of `[batch_size, max_n_tracklets, max_n_detections]`.
 
     """
+    tracklet_inter_features = tf.debugging.assert_all_finite(
+        tracklet_inter_features, "tracklet_inter_features"
+    )
+    detection_inter_features = tf.debugging.assert_all_finite(
+        detection_inter_features, "detection_inter_features"
+    )
+
     # Compute similarity parameters.
     iou = layers.Lambda(
         lambda f: compute_pairwise_similarities(

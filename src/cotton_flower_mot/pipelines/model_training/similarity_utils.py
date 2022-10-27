@@ -232,13 +232,17 @@ def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
         `[batch_size,]`.
 
     """
+    original_dtype = features1.dtype
+    features1 = tf.cast(features1, tf.float32)
+    features2 = tf.cast(features2, tf.float32)
+
     feature_dot = tf.reduce_sum(features1 * features2, axis=-1)
     feature1_mag = tf.norm(features1, axis=-1)
     feature2_mag = tf.norm(features2, axis=-1)
     denominator = feature1_mag * feature2_mag
 
-    feature_dot = tf.clip_by_value(feature_dot, 1e-3, 100.0)
+    feature_dot = tf.clip_by_value(feature_dot, -100, 100.0)
     denominator = tf.clip_by_value(denominator, 1e-3, 100.0)
     feature_dot = tf.debugging.assert_all_finite(feature_dot, "feature_dot")
     denominator = tf.debugging.assert_all_finite(denominator, "denominator")
-    return feature_dot / denominator
+    return tf.cast(feature_dot / denominator, original_dtype)
