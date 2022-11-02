@@ -78,7 +78,7 @@ class IdSwitches(tf.keras.metrics.Metric):
         return self._num_id_switches
 
 
-def _match_predictions(
+def _compute_bbox_matches(
     y_true: tf.Tensor, y_pred: tf.Tensor, *, iou_threshold: float
 ) -> tf.Tensor:
     """
@@ -275,7 +275,7 @@ class AveragePrecision(_BboxMetric):
             y_pred = self._take_top_predictions(
                 y_pred, self._use_top_predictions
             )
-        matches_with_confidence = _match_predictions(
+        matches_with_confidence = _compute_bbox_matches(
             y_true, y_pred, iou_threshold=self._iou_threshold
         )
 
@@ -352,7 +352,7 @@ class FalseNegatives(_BboxMetric):
         self, y_true: tf.Tensor, y_pred: tf.Tensor
     ) -> None:
         # Match ground-truth and predicted boxes.
-        matches_with_confidence = _match_predictions(
+        matches_with_confidence = _compute_bbox_matches(
             y_true, y_pred, iou_threshold=self._iou_threshold
         )
 
@@ -371,6 +371,71 @@ class FalseNegatives(_BboxMetric):
 
     def result(self) -> tf.Tensor:
         return self._false_negatives
+
+
+class FalsePositives(_BboxMetric):
+    """
+    A metric that calculates the number of false positives.
+    """
+
+    def __init__(
+        self,
+        iou_threshold: float = 0.5,
+        conf_threshold: float = 0.5,
+        name: str = "false_positives",
+        **kwargs: Any
+    ):
+        """
+        Args:
+            iou_threshold: The minimum IOU necessary between a ground-truth
+                box and a prediction for us to consider that prediction as
+                corresponding to the ground-truth.
+            conf_threshold: The minimum confidence necessary for a predicted
+                box to be considered as a positive.
+            name: The name of this metric.
+            **kwargs: Will be forwarded to the base class constructor.
+
+        """
+        super().__init__(name=name, **kwargs)
+
+        self._iou_threshold = iou_threshold
+        self._conf_threshold = conf_threshold
+
+        # Keeps track of the number of false negatives.
+        self._false_positives = self.add_weight(name="fp", initializer="zeros")
+
+    def _update_state_from_image(
+        self, y_true: tf.Tensor, y_pred: tf.Tensor
+    ) -> None:
+        # Match ground-truth and predicted boxes.
+        matches_with_confidence = _compute_bbox_matches(
+            y_true, y_pred, iou_threshold=self._iou_threshold
+        )
+
+        # Get the total number of ground-truth boxes with at least one match.
+        # This is the number of true positives.
+        is_positive = tf.greater_equal(
+            matches_with_confidence, self._conf_threshold
+        )
+        is_true_positive = tf.greater(
+            tf.reduce_sum(tf.cast(is_positive, tf.int32), axis=1), 0
+        )
+        num_true_positive = tf.reduce_sum(
+            tf.cast(is_true_positive, tf.float32)
+        )
+
+        # Subtract this from the total number of positive predictions to find
+        # the number of false positives.
+        confidence = y_pred[:, 4]
+        num_positive_pred = tf.reduce_sum(
+            tf.cast(confidence >= self._conf_threshold, tf.float32)
+        )
+        num_false_positives = num_positive_pred - num_true_positive
+
+        self._false_positives.assign_add(num_false_positives)
+
+    def result(self) -> tf.Tensor:
+        return self._false_positives
 
 
 class MaxConfidence(tf.keras.metrics.Metric):
@@ -401,7 +466,7 @@ class MaxConfidence(tf.keras.metrics.Metric):
         return self._max_confidence
 
 
-def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
+def make_metrics() -> Dict[str, Any]:
     """
     Creates the metrics to use for the model.
 
@@ -410,8 +475,11 @@ def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
 
     """
     return {
-        ModelTargets.GEOMETRY_SPARSE_PRED.value: AveragePrecision(),
-        ModelTargets.GEOMETRY_SPARSE_PRED.value: FalseNegatives(),
+        ModelTargets.GEOMETRY_SPARSE_PRED.value: [
+            AveragePrecision(),
+            FalseNegatives(),
+            FalsePositives(),
+        ],
         ModelTargets.HEATMAP.value: MaxConfidence(),
         ModelTargets.ASSIGNMENT.value: IdSwitches(),
     }
