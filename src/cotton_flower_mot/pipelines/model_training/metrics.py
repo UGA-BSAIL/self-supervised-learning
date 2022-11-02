@@ -3,7 +3,8 @@ Custom metrics for the model.
 """
 
 
-from typing import Any, Dict, List, Optional
+import abc
+from typing import Any, Dict, Optional
 
 import tensorflow as tf
 
@@ -77,9 +78,9 @@ class IdSwitches(tf.keras.metrics.Metric):
         return self._num_id_switches
 
 
-def _match_predictions(y_true: tf.Tensor, y_pred: tf.Tensor, *,
-                       iou_threshold: float) -> \
-        tf.Tensor:
+def _match_predictions(
+    y_true: tf.Tensor, y_pred: tf.Tensor, *, iou_threshold: float
+) -> tf.Tensor:
     """
     Matches each predicted box to a ground-truth box based upon IOU.
     Args:
@@ -102,6 +103,7 @@ def _match_predictions(y_true: tf.Tensor, y_pred: tf.Tensor, *,
     y_pred = tf.ensure_shape(y_pred, (None, 5))
     confidence = y_pred[:, 4]
     y_pred = y_pred[:, :4]
+    y_true = y_true[:, :4]
 
     # Determine which predictions match up with the truth through IOU.
     ious = compute_pairwise_similarities(
@@ -115,8 +117,74 @@ def _match_predictions(y_true: tf.Tensor, y_pred: tf.Tensor, *,
 
     matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
 
+    return matches_with_confidence
 
-class AveragePrecision(tf.keras.metrics.Metric):
+
+class _BboxMetric(tf.keras.metrics.Metric, abc.ABC):
+    """
+    A base class for metrics that operate on bounding boxes.
+    """
+
+    @abc.abstractmethod
+    def _update_state_from_image(
+        self, y_true: tf.Tensor, y_pred: tf.Tensor
+    ) -> None:
+        """
+        Performs the state update with boxes from a single image.
+
+        Args:
+            y_true: The true bounding boxes for the detections, with the shape
+                    `[num_detections, 6]`, where each row has the same layout as
+                    the input to `update_state`.
+            y_pred: The predicted bounding boxes for the detections, with the
+                shape `[num_detections, 5]`, where each row has the same
+                layout as the input to `update_state`.
+
+        """
+
+    def _update_state_from_image_with_return(
+        self, *args: Any, **kwargs: Any
+    ) -> tf.Tensor:
+        """
+        Same as `_update_state_from_image`, except it returns a dummy value
+        so we can use it with `map_fn`.
+
+        Args:
+            *args: Will be forwarded to `_update_state_from_image`.
+            **kwargs: Will be forwarded to `_update_state_from_image`.
+
+        Returns:
+            Always returns 0.
+
+        """
+        self._update_state_from_image(*args, **kwargs)
+
+        return tf.constant(0)
+
+    def update_state(
+        self, y_true: tf.RaggedTensor, y_pred: tf.RaggedTensor, **_
+    ) -> None:
+        """
+        Args:
+            y_true: The true sparse bounding box locations, with a shape of
+                `[batch, num_detections, 6]`. The last dimension is a vector
+                of the form
+                `[center_x, center_y, size_x, size_y, offset_x, offset_y]`.
+            y_pred: The predicted sparse bounding box locations, with a shape
+                of `[batch, num_detections, 5]`. The last dimension is a
+                vector of the form
+                `[center_x, center_y, size_x, size_y, confidence]`.
+
+        """
+        # Compute the metrics.
+        ragged_map_fn(
+            lambda e: self._update_state_from_image_with_return(e[0], e[1]),
+            (y_true, y_pred),
+            fn_output_signature=tf.TensorSpec(shape=[], dtype=tf.int32),
+        )
+
+
+class AveragePrecision(_BboxMetric):
     """
     Calculates the average precision for an object detector.
     """
@@ -126,7 +194,7 @@ class AveragePrecision(tf.keras.metrics.Metric):
         *,
         iou_threshold: float = 0.5,
         use_top_predictions: Optional[int] = 10,
-        name="average_precision",
+        name: str = "average_precision",
         **kwargs: Any
     ):
         """
@@ -199,31 +267,17 @@ class AveragePrecision(tf.keras.metrics.Metric):
             ),
         )
 
-    def _update_auc_from_image(
+    def _update_state_from_image(
         self, y_true: tf.Tensor, y_pred: tf.Tensor
-    ) -> tf.Tensor:
-        """
-        Updates the internal AUC metric for a single image and its detections.
-
-        Args:
-            y_true: The true bounding boxes for the detections, with the shape
-                `[num_detections, 6]`, where each row has the same layout as
-                the input to `update_state`.
-            y_pred: The predicted bounding boxes for the detections, with the
-                shape `[num_detections, 5]`, where each row has the same
-                layout as the input to `update_state`.
-
-        Returns:
-            A dummy return value, which is just a 0 tensor.
-
-        """
+    ) -> None:
         if self._use_top_predictions is not None:
             # Filter to top predictions.
             y_pred = self._take_top_predictions(
                 y_pred, self._use_top_predictions
             )
-        matches_with_confidence = _match_predictions(y_true, y_pred,
-                                                     iou_threshold=self._iou_threshold)
+        matches_with_confidence = _match_predictions(
+            y_true, y_pred, iou_threshold=self._iou_threshold
+        )
 
         # Confidence cannot realistically be less than 0, even if there are
         # no predictions.
@@ -256,36 +310,67 @@ class AveragePrecision(tf.keras.metrics.Metric):
         self._auc.update_state(positive_gt, true_positive_confidence)
         self._auc.update_state(negative_gt, false_positive_confidence)
 
-        # Dummy return value so that map_fn works.
-        return tf.constant(0)
-
-    def update_state(
-        self, y_true: tf.RaggedTensor, y_pred: tf.RaggedTensor, **_
-    ) -> None:
-        """
-        Args:
-            y_true: The true sparse bounding box locations, with a shape of
-                `[batch, num_detections, 6]`. The last dimension is a vector
-                of the form
-                `[center_x, center_y, size_x, size_y, offset_x, offset_y]`.
-            y_pred: The predicted sparse bounding box locations, with a shape
-                of `[batch, num_detections, 5]`. The last dimension is a
-                vector of the form
-                `[center_x, center_y, size_x, size_y, confidence]`.
-
-        """
-        # Compute the metrics.
-        ragged_map_fn(
-            lambda e: self._update_auc_from_image(e[0], e[1]),
-            (y_true, y_pred),
-            fn_output_signature=tf.TensorSpec(shape=[], dtype=tf.int32),
-        )
-
     def result(self) -> tf.Tensor:
         return self._auc.result()
 
     def reset_state(self) -> None:
         self._auc.reset_state()
+
+
+class FalseNegatives(_BboxMetric):
+    """
+    A metric that calculates the number of false negatives.
+    """
+
+    def __init__(
+        self,
+        iou_threshold: float = 0.5,
+        conf_threshold: float = 0.5,
+        name: str = "false_negatives",
+        **kwargs: Any
+    ):
+        """
+        Args:
+            iou_threshold: The minimum IOU necessary between a ground-truth
+                box and a prediction for us to consider that prediction as
+                corresponding to the ground-truth.
+            conf_threshold: The minimum confidence necessary for a predicted
+                box to be considered as a positive.
+            name: The name of this metric.
+            **kwargs: Will be forwarded to the base class constructor.
+
+        """
+        super().__init__(name=name, **kwargs)
+
+        self._iou_threshold = iou_threshold
+        self._conf_threshold = conf_threshold
+
+        # Keeps track of the number of false negatives.
+        self._false_negatives = self.add_weight(name="fn", initializer="zeros")
+
+    def _update_state_from_image(
+        self, y_true: tf.Tensor, y_pred: tf.Tensor
+    ) -> None:
+        # Match ground-truth and predicted boxes.
+        matches_with_confidence = _match_predictions(
+            y_true, y_pred, iou_threshold=self._iou_threshold
+        )
+
+        # Find the best match for each ground-truth box.
+        best_matches = tf.reduce_max(matches_with_confidence, axis=1)
+        # Confidence cannot be less than 0, even if there are no matches.
+        best_matches = tf.maximum(best_matches, 0.0)
+        # If any true box only has matches below the confidence threshold,
+        # we consider that to be a false negative.
+        false_negative_mask = tf.less(best_matches, self._conf_threshold)
+        num_false_negatives = tf.reduce_sum(
+            tf.cast(false_negative_mask, tf.float32)
+        )
+
+        self._false_negatives.assign_add(num_false_negatives)
+
+    def result(self) -> tf.Tensor:
+        return self._false_negatives
 
 
 class MaxConfidence(tf.keras.metrics.Metric):
@@ -326,6 +411,7 @@ def make_metrics() -> Dict[str, tf.keras.metrics.Metric]:
     """
     return {
         ModelTargets.GEOMETRY_SPARSE_PRED.value: AveragePrecision(),
+        ModelTargets.GEOMETRY_SPARSE_PRED.value: FalseNegatives(),
         ModelTargets.HEATMAP.value: MaxConfidence(),
         ModelTargets.ASSIGNMENT.value: IdSwitches(),
     }
