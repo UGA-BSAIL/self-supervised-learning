@@ -77,6 +77,45 @@ class IdSwitches(tf.keras.metrics.Metric):
         return self._num_id_switches
 
 
+def _match_predictions(y_true: tf.Tensor, y_pred: tf.Tensor, *,
+                       iou_threshold: float) -> \
+        tf.Tensor:
+    """
+    Matches each predicted box to a ground-truth box based upon IOU.
+    Args:
+        y_true: The true bounding boxes for the detections, with the shape
+                `[num_detections, 6]`, where each row has the same layout as
+                the input to `update_state`.
+        y_pred: The predicted bounding boxes for the detections, with the
+                shape `[num_detections, 5]`, where each row has the same
+                layout as the input to `update_state`.
+        iou_threshold: The IOU threshold for considering two boxes to match.
+
+    Returns:
+        A tensor of shape [num_true, num_pred], where the rows represent
+        ground-truth boxes, and the columns represent predicted boxes. A
+        value of zero means that the two boxes do not match. Otherwise,
+        this value is the confidence of the predicted box.
+
+    """
+    y_true = tf.ensure_shape(y_true, (None, 6))
+    y_pred = tf.ensure_shape(y_pred, (None, 5))
+    confidence = y_pred[:, 4]
+    y_pred = y_pred[:, :4]
+
+    # Determine which predictions match up with the truth through IOU.
+    ious = compute_pairwise_similarities(
+        compute_ious,
+        # It expects there to be a batch dimension.
+        left_features=tf.expand_dims(y_true, 0),
+        right_features=tf.expand_dims(y_pred, 0),
+    )[0]
+    # Anything below the threshold doesn't match.
+    iou_matches = tf.greater_equal(ious, iou_threshold)
+
+    matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
+
+
 class AveragePrecision(tf.keras.metrics.Metric):
     """
     Calculates the average precision for an object detector.
@@ -178,33 +217,14 @@ class AveragePrecision(tf.keras.metrics.Metric):
             A dummy return value, which is just a 0 tensor.
 
         """
-        y_true = tf.ensure_shape(y_true, (None, 6))
-        y_pred = tf.ensure_shape(y_pred, (None, 5))
         if self._use_top_predictions is not None:
             # Filter to top predictions.
             y_pred = self._take_top_predictions(
                 y_pred, self._use_top_predictions
             )
-        confidence = y_pred[:, 4]
-        y_pred = y_pred[:, :4]
+        matches_with_confidence = _match_predictions(y_true, y_pred,
+                                                     iou_threshold=self._iou_threshold)
 
-        # Add the offsets to the center locations.
-        true_offsets = y_true[:, 4:]
-        padding = tf.zeros_like(true_offsets)
-        true_offsets = tf.concat([true_offsets, padding], axis=1)
-        y_true = y_true[:, :4] + true_offsets
-
-        # Determine which predictions match up with the truth through IOU.
-        ious = compute_pairwise_similarities(
-            compute_ious,
-            # It expects there to be a batch dimension.
-            left_features=tf.expand_dims(y_true, 0),
-            right_features=tf.expand_dims(y_pred, 0),
-        )[0]
-        # Anything below the threshold doesn't match.
-        iou_matches = tf.greater_equal(ious, self._iou_threshold)
-
-        matches_with_confidence = tf.cast(iou_matches, tf.float32) * confidence
         # Confidence cannot realistically be less than 0, even if there are
         # no predictions.
         true_positive_confidence = tf.maximum(
@@ -225,6 +245,7 @@ class AveragePrecision(tf.keras.metrics.Metric):
             tf.cast(true_positive_mask, tf.bool)
         )
         # Extract the appropriate confidence scores for the FP predictions.
+        confidence = y_pred[:, 4]
         false_positive_confidence = tf.boolean_mask(
             confidence, false_positive_mask
         )
