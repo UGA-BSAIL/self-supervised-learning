@@ -235,14 +235,30 @@ def cosine_similarity(features1: tf.Tensor, features2: tf.Tensor) -> tf.Tensor:
     original_dtype = features1.dtype
     features1 = tf.cast(features1, tf.float32)
     features2 = tf.cast(features2, tf.float32)
+    features1 = tf.clip_by_value(
+        features1, original_dtype.min, original_dtype.max
+    )
+    features2 = tf.clip_by_value(
+        features2, original_dtype.min, original_dtype.max
+    )
+    features1 = tf.where(
+        tf.math.is_nan(features1), tf.zeros_like(features1), features1
+    )
+    features2 = tf.where(
+        tf.math.is_nan(features2), tf.zeros_like(features2), features2
+    )
 
     feature_dot = tf.reduce_sum(features1 * features2, axis=-1)
     feature1_mag = tf.norm(features1, axis=-1)
     feature2_mag = tf.norm(features2, axis=-1)
     denominator = feature1_mag * feature2_mag
 
-    feature_dot = tf.clip_by_value(feature_dot, -100, 100.0)
-    denominator = tf.clip_by_value(denominator, 1e-3, 100.0)
     feature_dot = tf.debugging.assert_all_finite(feature_dot, "feature_dot")
     denominator = tf.debugging.assert_all_finite(denominator, "denominator")
-    return tf.cast(feature_dot / denominator, original_dtype)
+    similarity = feature_dot / tf.maximum(denominator, _EPSILON)
+
+    # Convert back to original dtype.
+    similarity = tf.clip_by_value(
+        similarity, original_dtype.min, original_dtype.max
+    )
+    return tf.cast(similarity, original_dtype)
