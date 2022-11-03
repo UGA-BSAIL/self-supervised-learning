@@ -4,7 +4,7 @@ Custom metrics for the model.
 
 
 import abc
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 import tensorflow as tf
 
@@ -15,7 +15,7 @@ from .ragged_utils import ragged_map_fn
 from .similarity_utils import compute_ious
 
 
-def id_switches(
+def count_id_switches(
     true_assignment: tf.RaggedTensor, pred_assignment: tf.RaggedTensor
 ) -> tf.Tensor:
     """
@@ -43,7 +43,7 @@ class IdSwitches(tf.keras.metrics.Metric):
     A metric that tracks the number of ID switches.
     """
 
-    def __init__(self, name="id_switches", **kwargs: Any):
+    def __init__(self, name="count_id_switches", **kwargs: Any):
         """
         Args:
             name: The name of this metric.
@@ -64,7 +64,7 @@ class IdSwitches(tf.keras.metrics.Metric):
     ) -> None:
         y_true, y_pred = correct_ragged_mismatch(y_true, y_pred)
 
-        _id_switches = id_switches(y_true, y_pred)
+        _id_switches = count_id_switches(y_true, y_pred)
 
         if sample_weight is not None:
             # Weight each sample.
@@ -346,7 +346,9 @@ class FalseNegatives(_BboxMetric):
         self._conf_threshold = conf_threshold
 
         # Keeps track of the number of false negatives.
-        self._false_negatives = self.add_weight(name="fn", initializer="zeros")
+        self._false_negatives = self.add_weight(
+            name="fn", initializer="zeros", dtype=tf.int32
+        )
 
     def _update_state_from_image(
         self, y_true: tf.Tensor, y_pred: tf.Tensor
@@ -364,7 +366,7 @@ class FalseNegatives(_BboxMetric):
         # we consider that to be a false negative.
         false_negative_mask = tf.less(best_matches, self._conf_threshold)
         num_false_negatives = tf.reduce_sum(
-            tf.cast(false_negative_mask, tf.float32)
+            tf.cast(false_negative_mask, tf.int32)
         )
 
         self._false_negatives.assign_add(num_false_negatives)
@@ -402,7 +404,9 @@ class FalsePositives(_BboxMetric):
         self._conf_threshold = conf_threshold
 
         # Keeps track of the number of false negatives.
-        self._false_positives = self.add_weight(name="fp", initializer="zeros")
+        self._false_positives = self.add_weight(
+            name="fp", initializer="zeros", dtype=tf.int32
+        )
 
     def _update_state_from_image(
         self, y_true: tf.Tensor, y_pred: tf.Tensor
@@ -420,15 +424,13 @@ class FalsePositives(_BboxMetric):
         is_true_positive = tf.greater(
             tf.reduce_sum(tf.cast(is_positive, tf.int32), axis=1), 0
         )
-        num_true_positive = tf.reduce_sum(
-            tf.cast(is_true_positive, tf.float32)
-        )
+        num_true_positive = tf.reduce_sum(tf.cast(is_true_positive, tf.int32))
 
         # Subtract this from the total number of positive predictions to find
         # the number of false positives.
         confidence = y_pred[:, 4]
         num_positive_pred = tf.reduce_sum(
-            tf.cast(confidence >= self._conf_threshold, tf.float32)
+            tf.cast(confidence >= self._conf_threshold, tf.int32)
         )
         num_false_positives = num_positive_pred - num_true_positive
 
@@ -436,6 +438,70 @@ class FalsePositives(_BboxMetric):
 
     def result(self) -> tf.Tensor:
         return self._false_positives
+
+
+class MotAccuracy(tf.keras.metrics.Metric):
+    """
+    Calculates the MOT Accuracy (MOTA) metric, as defined by ClearMOT.
+    """
+
+    def __init__(
+        self,
+        *,
+        false_negatives: FalseNegatives,
+        false_positives: FalsePositives,
+        id_switches: IdSwitches,
+        name: str = "mot_accuracy",
+        **kwargs: Any
+    ):
+        """
+        This metric reads from other existing metrics to calculate its
+        results. Those metrics must be applied separately to the model. This
+        metric should then by applied to the sparse bounding box output so
+        it can see the total number of objects.
+
+        Args:
+            false_negatives: The `FalseNegatives` metric to read from
+                internally.
+            false_positives: The `FalsePositives` metric to read from
+                internally.
+            name: The name of this metric.
+            **kwargs: Will be forwarded to the base class constructor.
+
+        """
+        super().__init__(name=name, **kwargs)
+
+        self._false_negatives = false_negatives
+        self._false_positives = false_positives
+        self._id_switches = id_switches
+
+        # Keeps track of the total number of ground-truth objects.
+        self._num_objects = self.add_weight(
+            "num_objects", initializer="zeros", dtype=tf.int64
+        )
+
+    def update_state(
+        self, y_true: tf.RaggedTensor, _: tf.RaggedTensor, **__
+    ) -> None:
+        # Keep track of the total number of objects. (Internal metrics should
+        # be updated separately.)
+        y_true = cast(tf.RaggedTensor, y_true)
+        num_objects = tf.reduce_sum(y_true.row_lengths())
+        self._num_objects.assign_add(num_objects)
+
+    def result(self) -> tf.Tensor:
+        return tf.cond(
+            self._num_objects < 1,
+            # If we have no objects, I guess it's technically 100% accurate...
+            lambda: 1.0,
+            lambda: 1.0 - tf.cast(
+                self._false_negatives.result()
+                + self._false_positives.result()
+                + self._id_switches.result(),
+                tf.float32,
+            )
+            / tf.cast(self._num_objects, tf.float32),
+        )
 
 
 class MaxConfidence(tf.keras.metrics.Metric):
@@ -457,7 +523,7 @@ class MaxConfidence(tf.keras.metrics.Metric):
             name="max_confidence", initializer="zeros", dtype=tf.float32
         )
 
-    def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor, **_) -> None:
+    def update_state(self, _, y_pred: tf.Tensor, **__) -> None:
         # Compute the maximum heatmap value.
         batch_max = tf.reduce_max(y_pred)
         self._max_confidence.assign(batch_max)
@@ -474,12 +540,22 @@ def make_metrics() -> Dict[str, Any]:
         The metrics that it created.
 
     """
+    false_negatives = FalseNegatives()
+    false_positives = FalsePositives()
+    id_switches = IdSwitches()
+    mot_accuracy = MotAccuracy(
+        false_negatives=false_negatives,
+        false_positives=false_positives,
+        id_switches=id_switches,
+    )
+
     return {
         ModelTargets.GEOMETRY_SPARSE_PRED.value: [
             AveragePrecision(),
-            FalseNegatives(),
-            FalsePositives(),
+            false_negatives,
+            false_positives,
+            mot_accuracy,
         ],
         ModelTargets.HEATMAP.value: MaxConfidence(),
-        ModelTargets.ASSIGNMENT.value: IdSwitches(),
+        ModelTargets.ASSIGNMENT.value: id_switches,
     }
