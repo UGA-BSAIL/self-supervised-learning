@@ -451,6 +451,7 @@ class MotAccuracy(tf.keras.metrics.Metric):
         false_negatives: FalseNegatives,
         false_positives: FalsePositives,
         id_switches: IdSwitches,
+        conf_threshold: float = 0.5,
         name: str = "mot_accuracy",
         **kwargs: Any
     ):
@@ -465,6 +466,9 @@ class MotAccuracy(tf.keras.metrics.Metric):
                 internally.
             false_positives: The `FalsePositives` metric to read from
                 internally.
+            id_switches: The `IdSwitches` metric to read from internally.
+            conf_threshold: The minimum confidence necessary for a predicted
+                box to be considered as a positive.
             name: The name of this metric.
             **kwargs: Will be forwarded to the base class constructor.
 
@@ -474,33 +478,41 @@ class MotAccuracy(tf.keras.metrics.Metric):
         self._false_negatives = false_negatives
         self._false_positives = false_positives
         self._id_switches = id_switches
+        self._conf_threshold = conf_threshold
 
-        # Keeps track of the total number of ground-truth objects.
-        self._num_objects = self.add_weight(
-            "num_objects", initializer="zeros", dtype=tf.int64
+        # Keeps track of the total number of predicted objects.
+        self._num_predictions = self.add_weight(
+            "num_predictions", initializer="zeros", dtype=tf.int32
         )
 
     def update_state(
-        self, y_true: tf.RaggedTensor, _: tf.RaggedTensor, **__
+        self, _: tf.RaggedTensor, y_pred: tf.RaggedTensor, **__
     ) -> None:
-        # Keep track of the total number of objects. (Internal metrics should
-        # be updated separately.)
-        y_true = cast(tf.RaggedTensor, y_true)
-        num_objects = tf.reduce_sum(y_true.row_lengths())
-        self._num_objects.assign_add(num_objects)
+        # Keep track of the total number of objects. This can be calculated
+        # as the total number of positive predictions + any false negatives.
+        y_pred = cast(tf.RaggedTensor, y_pred)
+        confidence = y_pred[:, :, -1]
+        num_predictions = tf.reduce_sum(
+            tf.cast(confidence >= self._conf_threshold, tf.int32)
+        )
+        self._num_predictions.assign_add(num_predictions)
 
     def result(self) -> tf.Tensor:
         return tf.cond(
-            self._num_objects < 1,
+            self._num_predictions < 1,
             # If we have no objects, I guess it's technically 100% accurate...
             lambda: 1.0,
-            lambda: 1.0 - tf.cast(
+            lambda: 1.0
+            - tf.cast(
                 self._false_negatives.result()
                 + self._false_positives.result()
                 + self._id_switches.result(),
                 tf.float32,
             )
-            / tf.cast(self._num_objects, tf.float32),
+            / tf.cast(
+                self._num_predictions + self._false_negatives.result(),
+                tf.float32,
+            ),
         )
 
 
