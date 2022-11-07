@@ -11,7 +11,7 @@ from loguru import logger
 from tensorflow.keras import layers
 from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2S
 
-from ..callbacks import LogHeatmaps
+from ..callbacks import LogHeatmaps, KeepBest
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
 from ..training_utils import (
@@ -197,6 +197,9 @@ def train_model(
         The trained model.
 
     """
+    # Add a callback for keeping track of the best model.
+    best_model_callback = KeepBest()
+
     for phase in learning_phases:
         logger.info("Starting new training phase.")
         logger.debug("Using phase parameters: {}", phase)
@@ -207,6 +210,7 @@ def train_model(
             training_params=phase,
             **kwargs,
         )
+        callbacks.append(best_model_callback)
 
         optimizer = tf.keras.optimizers.Adam(
             learning_rate=phase["learning_rate"]["initial"]
@@ -229,4 +233,4 @@ def train_model(
             validation_freq=validation_frequency,
         )
 
-    return model
+    return best_model_callback.best_model

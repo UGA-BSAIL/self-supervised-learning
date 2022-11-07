@@ -5,6 +5,7 @@ Encapsulates custom callbacks to use.
 
 import abc
 import gc
+import math
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -15,6 +16,7 @@ from loguru import logger
 
 from .schemas import ModelInputs, ModelTargets
 from .visualization import visualize_heat_maps
+from .model_training.layers import CUSTOM_LAYERS
 
 
 class _TensorboardLoggingCallback(callbacks.Callback):
@@ -233,6 +235,57 @@ class ClearMemory(callbacks.Callback):
     decrease overall memory usage.
     """
 
-    def on_epoch_end(self, epoch: int, logs: Optional[Dict] = None) -> None:
+    def on_epoch_end(self, _: int, __: Optional[Dict] = None) -> None:
         gc.collect()
         keras.backend.clear_session()
+
+
+class KeepBest(callbacks.Callback):
+    """
+    A callback that keeps track of the best-performing model, even if it
+    wasn't the most recent.
+    """
+
+    def __init__(self, metric: str = "val_loss", minimize: bool = True):
+        """
+        Args:
+            metric: The metric to track for determining which model is the
+                best.
+            minimize: If true, it will attempt to minimize the metric.
+                Otherwise, it will attempt to maximize it.
+
+        """
+        self.__metric_name = metric
+
+        if minimize:
+            self.__best_metric_value = math.inf
+            self.__metric_comparator = lambda x, y: x < y
+        else:
+            self.__best_metric_value = -math.inf
+            self.__metric_comparator = lambda x, y: x > y
+
+        # The current best model.
+        self.__best_model = None
+
+    def on_epoch_end(self, epoch: int, logs: Optional[Dict] = None) -> None:
+        # Get the metric value.
+        metric_value = logs[self.__metric_name]
+
+        if self.__metric_comparator(metric_value, self.__best_metric_value):
+            logger.debug(
+                "This model is currently the best at epoch {}.", epoch
+            )
+            self.__best_metric_value = metric_value
+
+            with tf.keras.utils.custom_object_scope(CUSTOM_LAYERS):
+                self.__best_model = tf.keras.models.clone_model(self.model)
+
+    @property
+    def best_model(self) -> Optional[tf.keras.Model]:
+        """
+        Returns:
+            The current best model, or None if the callback hasn't ever been
+            run.
+
+        """
+        return self.__best_model
