@@ -25,6 +25,7 @@ numpy = "1.22"
 opencv-contrib-python = "4.5.2.54"
 google-cloud-bigquery = "2.20.0"
 tqdm = "^4.64.0"
+python-json-logger = "^2.0.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
