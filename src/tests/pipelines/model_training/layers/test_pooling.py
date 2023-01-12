@@ -8,9 +8,9 @@ import tensorflow as tf
 from faker import Faker
 from pydantic.dataclasses import dataclass
 
-from src.cotton_flower_mot.pipelines import heat_maps
-from src.cotton_flower_mot.pipelines.model_training.layers import pooling
-from src.cotton_flower_mot.type_helpers import ArbitraryTypesConfig
+from src.self_supervised.pipelines import heat_maps
+from src.self_supervised.pipelines.model_training.layers import pooling
+from src.self_supervised.type_helpers import ArbitraryTypesConfig
 
 # Do not use mixed precision during tests as it can degrade accuracy.
 tf.keras.mixed_precision.set_global_policy("float32")

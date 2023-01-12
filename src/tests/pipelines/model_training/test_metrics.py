@@ -6,7 +6,7 @@ Tests for the `metrics` module.
 import numpy as np
 from faker import Faker
 
-from src.cotton_flower_mot.pipelines.model_training import metrics
+from src.self_supervised.pipelines.model_training import metrics
 
 
 def test_average_precision_smoke(faker: Faker) -> None:

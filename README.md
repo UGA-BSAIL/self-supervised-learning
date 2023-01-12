@@ -1,4 +1,4 @@
-# Cotton Flower MOT
+# Self-Supervised Learning Experiments
 
 ## Overview
 

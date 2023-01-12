@@ -197,6 +197,31 @@ class UnannotatedFeatures(enum.Enum):
 
 
 @enum.unique
+class MarsMetadata(enum.Enum):
+    """
+    Schema for metadata from the MARS dataset.
+    """
+
+    CLIP = "clip"
+    """
+    Clip ID that this frame is associated with.
+    """
+    FRAME_NUM = "frame_num"
+    """
+    Frame number within the clip.
+    """
+    CAMERA = "camera"
+    """
+    The camera number that this frame is from.
+    """
+
+    FILE_ID = "file_id"
+    """
+    The unique ID that identifies this file on the disk.
+    """
+
+
+@enum.unique
 class ModelInputs(enum.Enum):
     """
     Key names for the inputs to the model.

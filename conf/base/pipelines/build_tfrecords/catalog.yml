@@ -1,4 +1,0 @@
-# Combined dataset of all video data.
-cotton_videos:
-  type: MemoryDataSet
-  copy_mode: assign

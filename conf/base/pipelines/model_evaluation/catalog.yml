@@ -27,8 +27,8 @@ count_report_valid:
 
 # Tracking videos.
 tracking_videos_test:
-  type: cotton_flower_mot.data_sets.MultiFileDataSet
-  dataset: cotton_flower_mot.data_sets.VideoDataSet
+  type: self_supervised.data_sets.MultiFileDataSet
+  dataset: self_supervised.data_sets.VideoDataSet
   filepath: ${output_data_dir}/08_reporting/tracking_videos/test
   extension: .mp4
   bgr_color: false
@@ -36,8 +36,8 @@ tracking_videos_test:
   versioned: True
 
 tracking_videos_valid:
-  type: cotton_flower_mot.data_sets.MultiFileDataSet
-  dataset: cotton_flower_mot.data_sets.VideoDataSet
+  type: self_supervised.data_sets.MultiFileDataSet
+  dataset: self_supervised.data_sets.VideoDataSet
   filepath: ${output_data_dir}/08_reporting/tracking_videos/valid
   extension: .mp4
   bgr_color: false

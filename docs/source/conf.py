@@ -29,7 +29,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# cotton_flower_mot documentation build
+# self_supervised documentation build
 # configuration file, created by sphinx-quickstart.
 #
 # This file is execfile()d with the current directory set to its
@@ -54,7 +54,7 @@ from cotton_flower_mot import __version__ as release
 
 # -- Project information -----------------------------------------------------
 
-project = "cotton_flower_mot"
+project = "self_supervised"
 copyright = "2021, QuantumBlack Visual Analytics Limited"
 author = "QuantumBlack"
 
@@ -180,8 +180,8 @@ latex_elements = {
 latex_documents = [
     (
         master_doc,
-        "cotton_flower_mot.tex",
-        "cotton_flower_mot Documentation",
+        "self_supervised.tex",
+        "self_supervised Documentation",
         "QuantumBlack",
         "manual",
     )
@@ -194,8 +194,8 @@ latex_documents = [
 man_pages = [
     (
         master_doc,
-        "cotton_flower_mot",
-        "cotton_flower_mot Documentation",
+        "self_supervised",
+        "self_supervised Documentation",
         [author],
         1,
     )
@@ -209,11 +209,11 @@ man_pages = [
 texinfo_documents = [
     (
         master_doc,
-        "cotton_flower_mot",
-        "cotton_flower_mot Documentation",
+        "self_supervised",
+        "self_supervised Documentation",
         author,
-        "cotton_flower_mot",
-        "Project cotton_flower_mot codebase.",
+        "self_supervised",
+        "Project self_supervised codebase.",
         "Data-Science",
     )
 ]

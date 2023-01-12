@@ -6,7 +6,7 @@ Tests for the `ragged_utils` module.
 import numpy as np
 import tensorflow as tf
 
-from src.cotton_flower_mot.pipelines.model_training import ragged_utils
+from src.self_supervised.pipelines.model_training import ragged_utils
 
 
 def test_ragged_map_fn() -> None:

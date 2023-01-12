@@ -12,7 +12,7 @@ import tensorflow as tf
 from faker import Faker
 from faker.providers import BaseProvider
 
-from src.cotton_flower_mot.pipelines.model_training.gcnn_model import (
+from src.self_supervised.pipelines.model_training.gcnn_model import (
     ModelConfig,
 )
 

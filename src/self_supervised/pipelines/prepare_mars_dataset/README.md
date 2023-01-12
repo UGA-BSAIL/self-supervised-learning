@@ -1,6 +1,6 @@
-# Pipeline convert_annotations
+# Pipeline prepare_mars_dataset
 
-> *Note:* This is a `README.md` boilerplate generated using `Kedro 0.17.2`.
+> *Note:* This is a `README.md` boilerplate generated using `Kedro 0.18.3`.
 
 ## Overview
 

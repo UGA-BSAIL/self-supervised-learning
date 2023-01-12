@@ -1,0 +1,9 @@
+# The path to write the raw image data to.
+image_dataset_path: data/05_model_input/mars_multi_camera/
+# The timestamp tolerance to use for synchronizing cameras.
+sync_tolerance: 0.05
+# The maximum timestamp gap between frames within the same clip.
+max_timestamp_gap: 0.3
+# The threshold to use for determining whether there is enough motion between
+# frames to include them.
+motion_threshold: 5.0

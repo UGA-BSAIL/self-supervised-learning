@@ -8,7 +8,7 @@ import pytest
 import tensorflow as tf
 from faker import Faker
 
-from src.cotton_flower_mot.pipelines.model_training import combined_model
+from src.self_supervised.pipelines.model_training import combined_model
 
 
 @pytest.mark.integration

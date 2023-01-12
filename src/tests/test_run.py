@@ -45,7 +45,7 @@ from kedro.framework.context import KedroContext
 @pytest.fixture
 def project_context():
     return KedroContext(
-        package_name="cotton_flower_mot", project_path=Path.cwd()
+        package_name="self_supervised", project_path=Path.cwd()
     )
 
 
@@ -54,4 +54,4 @@ def project_context():
 # functionality
 class TestProjectContext:
     def test_package_name(self, project_context):
-        assert project_context.package_name == "cotton_flower_mot"
+        assert project_context.package_name == "self_supervised"

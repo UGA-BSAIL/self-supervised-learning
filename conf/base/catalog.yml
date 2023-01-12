@@ -1,96 +1,12 @@
-# Cleaned and wrangled annotations.
-annotations_pandas:
-  type: pandas.ParquetDataSet
-  filepath: data/03_primary/annotations
+# Specification for the raw MARS dataset.
+mars_dataset_spec:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/mars_dataset.yml
+
+mars_dataset_meta:
+  type: pandas.FeatherDataSet
+  filepath: data/05_model_input/mars_dataset_meta.feather
   versioned: True
-
-# Training data, as TFRecords.
-tfrecord_train:
-  type: cotton_flower_mot.data_sets.MultiFileDataSet
-  dataset: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/train
-  extension: .tfrecord
-  versioned: True
-
-# Testing data, as TFRecords.
-tfrecord_test:
-  type: cotton_flower_mot.data_sets.MultiFileDataSet
-  dataset: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/test
-  extension: .tfrecord
-  versioned: True
-
-# Training data, as TFRecords.
-tfrecord_valid:
-  type: cotton_flower_mot.data_sets.MultiFileDataSet
-  dataset: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/valid
-  extension: .tfrecord
-  versioned: True
-
-# Unannotated data, as TFRecords, with the robot frame minimally visible.
-tfrecord_unannotated_no_wheel:
-  type: PartitionedDataSet
-  dataset:
-    type: cotton_flower_mot.data_sets.TfRecordsDataSet
-    compressed: true
-  path: data/05_model_input/unannotated/no_wheel
-
-# Same, but with the robot structure visible.
-tfrecord_unannotated_wheel:
-  type: PartitionedDataSet
-  dataset:
-    type: cotton_flower_mot.data_sets.TfRecordsDataSet
-    compressed: true
-  path: data/05_model_input/unannotated/wheel
-
-# A version of the unannotated datasets to use for loading. This can
-# be more efficient, because it loads all the TFRecords files into
-# a single dataset.
-tfrecord_unannotated_no_wheel_combined:
-  type: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/unannotated/no_wheel
-
-tfrecord_unannotated_wheel_combined:
-  type: cotton_flower_mot.data_sets.TfRecordsDataSet
-  filepath: data/05_model_input/unannotated/wheel
-
-# Encompasses all unannotated data.
-tfrecord_unannotated_all:
-  type: MemoryDataSet
-  copy_mode: assign
-
-# Intermediate TF Datasets containing pre-processed data.
-training_data:
-  type: MemoryDataSet
-  copy_mode: assign
-
-testing_data:
-  type: MemoryDataSet
-  copy_mode: assign
-
-validation_data:
-  type: MemoryDataSet
-  copy_mode: assign
-
-rotnet_unannotated_data:
-  type: MemoryDataSet
-  copy_mode: assign
-
-colorization_unannotated_data:
-  type: MemoryDataSet
-  copy_mode: assign
-
-# Intermediate TF datasets containing pre-processed data with
-# clips in-tact. This means that clips are not interleaved and
-# frames with no detections are included.
-testing_data_clips:
-  type: MemoryDataSet
-  copy_mode: assign
-
-validation_data_clips:
-  type: MemoryDataSet
-  copy_mode: assign
 
 _model_args: &model_args
   type: tensorflow.TensorFlowModelDataset

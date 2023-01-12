@@ -28,7 +28,7 @@
 
 from setuptools import find_packages, setup
 
-entry_point = "cotton_flower_mot = cotton_flower_mot.run:run_package"
+entry_point = "self_supervised = self_supervised.run:run_package"
 
 
 # get the dependencies and installs
@@ -43,7 +43,7 @@ with open("requirements.txt", "r", encoding="utf-8") as f:
             requires.append(req)
 
 setup(
-    name="cotton_flower_mot",
+    name="self_supervised",
     version="0.1",
     packages=find_packages(exclude=["tests"]),
     entry_points={"console_scripts": [entry_point]},

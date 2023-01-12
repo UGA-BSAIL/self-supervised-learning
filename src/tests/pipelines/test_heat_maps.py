@@ -8,7 +8,7 @@ import pytest
 import tensorflow as tf
 from faker import Faker
 
-from src.cotton_flower_mot.pipelines import heat_maps
+from src.self_supervised.pipelines import heat_maps
 
 
 @pytest.mark.parametrize(

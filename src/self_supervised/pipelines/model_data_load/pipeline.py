@@ -8,31 +8,13 @@ from kedro.pipeline import Pipeline, node
 
 from ..dataset_io import (
     DataAugmentationConfig,
-    HeatMapSource,
     colorization_inputs_and_targets_from_dataset,
-    inputs_and_targets_from_datasets,
     rot_net_inputs_and_targets_from_dataset,
 )
 from .nodes import concat_datasets
 
 
 def create_pipeline(**_):
-    # Preset for loading training data.
-    load_datasets = partial(
-        inputs_and_targets_from_datasets,
-        include_frame=True,
-        heat_map_source=HeatMapSource.LOAD,
-    )
-    # Preset for loading testing and validation data that doesn't randomize
-    # or interleave clips.
-    load_clips = partial(
-        inputs_and_targets_from_datasets,
-        interleave=False,
-        include_empty=True,
-        include_frame=True,
-        heat_map_source=HeatMapSource.NONE,
-        batch_size=1,
-    )
     # Common configuration for standard dataset loading.
     loading_config = dict(
         config="model_config",
@@ -56,44 +38,6 @@ def create_pipeline(**_):
                     max_bbox_jitter="params:bbox_jitter_fraction",
                 ),
                 "data_augmentation_config",
-            ),
-            # Load the datasets.
-            node(
-                load_datasets,
-                dict(
-                    raw_datasets="tfrecord_train",
-                    augmentation_config="data_augmentation_config",
-                    shuffle_buffer_size="params:shuffle_buffer_size",
-                    **loading_config
-                ),
-                "training_data",
-            ),
-            node(
-                load_datasets,
-                dict(raw_datasets="tfrecord_test", **loading_config),
-                "testing_data",
-            ),
-            node(
-                load_datasets,
-                dict(raw_datasets="tfrecord_valid", **loading_config),
-                "validation_data",
-            ),
-            # Create clip datasets.
-            node(
-                load_clips,
-                dict(
-                    raw_datasets="tfrecord_test",
-                    config="model_config",
-                ),
-                "testing_data_clips",
-            ),
-            node(
-                load_clips,
-                dict(
-                    raw_datasets="tfrecord_valid",
-                    config="model_config",
-                ),
-                "validation_data_clips",
             ),
             node(
                 rot_net_inputs_and_targets_from_dataset,
