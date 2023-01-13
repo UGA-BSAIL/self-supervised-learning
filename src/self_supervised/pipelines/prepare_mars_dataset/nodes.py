@@ -124,10 +124,11 @@ def _write_until_clip_end(
             continue
 
         # Check that we have sufficient motion between frames.
-        if (
-            previous_frames
-            and _minimum_motion(previous_frames, frames) < motion_threshold
-        ):
+        if previous_frames is None:
+            # Wait to check motion before writing anything.
+            previous_frames = frames
+            continue
+        if _minimum_motion(previous_frames, frames) < motion_threshold:
             logger.debug(
                 "Dropping frame {} because it is stationary.", frame_num
             )

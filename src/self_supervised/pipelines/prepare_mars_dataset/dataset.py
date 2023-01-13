@@ -145,7 +145,7 @@ class Camera(_YamlRep):
         )
         if (
             num_actual_frames
-            < timestamps[self.TimestampCol.FRAME_NUM.value].max()
+            <= timestamps[self.TimestampCol.FRAME_NUM.value].max()
         ):
             logger.warning(
                 "{} has fewer frames ({}) that we have timestamps for. Truncating timestamps.",
