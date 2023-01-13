@@ -131,6 +131,9 @@ class Camera(_YamlRep):
             sep=" ",
             names=[c.value for c in self.TimestampCol],
         )
+        # Remove timestamps with a value of zero, which we occasionally end up with. (This must be a quirk of the
+        # software I used to convert the Rosbags.)
+        timestamps = timestamps[timestamps[self.TimestampCol.TIMESTAMP.value] > 0.0]
         # Use the timestamps as an index for easy querying.
         timestamps.set_index(self.TimestampCol.TIMESTAMP.value, inplace=True)
 
@@ -248,13 +251,8 @@ class Camera(_YamlRep):
             in order.
 
         """
-        capture = cv2.VideoCapture(self.video_path.as_posix())
-
-        for timestamp in self.__timestamps.index:
-            status, frame = capture.read()
-            if not status:
-                # No more frames.
-                break
+        for timestamp, frame_num in self.__timestamps.itertuples():
+            frame = self.__frame_at_index(frame_num)
 
             yield timestamp, frame
 
