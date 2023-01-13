@@ -206,7 +206,7 @@ class Camera(_YamlRep):
 
         """
         # Get the corresponding image.
-        skip_frames = frame_index - self.__capture_frame - 1
+        skip_frames = frame_index - self.__capture_frame
         if 0 <= skip_frames <= self._FRAME_SEEK_THRESHOLD:
             # This is an optimization because the CAP_PROP_POS_FRAMES method
             # does not seem to be very efficient. In practice, with short seeks
@@ -215,9 +215,10 @@ class Camera(_YamlRep):
                 self.__video_capture.grab()
         else:
             self.__video_capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-        self.__capture_frame = frame_index
 
         status, frame = self.__video_capture.read()
+        self.__capture_frame = frame_index + 1
+
         assert status, "Failed to read frame from video."
         return frame
 
