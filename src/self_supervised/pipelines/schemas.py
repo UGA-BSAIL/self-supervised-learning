@@ -214,6 +214,11 @@ class MarsMetadata(enum.Enum):
     """
     The camera number that this frame is from.
     """
+    TIMESTAMP = "timestamp"
+    """
+    The timestamp from the original video file that is associated with this
+    frame. All frames in a clip should have monotonically-increasing timestamps.
+    """
 
     FILE_ID = "file_id"
     """

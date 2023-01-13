@@ -153,6 +153,7 @@ def _write_until_clip_end(
                 clip_num,
                 frame_num,
                 camera,
+                timestamp,
                 file_id,
             )
         frame_dataset.save(frame_files)
