@@ -133,9 +133,26 @@ class Camera(_YamlRep):
         )
         # Remove timestamps with a value of zero, which we occasionally end up with. (This must be a quirk of the
         # software I used to convert the Rosbags.)
-        timestamps = timestamps[timestamps[self.TimestampCol.TIMESTAMP.value] > 0.0]
+        timestamps = timestamps[
+            timestamps[self.TimestampCol.TIMESTAMP.value] > 0.0
+        ]
         # Use the timestamps as an index for easy querying.
         timestamps.set_index(self.TimestampCol.TIMESTAMP.value, inplace=True)
+
+        # Sometimes we also have more timestamps than frames...
+        num_actual_frames = int(
+            self.__video_capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        )
+        if (
+            num_actual_frames
+            < timestamps[self.TimestampCol.FRAME_NUM.value].max()
+        ):
+            logger.warning(
+                "{} has fewer frames ({}) that we have timestamps for. Truncating timestamps.",
+                self.video_path,
+                num_actual_frames,
+            )
+            timestamps = timestamps[timestamps[self.TimestampCol.FRAME_NUM.value] < num_actual_frames]
 
         return timestamps
 
