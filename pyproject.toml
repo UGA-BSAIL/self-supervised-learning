@@ -8,25 +8,19 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "~3.8"
 kedro = {extras = ["matplotlib", "pandas"], version = "^0.18.1"}
-pycvat = {path = "pycvat", develop = false}
 pandas = "1.5"
 loguru = "^0.5.3"
-spektral = {git = "https://github.com/danielegrattarola/spektral.git", rev = "1dbdf9"}
 seaborn = "^0.11.1"
 matplotlib = "^3.3.4"
 pydantic = "^1.8.1"
 scipy = "^1.6.2"
 opencv-python = "4.5.2.54"
-tensorflow-addons = "^0.13.0"
-tenacity = "^8.0.1"
-tensorflow-datasets = "^4.4.0"
-tensorflow = "2.11.0"
 numpy = "1.22"
 opencv-contrib-python = "4.5.2.54"
-google-cloud-bigquery = "2.20.0"
 tqdm = "^4.64.0"
 python-json-logger = "^2.0.4"
 setuptools = "^65.7.0"
+torch = "^1.13.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"

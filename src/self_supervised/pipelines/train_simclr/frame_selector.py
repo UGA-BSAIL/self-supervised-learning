@@ -163,7 +163,7 @@ class FrameSelector:
         anchor_row = self.__random_row(possible_anchor_frames)
         anchor_timestamp = anchor_row[MarsMetadata.TIMESTAMP.value]
 
-        # Choose the positive and negative pairs `from within the same clip.
+        # Choose the positive and negative pairs from within the same clip.
         anchor_offsets = clip_timestamps - anchor_timestamp
         positive_min, positive_max = self.__positive_time_range
         possible_positive_frames = positive_metadata.loc[anchor_clip][
