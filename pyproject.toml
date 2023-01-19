@@ -21,6 +21,7 @@ tqdm = "^4.64.0"
 python-json-logger = "^2.0.4"
 setuptools = "^65.7.0"
 torch = "^1.13.1"
+torchvision = "^0.14.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
