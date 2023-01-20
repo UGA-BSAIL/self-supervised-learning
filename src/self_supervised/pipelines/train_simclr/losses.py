@@ -1,6 +1,7 @@
 from torch import Tensor
 import torch
 from torch import nn
+import torch.nn.functional as F
 import itertools
 
 
@@ -62,4 +63,42 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
     num_examples, _ = similarities.shape
     targets = torch.eye(num_examples)
 
-    return nn.functional.cross_entropy(similarities, targets)
+    return F.cross_entropy(similarities, targets)
+
+
+class NtXentLoss(nn.Module):
+    """
+    Implements the NT-Xent loss from
+    http://proceedings.mlr.press/v119/chen20j/chen20j.pdf
+    """
+
+    def __init__(self, temperature: float = 1.0):
+        """
+        Args:
+            temperature: The temperature parameter to use for the loss.
+
+        """
+        __constants__ = ["temperature"]
+
+        super().__init__()
+
+        self.temperature = temperature
+
+    def forward(self, left_features: Tensor, right_features: Tensor) -> Tensor:
+        """
+        Computes the loss.
+
+        Args:
+            left_features: The first set of features, with one set of
+                augmentations.
+            right_features: The features from the same images with different
+                augmentations.
+
+        Returns:
+            The computed loss.
+
+        """
+        similarities = compute_all_similarities(left_features, right_features)
+        similarities /= self.temperature
+
+        return compute_loss_all_similarities(similarities)
