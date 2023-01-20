@@ -34,12 +34,15 @@ class SimClrModel(nn.Module):
     Class that encapsulates the entire SimCLR model.
     """
 
-    def __init__(self, *, encoder: nn.Module, loss: NtXentLoss):
+    def __init__(self, *, encoder: nn.Module, loss: NtXentLoss,
+                 num_features: int = 2048):
         """
         Args:
             encoder: This is `f()` in the paper. It will be applied to
                 input images and used to generate representations.
             loss: The loss function to use.
+            num_features: The number of features that we expect to be produced
+                by the encoder.
 
         """
         super().__init__()
