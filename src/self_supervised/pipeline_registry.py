@@ -3,7 +3,6 @@ from typing import Dict
 from kedro.pipeline import Pipeline
 
 from .pipelines import (
-    build_unannotated_tfrecords,
     eda,
     model_config,
     model_data_load,
@@ -24,7 +23,6 @@ def register_pipelines() -> Dict[str, Pipeline]:
 
     """
     config_pipeline = model_config.create_pipeline()
-    unannotated_pipeline = build_unannotated_tfrecords.create_pipeline()
     eda_pipeline = eda.create_pipeline()
     data_load_pipeline = config_pipeline + model_data_load.create_pipeline()
     training_pipeline = data_load_pipeline + model_training.create_pipeline()
@@ -47,7 +45,6 @@ def register_pipelines() -> Dict[str, Pipeline]:
 
     return {
         "__default__": eda_pipeline + training_pipeline,
-        "build_unannotated_tfrecords": unannotated_pipeline,
         "eda": eda_pipeline,
         "model_training": training_pipeline,
         "model_training_rotnet_init": training_pipeline_rotnet_init,

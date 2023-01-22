@@ -8,6 +8,7 @@ from torch import Tensor
 from .losses import NtXentLoss
 from typing import Any
 from torchvision.models import convnext_small
+from typing import Tuple
 
 
 class ProjectionHead(nn.Module):
@@ -24,11 +25,19 @@ class ProjectionHead(nn.Module):
         """
         super().__init__()
 
+        # Global average pooling.
+        self.average_pool = nn.AdaptiveAvgPool2d(1)
+
         self.hidden = nn.Linear(num_inputs, num_outputs)
+        self.bn = nn.BatchNorm1d(num_inputs)
         self.act = nn.ReLU()
 
     def forward(self, inputs: Tensor) -> Tensor:
-        return self.act(self.hidden(inputs))
+        # Perform global average pooling.
+        pooled = self.average_pool(inputs)
+        pooled = pooled.squeeze(2).squeeze(2)
+
+        return self.hidden(self.act(self.bn(pooled)))
 
 
 class SimClrModel(nn.Module):
@@ -40,7 +49,6 @@ class SimClrModel(nn.Module):
         self,
         *,
         encoder: nn.Module,
-        loss: NtXentLoss,
         num_features: int = 2048,
         num_projected_outputs: int = 256
     ):
@@ -48,7 +56,6 @@ class SimClrModel(nn.Module):
         Args:
             encoder: This is `f()` in the paper. It will be applied to
                 input images and used to generate representations.
-            loss: The loss function to use.
             num_features: The number of features that we expect to be produced
                 by the encoder.
             num_projected_outputs: Output size of the projection head.
@@ -57,19 +64,20 @@ class SimClrModel(nn.Module):
         super().__init__()
 
         self.encoder = encoder
-        self.loss = loss
         self.projection = ProjectionHead(
             num_inputs=num_features, num_outputs=num_projected_outputs
         )
 
-    def forward(self, left_inputs: Tensor, right_inputs: Tensor) -> Tensor:
+    def forward(
+        self, left_inputs: Tensor, right_inputs: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         """
         Args:
             left_inputs: The images to apply the model to.
             right_inputs: The same images, but with different augmentations.
 
         Returns:
-            The loss value.
+            The computed and projected encodings for each input.
 
         """
         # Get the representations.
@@ -80,8 +88,7 @@ class SimClrModel(nn.Module):
         left_projected = self.projection(left_rep)
         right_projected = self.projection(right_rep)
 
-        # Apply the loss.
-        return self.loss(left_projected, right_projected)
+        return left_projected, right_projected
 
 
 class ConvNeXtSmallEncoder(nn.Module):
@@ -97,10 +104,13 @@ class ConvNeXtSmallEncoder(nn.Module):
             **kwargs: Will be forwarded to the ConNeXt builder.
 
         """
-        self.convnext = convnext_small()
+        super().__init__()
+
+        self.convnext = convnext_small(*args, **kwargs)
         # Internal projection head used to get the right number of output
         # features for the representation.
         self.projection = nn.Conv2d(768, num_features, (1, 1), padding="same")
 
     def forward(self, inputs: Tensor) -> Tensor:
-        return self.projection(self.convnext(inputs))
+        features = self.convnext.features(inputs)
+        return self.projection(features)
