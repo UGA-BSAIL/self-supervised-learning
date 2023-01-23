@@ -12,6 +12,7 @@ from torchvision.io import read_image
 from torch import Tensor
 from torch import nn
 import torch
+from typing import Optional, Tuple
 
 
 class SingleFrameDataset(Dataset):
@@ -19,12 +20,19 @@ class SingleFrameDataset(Dataset):
     Dataset that just reads single frames.
     """
 
-    def __init__(self, *, mars_metadata: pd.DataFrame, image_folder: Path):
+    def __init__(
+        self,
+        *,
+        mars_metadata: pd.DataFrame,
+        image_folder: Path,
+    ):
         """
         Args:
             mars_metadata: The metadata, which describes where to find the
                 dataset files.
             image_folder: The folder that contains all the dataset images.
+            output_size: The size of the images to output. If None, it will
+                not alter the images. Otherwise, it will crop them.
 
         """
         self.__metadata = mars_metadata

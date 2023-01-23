@@ -25,7 +25,7 @@ def compute_all_similarities(
     """
     assert left_features.shape == right_features.shape
     batch_size, num_features = left_features.shape
-    similarities = torch.empty(size=(batch_size,) * 2)
+    similarities = torch.zeros(size=(batch_size,) * 2)
 
     # Fill in the similarities for the upper triangle.
     for left_i, right_i in itertools.combinations(range(batch_size), 2):
