@@ -13,6 +13,7 @@ from torch.optim import Optimizer, AdamW
 from typing import List, Tuple
 from torch import Tensor
 from torchvision.transforms.functional import normalize
+from torch.cuda.amp import GradScaler
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -81,6 +82,7 @@ def _train_loop(
     model: nn.Module,
     loss_fn: nn.Module,
     optimizer: Optimizer,
+    scaler: GradScaler,
 ) -> None:
     """
     Trains for a single epoch.
@@ -90,6 +92,7 @@ def _train_loop(
         model: The model to train.
         loss_fn: The loss function to use.
         optimizer: The optimizer to use.
+        scaler: Gradient scaler to use.
 
     """
     for batch_i, (left_inputs, right_inputs) in enumerate(dataloader):
@@ -97,13 +100,15 @@ def _train_loop(
         right_inputs = _normalize(right_inputs)
 
         # Compute loss.
-        left_pred, right_pred = model(left_inputs, right_inputs)
-        loss = loss_fn(left_pred, right_pred)
+        with torch.autocast(device_type=DEVICE, dtype=torch.float16):
+            left_pred, right_pred = model(left_inputs, right_inputs)
+            loss = loss_fn(left_pred, right_pred)
 
         # Backward pass.
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         logger.info("batch {}: loss={}", batch_i, loss.item())
 
@@ -129,6 +134,7 @@ def train_model(
     """
     loss_fn = NtXentLoss()
     optimizer = AdamW(model.parameters(), lr=learning_rate)
+    scaler = GradScaler()
 
     data_loader = data.DataLoader(
         training_data,
@@ -146,4 +152,5 @@ def train_model(
             optimizer=optimizer,
             model=model,
             loss_fn=loss_fn,
+            scaler=scaler,
         )
