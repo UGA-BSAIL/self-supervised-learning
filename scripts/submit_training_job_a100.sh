@@ -6,25 +6,25 @@
 # It expects that a valid virtualenv has already been created with
 # `poetry install`.
 
-#SBATCH --partition=gpu_p
-#SBATCH -J cotton_mot_model_train
+#SBATCH --partition=gpu
+#SBATCH -J self_supervised_model_train
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=12
-#SBATCH --gres=gpu:A100:1
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:a100:1
 #SBATCH --time=16:00:00
 #SBATCH --mem=40gb
-#SBATCH --mail-user=daniel.petti@uga.edu
+#SBATCH --mail-user=djpetti@gmail.com
 #SBATCH --mail-type=END,FAIL
-#SBATCH --output=cotton_mot_model_train.%j.out    # Standard output log
-#SBATCH --error=cotton_mot_model_train.%j.err     # Standard error log
+#SBATCH --output=self_supervised_model_train.%j.out    # Standard output log
+#SBATCH --error=self_supervised_model_train.%j.err     # Standard error log
 
 set -e
 
 # Base directory we use for job output.
-OUTPUT_BASE_DIR="/scratch/$(whoami)"
+OUTPUT_BASE_DIR="/blue/cli2/$(whoami)/job_scratch/"
 # Directory where our data and venv are located.
-LARGE_FILES_DIR="/work/cylilab/cotton_mot"
+LARGE_FILES_DIR="/blue/cli2/$(whoami)/ssl/"
 
 function prepare_environment() {
   # Create the working directory for this job.
@@ -54,4 +54,4 @@ prepare_environment
 source scripts/load_common.sh
 
 # Run the training.
-poetry run kedro run --pipeline=model_training --env=a100 "$@"
+poetry run kedro run --pipeline=train_simclr --env=a100 "$@"

@@ -10,9 +10,8 @@ from pathlib import Path
 from loguru import logger
 from torchvision.io import read_image
 from torch import Tensor
-from torch import nn
 import torch
-from typing import Optional, Tuple
+from typing import Callable
 
 
 class SingleFrameDataset(Dataset):
@@ -67,7 +66,7 @@ class PairedAugmentedDataset(Dataset):
         self,
         *,
         image_dataset: Dataset,
-        augmentation: nn.Module,
+        augmentation: Callable[[Tensor], Tensor],
     ):
         """
 

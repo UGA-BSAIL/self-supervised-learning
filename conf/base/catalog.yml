@@ -3,7 +3,23 @@ mars_dataset_spec:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/mars_dataset.yml
 
+# Metadata associated with the MARS dataset.
 mars_dataset_meta:
   type: pandas.FeatherDataSet
   filepath: data/05_model_input/mars_dataset_meta.feather
   versioned: True
+
+# Initial, untrained model
+initial_model:
+  type: MemoryDataSet
+  copy_mode: assign
+
+# Trained model
+trained_model:
+  type: self_supervised.data_sets.PytorchModelDataSet
+  filepath: ${output_data_dir}/06_models/last.pt
+
+# Training dataset
+training_data:
+  type: MemoryDataSet
+  copy_mode: assign

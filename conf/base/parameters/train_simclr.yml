@@ -1,5 +1,9 @@
-# This is a boilerplate parameters config generated for pipeline 'train_simclr'
-# using Kedro 0.18.4.
-#
-# Documentation for this file format can be found in "Parameters"
-# Link: https://kedro.readthedocs.io/en/0.18.4/kedro_project_setup/configuration.html#parameters
+# Path to the folder containing the MARS images.
+mars_image_folder: data/05_model_input/mars_multi_camera
+
+# Number of epochs to train for.
+num_epochs: 100
+# Batch size to use for training.
+batch_size: 1024
+# Learning rate to use for training.
+learning_rate: 0.001

@@ -5,9 +5,8 @@ Implements the SimCLR-specific portions of the model.
 
 from torch import nn
 from torch import Tensor
-from .losses import NtXentLoss
 from typing import Any
-from torchvision.models import convnext_small
+from torchvision.models import convnext_small, efficientnet_v2_s
 from typing import Tuple
 
 
@@ -113,4 +112,29 @@ class ConvNeXtSmallEncoder(nn.Module):
 
     def forward(self, inputs: Tensor) -> Tensor:
         features = self.convnext.features(inputs)
+        return self.projection(features)
+
+
+class EfficientNetSmallEncoder(nn.Module):
+    """
+    Encoder module that uses EfficientNetV2-S.
+    """
+
+    def __init__(self, *args: Any, num_features: int = 2048, **kwargs: Any):
+        """
+        Args:
+            *args: Will be forwarded to the ConvNeXt builder.
+            num_features: Number of output features to use.
+            **kwargs: Will be forwarded to the ConNeXt builder.
+
+        """
+        super().__init__()
+
+        self.efficient_net = efficientnet_v2_s(*args, **kwargs)
+        # Internal projection head used to get the right number of output
+        # features for the representation.
+        self.projection = nn.Conv2d(1280, num_features, (1, 1), padding="same")
+
+    def forward(self, inputs: Tensor) -> Tensor:
+        features = self.efficient_net.features(inputs)
         return self.projection(features)

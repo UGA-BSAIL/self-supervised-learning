@@ -9,27 +9,19 @@ from .losses import NtXentLoss
 from loguru import logger
 import torch
 from torch.utils import data
-from torch.optim import Optimizer, AdamW
-from typing import List, Tuple
+from torch.optim import Optimizer, Adam
+from typing import List, Tuple, Union
 from torch import Tensor
 from torchvision.transforms.functional import normalize
+from torchvision.transforms import RandAugment, RandomCrop, Compose, Lambda
 from torch.cuda.amp import GradScaler
+from pathlib import Path
+from .dataset_io import SingleFrameDataset, PairedAugmentedDataset
+import pandas as pd
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using {} device.", DEVICE)
-
-
-def build_model() -> nn.Module:
-    """
-    Builds the complete SimCLR model.
-
-    Returns:
-        The model that it built.
-
-    """
-    encoder = ConvNeXtSmallEncoder()
-    return SimClrModel(encoder=encoder).to(DEVICE)
 
 
 def _collate_pairs(pairs: List[Tensor]) -> Tuple[Tensor, Tensor]:
@@ -69,10 +61,10 @@ def _normalize(images: Tensor) -> Tensor:
         The normalized images.
 
     """
-    images = images.to(torch.float32)
+    images = images.to(torch.float).to(DEVICE, non_blocking=True)
 
-    mean = images.mean(dim=(1, 2, 3), keepdims=True)
-    std = images.std(dim=(1, 2, 3), keepdims=True)
+    mean = images.mean(dim=(2, 3), keepdims=True)
+    std = images.std(dim=(2, 3), keepdims=True)
     return normalize(images, mean, std)
 
 
@@ -113,6 +105,54 @@ def _train_loop(
         logger.info("batch {}: loss={}", batch_i, loss.item())
 
 
+def build_model() -> nn.Module:
+    """
+    Builds the complete SimCLR model.
+
+    Returns:
+        The model that it built.
+
+    """
+    encoder = ConvNeXtSmallEncoder()
+    return SimClrModel(encoder=encoder).to(DEVICE)
+
+
+def load_dataset(
+    *, image_folder: Union[Path, str], metadata: pd.DataFrame
+) -> data.Dataset:
+    """
+    Loads the training dataset.
+
+    Args:
+        image_folder: The path to the training images.
+        metadata: The metadata associated with this dataset.
+
+    Returns:
+        The dataset that it loaded.
+
+    """
+    image_folder = Path(image_folder)
+
+    augmentation = Compose(
+        [
+            RandomCrop((240, 240)),
+            # Apparently, RandomCrop sometimes produces non-contiguous views,
+            # and RandAugment doesn't like that.
+            Lambda(lambda t: t.contiguous()),
+            RandAugment(),
+        ]
+    )
+
+    single_frames = SingleFrameDataset(
+        mars_metadata=metadata, image_folder=image_folder
+    )
+    paired_frames = PairedAugmentedDataset(
+        image_dataset=single_frames, augmentation=augmentation
+    )
+
+    return paired_frames
+
+
 def train_model(
     model: nn.Module,
     *,
@@ -120,7 +160,7 @@ def train_model(
     num_epochs: int,
     batch_size: int,
     learning_rate: float = 0.001,
-) -> None:
+) -> nn.Module:
     """
     Trains the model.
 
@@ -131,9 +171,12 @@ def train_model(
         batch_size: The batch size to use for training.
         learning_rate: The learning rate to use.
 
+    Returns:
+        The trained model.
+
     """
-    loss_fn = NtXentLoss()
-    optimizer = AdamW(model.parameters(), lr=learning_rate)
+    loss_fn = NtXentLoss().to(DEVICE)
+    optimizer = Adam(model.parameters(), lr=learning_rate)
     scaler = GradScaler()
 
     data_loader = data.DataLoader(
@@ -154,3 +197,5 @@ def train_model(
             loss_fn=loss_fn,
             scaler=scaler,
         )
+
+    return model

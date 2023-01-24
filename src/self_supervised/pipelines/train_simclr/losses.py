@@ -24,8 +24,13 @@ def compute_all_similarities(
 
     """
     assert left_features.shape == right_features.shape
+    assert (
+        left_features.device == right_features.device
+    ), "Features must be on same device."
     batch_size, num_features = left_features.shape
-    similarities = torch.zeros(size=(batch_size,) * 2)
+    similarities = torch.zeros(
+        size=(batch_size,) * 2, device=left_features.device
+    )
 
     # Fill in the similarities for the upper triangle.
     for left_i, right_i in itertools.combinations(range(batch_size), 2):
@@ -61,7 +66,7 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
     # Compute the target distributions. These are essentially just one-hot
     # vectors that are 1 where i==j.
     num_examples, _ = similarities.shape
-    targets = torch.eye(num_examples)
+    targets = torch.eye(num_examples, device=similarities.device)
 
     return F.cross_entropy(similarities, targets)
 
