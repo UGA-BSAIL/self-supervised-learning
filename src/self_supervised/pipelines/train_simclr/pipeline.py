@@ -3,12 +3,25 @@ Pipeline definition for `train_simclr`.
 """
 
 from kedro.pipeline import Pipeline, node, pipeline
+
+from ..common_nodes import init_wandb
 from .nodes import build_model, load_dataset, train_model
 
 
 def create_pipeline(**kwargs) -> Pipeline:
     return pipeline(
         [
+            node(
+                init_wandb,
+                dict(
+                    entity="params:wandb_entity",
+                    num_epochs="params:num_epochs",
+                    batch_size="params:batch_size",
+                    learning_rate="params:learning_rate",
+                ),
+                None,
+            ),
+            # Start the training.
             node(
                 load_dataset,
                 dict(

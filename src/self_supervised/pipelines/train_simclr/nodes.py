@@ -3,22 +3,25 @@ Nodes for the `train_simclr` pipeline.
 """
 
 
-from torch import nn
-from .simclr_model import SimClrModel, ConvNeXtSmallEncoder
-from .losses import NtXentLoss
-from loguru import logger
-import torch
-from torch.utils import data
-from torch.optim import Optimizer, AdamW
-from typing import List, Tuple, Union
-from torch import Tensor
-from torchvision.transforms.functional import normalize
-from torchvision.transforms import RandAugment, CenterCrop, Compose, Lambda
-from torch.cuda.amp import GradScaler
 from pathlib import Path
-from .dataset_io import SingleFrameDataset, PairedAugmentedDataset
-import pandas as pd
+from typing import List, Tuple, Union
 
+import numpy as np
+import pandas as pd
+import torch
+import wandb
+from loguru import logger
+from torch import Tensor, nn
+from torch.cuda.amp import GradScaler
+from torch.optim import AdamW, Optimizer
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils import data
+from torchvision.transforms import CenterCrop, Compose, Lambda, RandAugment
+from torchvision.transforms.functional import normalize
+
+from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
+from .losses import NtXentLoss
+from .simclr_model import ConvNeXtSmallEncoder, SimClrModel
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using {} device.", DEVICE)
@@ -68,41 +71,109 @@ def _normalize(images: Tensor) -> Tensor:
     return normalize(images, mean, std)
 
 
-def _train_loop(
-    *,
-    dataloader: data.DataLoader,
-    model: nn.Module,
-    loss_fn: nn.Module,
-    optimizer: Optimizer,
-    scaler: GradScaler,
-) -> None:
+class TrainingLoop:
     """
-    Trains for a single epoch.
-
-    Args:
-        dataloader: The data to use for training.
-        model: The model to train.
-        loss_fn: The loss function to use.
-        optimizer: The optimizer to use.
-        scaler: Gradient scaler to use.
-
+    Manages running a training loop.
     """
-    for batch_i, (left_inputs, right_inputs) in enumerate(dataloader):
-        left_inputs = _normalize(left_inputs)
-        right_inputs = _normalize(right_inputs)
 
-        # Compute loss.
-        with torch.autocast(device_type=DEVICE, dtype=torch.float16):
-            left_pred, right_pred = model(left_inputs, right_inputs)
-            loss = loss_fn(left_pred, right_pred)
+    def __init__(
+        self,
+        *,
+        model: nn.Module,
+        loss_fn: nn.Module,
+        optimizer: Optimizer,
+        scaler: GradScaler,
+    ):
+        """
+        Args:
+            model: The model to train.
+            loss_fn: The loss function to use.
+            optimizer: The optimizer to use.
+            scaler: Gradient scaler to use.
 
-        # Backward pass.
-        optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
+        """
+        self.__model = model
+        self.__loss_fn = loss_fn
+        self.__optimizer = optimizer
+        self.__scaler = scaler
 
-        logger.info("batch {}: loss={}", batch_i, loss.item())
+        # Keeps track of the current global training step.
+        self.__global_step = 0
+
+    def __log_first_batch(
+        self, *, left_inputs: Tensor, right_inputs: Tensor
+    ) -> None:
+        """
+        Logs data from the first batch of an epoch.
+
+        Args:
+            left_inputs: The left side inputs.
+            right_inputs: The right side inputs.
+
+        """
+
+        def _to_wandb_image(image: Tensor) -> wandb.Image:
+            # WandB doesn't seem to like initializing images from pure
+            # tensors, so we have to do some fancy stuff.
+            return wandb.Image(image.permute((1, 2, 0)).numpy())
+
+        # Take at most 25 images from each batch.
+        wandb.log(
+            {
+                "global_step": self.__global_step,
+                "train/left_input_examples": [
+                    _to_wandb_image(im) for im in left_inputs[:25]
+                ],
+                "train/right_input_examples": [
+                    _to_wandb_image(im) for im in right_inputs[:25]
+                ],
+            }
+        )
+
+    def train_epoch(self, data_loader: data.DataLoader) -> float:
+        """
+        Trains the model for a single epoch on some data.
+
+        Args:
+            data_loader: The data to train on.
+
+        Returns:
+            The average loss for this epoch.
+
+        """
+        losses = []
+        for batch_i, (left_inputs, right_inputs) in enumerate(data_loader):
+            if batch_i == 0:
+                self.__log_first_batch(
+                    left_inputs=left_inputs, right_inputs=right_inputs
+                )
+            left_inputs = _normalize(left_inputs)
+            right_inputs = _normalize(right_inputs)
+
+            # Compute loss.
+            with torch.autocast(device_type=DEVICE, dtype=torch.float16):
+                left_pred, right_pred = self.__model(left_inputs, right_inputs)
+                loss = self.__loss_fn(left_pred, right_pred)
+
+            # Backward pass.
+            self.__optimizer.zero_grad()
+            self.__scaler.scale(loss).backward()
+            self.__scaler.step(self.__optimizer)
+            self.__scaler.update()
+
+            logger.debug("batch {}: loss={}", batch_i, loss.item())
+            wandb.log(
+                {
+                    "global_step": self.__global_step,
+                    "train/loss": loss.item(),
+                    "lr": self.__optimizer.param_groups[0]["lr"],
+                }
+            )
+
+            self.__global_step += 1
+            losses.append(loss.item())
+
+        return np.mean(losses)
 
 
 def build_model() -> nn.Module:
@@ -177,7 +248,11 @@ def train_model(
     """
     loss_fn = NtXentLoss().to(DEVICE)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
+    scheduler = ReduceLROnPlateau(optimizer, "min")
     scaler = GradScaler()
+
+    # Log gradients
+    wandb.watch(model, log_freq=500)
 
     data_loader = data.DataLoader(
         training_data,
@@ -188,14 +263,14 @@ def train_model(
         shuffle=True,
     )
 
+    training_loop = TrainingLoop(
+        model=model, optimizer=optimizer, loss_fn=loss_fn, scaler=scaler
+    )
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)
-        _train_loop(
-            dataloader=data_loader,
-            optimizer=optimizer,
-            model=model,
-            loss_fn=loss_fn,
-            scaler=scaler,
-        )
+        average_loss = training_loop.train_epoch(data_loader)
+
+        logger.info("Epoch {} loss: {}", i, average_loss)
+        scheduler.step(average_loss)
 
     return model
