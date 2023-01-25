@@ -9,11 +9,11 @@ from .losses import NtXentLoss
 from loguru import logger
 import torch
 from torch.utils import data
-from torch.optim import Optimizer, Adam
+from torch.optim import Optimizer, AdamW
 from typing import List, Tuple, Union
 from torch import Tensor
 from torchvision.transforms.functional import normalize
-from torchvision.transforms import RandAugment, RandomCrop, Compose, Lambda
+from torchvision.transforms import RandAugment, CenterCrop, Compose, Lambda
 from torch.cuda.amp import GradScaler
 from pathlib import Path
 from .dataset_io import SingleFrameDataset, PairedAugmentedDataset
@@ -135,8 +135,8 @@ def load_dataset(
 
     augmentation = Compose(
         [
-            RandomCrop((240, 240)),
-            # Apparently, RandomCrop sometimes produces non-contiguous views,
+            CenterCrop((240, 240)),
+            # Apparently, crops sometimes produces non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
             RandAugment(),
@@ -176,7 +176,7 @@ def train_model(
 
     """
     loss_fn = NtXentLoss().to(DEVICE)
-    optimizer = Adam(model.parameters(), lr=learning_rate)
+    optimizer = AdamW(model.parameters(), lr=learning_rate)
     scaler = GradScaler()
 
     data_loader = data.DataLoader(
