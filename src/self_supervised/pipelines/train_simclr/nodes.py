@@ -16,11 +16,13 @@ from torch.cuda.amp import GradScaler
 from torch.optim import AdamW, Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
+from torchmetrics import Metric
 from torchvision.transforms import CenterCrop, Compose, Lambda, RandAugment
 from torchvision.transforms.functional import normalize
 
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
 from .losses import NtXentLoss
+from .metrics import ProxyClassAccuracy
 from .simclr_model import ConvNeXtSmallEncoder, SimClrModel
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -68,6 +70,9 @@ def _normalize(images: Tensor) -> Tensor:
 
     mean = images.mean(dim=(2, 3), keepdims=True)
     std = images.std(dim=(2, 3), keepdims=True)
+    # Occasionally, due to weird augmentation, this can be zero, which we can't
+    # divide by.
+    std = std.clamp(min=0.01)
     return normalize(images, mean, std)
 
 
@@ -83,6 +88,7 @@ class TrainingLoop:
         loss_fn: nn.Module,
         optimizer: Optimizer,
         scaler: GradScaler,
+        accuracy: Metric,
     ):
         """
         Args:
@@ -90,12 +96,14 @@ class TrainingLoop:
             loss_fn: The loss function to use.
             optimizer: The optimizer to use.
             scaler: Gradient scaler to use.
+            accuracy: Metric to use for computing accuracy.
 
         """
         self.__model = model
         self.__loss_fn = loss_fn
         self.__optimizer = optimizer
         self.__scaler = scaler
+        self.__accuracy = accuracy
 
         # Keeps track of the current global training step.
         self.__global_step = 0
@@ -130,6 +138,21 @@ class TrainingLoop:
             }
         )
 
+    def __log_epoch_end(self) -> None:
+        """
+        Performs logging for the end of the epoch.
+
+        """
+        wandb.log(
+            {
+                "global_step": self.__global_step,
+                "train/acc_epoch": self.__accuracy.compute(),
+            }
+        )
+
+        # Reset this metric for next epoch.
+        self.__accuracy.reset()
+
     def train_epoch(self, data_loader: data.DataLoader) -> float:
         """
         Trains the model for a single epoch on some data.
@@ -161,11 +184,15 @@ class TrainingLoop:
             self.__scaler.step(self.__optimizer)
             self.__scaler.update()
 
+            # Compute accuracy.
+            batch_acc = self.__accuracy(left_pred, right_pred)
+
             logger.debug("batch {}: loss={}", batch_i, loss.item())
             wandb.log(
                 {
                     "global_step": self.__global_step,
                     "train/loss": loss.item(),
+                    "train/acc_batch": batch_acc.item(),
                     "lr": self.__optimizer.param_groups[0]["lr"],
                 }
             )
@@ -173,6 +200,7 @@ class TrainingLoop:
             self.__global_step += 1
             losses.append(loss.item())
 
+        self.__log_epoch_end()
         return np.mean(losses)
 
 
@@ -250,6 +278,7 @@ def train_model(
     optimizer = AdamW(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, "min")
     scaler = GradScaler()
+    accuracy = ProxyClassAccuracy().to(DEVICE)
 
     # Log gradients
     wandb.watch(model, log_freq=500)
@@ -261,10 +290,15 @@ def train_model(
         pin_memory=True,
         num_workers=8,
         shuffle=True,
+        drop_last=True,
     )
 
     training_loop = TrainingLoop(
-        model=model, optimizer=optimizer, loss_fn=loss_fn, scaler=scaler
+        model=model,
+        optimizer=optimizer,
+        loss_fn=loss_fn,
+        scaler=scaler,
+        accuracy=accuracy,
     )
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)
