@@ -89,6 +89,7 @@ class TrainingLoop:
         optimizer: Optimizer,
         scaler: GradScaler,
         accuracy: Metric,
+        checkpoint_dir: Path = Path("checkpoints"),
     ):
         """
         Args:
@@ -97,6 +98,8 @@ class TrainingLoop:
             optimizer: The optimizer to use.
             scaler: Gradient scaler to use.
             accuracy: Metric to use for computing accuracy.
+            checkpoint_dir: The directory to use for saving intermediate
+                model checkpoints.
 
         """
         self.__model = model
@@ -104,6 +107,8 @@ class TrainingLoop:
         self.__optimizer = optimizer
         self.__scaler = scaler
         self.__accuracy = accuracy
+        self.__checkpoint_dir = checkpoint_dir
+        self.__checkpoint_dir.mkdir(exist_ok=True)
 
         # Keeps track of the current global training step.
         self.__global_step = 0
@@ -153,6 +158,17 @@ class TrainingLoop:
         # Reset this metric for next epoch.
         self.__accuracy.reset()
 
+    def __save_checkpoint(self) -> None:
+        """
+        Saves a model checkpoint.
+
+        """
+        checkpoint_name = f"checkpoint_{self.__global_step}.pt"
+        logger.debug("Saving checkpoint '{}'...", checkpoint_name)
+
+        checkpoint_path = self.__checkpoint_dir / checkpoint_name
+        torch.save(self.__model, checkpoint_path.as_posix())
+
     def train_epoch(self, data_loader: data.DataLoader) -> float:
         """
         Trains the model for a single epoch on some data.
@@ -201,6 +217,7 @@ class TrainingLoop:
             losses.append(loss.item())
 
         self.__log_epoch_end()
+        self.__save_checkpoint()
         return np.mean(losses)
 
 
