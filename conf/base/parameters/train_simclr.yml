@@ -3,8 +3,6 @@ mars_image_folder: data/05_model_input/mars_multi_camera
 
 # Number of epochs to train for.
 num_epochs: 100
-# Batch size to use for training.
-batch_size: 1024
 # Learning rate to use for training.
 learning_rate: 0.001
 

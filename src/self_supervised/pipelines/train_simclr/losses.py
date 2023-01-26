@@ -1,8 +1,6 @@
-from torch import Tensor
 import torch
-from torch import nn
 import torch.nn.functional as F
-import itertools
+from torch import Tensor, nn
 
 
 def compute_all_similarities(
@@ -19,33 +17,21 @@ def compute_all_similarities(
             produced from the same input, just augmented in a different way.
 
     Returns:
-        The pairwise similarities. Will be a symmetric matrix of shape
-        `(batch, batch)`.
+        The pairwise similarities. Will be a matrix of shape `(batch, batch)`.
 
     """
     assert left_features.shape == right_features.shape
     assert (
         left_features.device == right_features.device
     ), "Features must be on same device."
-    batch_size, num_features = left_features.shape
-    similarities = torch.zeros(
-        size=(batch_size,) * 2, device=left_features.device
-    )
+    batch_size, _ = left_features.shape
 
-    # Fill in the similarities for the upper triangle.
-    for left_i, right_i in itertools.combinations(range(batch_size), 2):
-        similarities[left_i, right_i] = nn.functional.cosine_similarity(
-            left_features[left_i], right_features[right_i], dim=0
-        )
-    # `combinations` does not produce repeated elements, so we need to fill the
-    # diagonal separately.
-    for i in range(batch_size):
-        similarities[i, i] = nn.functional.cosine_similarity(
-            left_features[i], right_features[i], dim=0
-        )
+    left_repeated = torch.repeat_interleave(left_features, batch_size, dim=0)
+    right_tiled = torch.tile(right_features, (batch_size, 1))
 
-    # Copy the upper triangle into the lower triangle.
-    return similarities + similarities.triu(diagonal=1).T
+    similarities = F.cosine_similarity(left_repeated, right_tiled, dim=1)
+    # Put it back into the expected 2D shape.
+    return torch.reshape(similarities, (batch_size, batch_size))
 
 
 def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
@@ -56,7 +42,7 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
 
     Args:
         similarities: The matrix of similarities for this batch. Should
-            have shape `(N, N)`. If we are using a temperature parameter, they
+            have shape `(2N, 2N)`. If we are using a temperature parameter, they
             should have already been scaled by that.
 
     Returns:
@@ -66,9 +52,25 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
     # Compute the target distributions. These are essentially just one-hot
     # vectors that are 1 where i==j.
     num_examples, _ = similarities.shape
-    targets = torch.eye(num_examples, device=similarities.device)
 
-    return F.cross_entropy(similarities, targets)
+    def _per_example_losses(exp_similarities_: Tensor) -> Tensor:
+        # Computes losses for each positive pair.
+        denom_mask = 1.0 - torch.eye(
+            num_examples, device=exp_similarities_.device
+        )
+
+        # Compute the denominators.
+        denom_terms = denom_mask * exp_similarities
+        denominators = torch.sum(denom_terms, dim=1)
+
+        # Compute the numerators.
+        numerators = torch.diagonal(exp_similarities, 0)
+
+        # Compute per-example losses.
+        return -torch.log(numerators / denominators)
+
+    exp_similarities = torch.exp(similarities)
+    return torch.mean(_per_example_losses(exp_similarities))
 
 
 class NtXentLoss(nn.Module):
@@ -83,7 +85,7 @@ class NtXentLoss(nn.Module):
             temperature: The temperature parameter to use for the loss.
 
         """
-        __constants__ = ["temperature"]
+        __constants__ = ["temperature"]  # noqa: F841
 
         super().__init__()
 
@@ -103,7 +105,11 @@ class NtXentLoss(nn.Module):
             The computed loss.
 
         """
-        similarities = compute_all_similarities(left_features, right_features)
+        # Compute both similarities between right and left features, and
+        # similarities between negative pairs on the same side.
+        rows = torch.cat((left_features, right_features))
+        cols = torch.cat((right_features, left_features))
+        similarities = compute_all_similarities(rows, cols)
         similarities /= self.temperature
 
         return compute_loss_all_similarities(similarities)

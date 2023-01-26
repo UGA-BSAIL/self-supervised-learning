@@ -276,7 +276,7 @@ def train_model(
     """
     loss_fn = NtXentLoss().to(DEVICE)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
-    scheduler = ReduceLROnPlateau(optimizer, "min")
+    scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE)
 

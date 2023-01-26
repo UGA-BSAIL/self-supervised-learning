@@ -27,9 +27,11 @@ class ProxyClassAccuracy(BinaryAccuracy):
 
         """
         similarities = compute_all_similarities(left_features, right_features)
+        # Treat the similarities as probabilities.
+        probabilities = torch.sigmoid(similarities)
 
         # The positive pairs should be on the diagonals.
-        num_examples, _ = similarities.shape
+        num_examples, _ = probabilities.shape
         targets = torch.eye(num_examples, device=similarities.device)
 
         return super().forward(similarities, targets)
