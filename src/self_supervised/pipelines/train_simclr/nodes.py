@@ -276,6 +276,7 @@ def train_model(
     num_epochs: int,
     batch_size: int,
     learning_rate: float = 0.001,
+    temperature: float = 0.1,
 ) -> nn.Module:
     """
     Trains the model.
@@ -286,12 +287,13 @@ def train_model(
         num_epochs: The number of epochs to train for.
         batch_size: The batch size to use for training.
         learning_rate: The learning rate to use.
+        temperature: The temperature parameter to use for the loss.
 
     Returns:
         The trained model.
 
     """
-    loss_fn = NtXentLoss().to(DEVICE)
+    loss_fn = NtXentLoss(temperature=temperature).to(DEVICE)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
     scaler = GradScaler()
