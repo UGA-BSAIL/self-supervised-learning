@@ -22,7 +22,7 @@ from torchvision.transforms.functional import normalize
 
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
 from .losses import NtXentLoss
-from .metrics import ProxyClassAccuracy
+from .metrics import ProxyClassAccuracy, binary_accuracy
 from .simclr_model import ConvNeXtSmallEncoder, SimClrModel
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

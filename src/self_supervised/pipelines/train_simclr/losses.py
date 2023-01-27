@@ -49,8 +49,6 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
         The reduced loss for all the similarities.
 
     """
-    # Compute the target distributions. These are essentially just one-hot
-    # vectors that are 1 where i==j.
     num_examples, _ = similarities.shape
 
     def _per_example_losses(exp_similarities_: Tensor) -> Tensor:
@@ -60,11 +58,17 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
         )
 
         # Compute the denominators.
-        denom_terms = denom_mask * exp_similarities
+        denom_terms = denom_mask * exp_similarities_
         denominators = torch.sum(denom_terms, dim=1)
 
-        # Compute the numerators.
-        numerators = torch.diagonal(exp_similarities, 0)
+        # Compute the numerators. These will not be on the main diagonal,
+        # (which is all ones), but instead the diagonal of either the
+        # top right or bottom left quadrant, which represents the similarities
+        # between corresponding left and right features.
+        numerators = torch.diagonal(exp_similarities_, num_examples // 2)
+        # Since the matrix is symmetric, we can just read one of these
+        # diagonals and then tile it.
+        numerators = numerators.tile(2)
 
         # Compute per-example losses.
         return -torch.log(numerators / denominators)
@@ -107,9 +111,8 @@ class NtXentLoss(nn.Module):
         """
         # Compute both similarities between right and left features, and
         # similarities between negative pairs on the same side.
-        rows = torch.cat((left_features, right_features))
-        cols = torch.cat((right_features, left_features))
-        similarities = compute_all_similarities(rows, cols)
+        combined = torch.cat((left_features, right_features))
+        similarities = compute_all_similarities(combined, combined)
         similarities /= self.temperature
 
         return compute_loss_all_similarities(similarities)

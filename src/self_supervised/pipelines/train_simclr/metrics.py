@@ -28,10 +28,13 @@ class ProxyClassAccuracy(BinaryAccuracy):
         """
         similarities = compute_all_similarities(left_features, right_features)
         # Treat the similarities as probabilities.
-        probabilities = torch.sigmoid(similarities)
+        predicted_classes = similarities >= self.threshold
+        predicted_classes = predicted_classes.to(torch.int)
 
         # The positive pairs should be on the diagonals.
-        num_examples, _ = probabilities.shape
-        targets = torch.eye(num_examples, device=similarities.device)
+        num_examples, _ = similarities.shape
+        targets = torch.eye(
+            num_examples, device=similarities.device, dtype=torch.int
+        )
 
-        return super().forward(similarities, targets)
+        return super().forward(predicted_classes, targets)
