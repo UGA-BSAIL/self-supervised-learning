@@ -2,7 +2,7 @@
 
 # Helper script that packages artifacts from a training run.
 
-#SBATCH --partition=batch
+#SBATCH --partition=hpg-default
 #SBATCH -J cotton_mot_model_package_artifacts
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -10,8 +10,8 @@
 #SBATCH --time=0:05:00
 #SBATCH --mem=2gb
 #SBATCH --mail-user=daniel.petti@uga.edu
-#SBATCH --output=cotton_mot_model_package_artifacts.out    # Standard output log
-#SBATCH --error=cotton_mot_model_package_artifacts.err     # Standard error log
+#SBATCH --output=ssl_model_package_artifacts.out    # Standard output log
+#SBATCH --error=ssl_model_package_artifacts.err     # Standard error log
 
 set -e
 
@@ -23,13 +23,13 @@ fi
 # The job ID to collect artifacts from.
 JOB_ID=$1
 # Split the job ID on the dot.
-job_dir="/scratch/$(whoami)/job_${JOB_ID}"
+job_dir="/blue/cli2/$(whoami)/job_scratch/job_${JOB_ID}"
 
 function package_artifacts() {
   mkdir artifacts
 
   # Grab the job output.
-  zip artifacts/output.zip cotton_*_model_train."${JOB_ID}".*
+  zip artifacts/output.zip *_model_train."${JOB_ID}".*
 
   # Grab the models and reports
   zip -r artifacts/models.zip "${job_dir}/output_data/06_models/"
@@ -42,7 +42,7 @@ function clean_artifacts() {
   # Remove old job data.
   rm -rf "${job_dir}"
   # Remove old job output.
-  rm cotton_*_model_train."${JOB_ID}".*
+  rm *_model_train."${JOB_ID}".*
 }
 
 package_artifacts
