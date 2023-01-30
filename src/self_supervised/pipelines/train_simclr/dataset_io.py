@@ -3,15 +3,17 @@ Utilities for loading the image data.
 """
 
 
-from torch.utils.data import Dataset
-import pandas as pd
-from ..schemas import MarsMetadata
 from pathlib import Path
-from loguru import logger
-from torchvision.io import read_image
-from torch import Tensor
+from typing import Callable, Optional
+
+import pandas as pd
 import torch
-from typing import Callable
+from loguru import logger
+from torch import Tensor
+from torch.utils.data import Dataset
+from torchvision.io import read_image
+
+from ..schemas import MarsMetadata
 
 
 class SingleFrameDataset(Dataset):
@@ -24,19 +26,21 @@ class SingleFrameDataset(Dataset):
         *,
         mars_metadata: pd.DataFrame,
         image_folder: Path,
+        augmentation: Optional[Callable[[Tensor], Tensor]] = None,
     ):
         """
         Args:
             mars_metadata: The metadata, which describes where to find the
                 dataset files.
             image_folder: The folder that contains all the dataset images.
-            output_size: The size of the images to output. If None, it will
-                not alter the images. Otherwise, it will crop them.
+            augmentation: Augmentation to apply to output images. Defaults to
+                nothing.
 
         """
         self.__metadata = mars_metadata
         logger.info("Loading dataset images from {}.", image_folder)
         self.__image_folder = image_folder
+        self.__augmentation = augmentation
 
     def __len__(self) -> int:
         return len(self.__metadata)
@@ -54,7 +58,12 @@ class SingleFrameDataset(Dataset):
         example_row = self.__metadata.iloc[item]
         file_id = example_row[MarsMetadata.FILE_ID.value]
         file_path = self.__image_folder / f"{file_id}.jpg"
-        return read_image(file_path.as_posix())
+        image = read_image(file_path.as_posix())
+
+        if self.__augmentation is not None:
+            # Apply the augmentation.
+            image = self.__augmentation(image)
+        return image
 
 
 class PairedAugmentedDataset(Dataset):

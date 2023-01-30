@@ -17,7 +17,7 @@ from torch.optim import AdamW, Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
 from torchmetrics import Metric
-from torchvision.transforms import CenterCrop, Compose, Lambda, RandAugment
+from torchvision.transforms import Compose, Lambda, RandAugment, RandomCrop
 from torchvision.transforms.functional import normalize
 
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
@@ -251,16 +251,17 @@ def load_dataset(
 
     augmentation = Compose(
         [
-            CenterCrop((240, 240)),
-            # Apparently, crops sometimes produces non-contiguous views,
+            # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
-            RandAugment(),
+            RandAugment(num_ops=4),
         ]
     )
 
     single_frames = SingleFrameDataset(
-        mars_metadata=metadata, image_folder=image_folder
+        mars_metadata=metadata,
+        image_folder=image_folder,
+        augmentation=RandomCrop(240),
     )
     paired_frames = PairedAugmentedDataset(
         image_dataset=single_frames, augmentation=augmentation
