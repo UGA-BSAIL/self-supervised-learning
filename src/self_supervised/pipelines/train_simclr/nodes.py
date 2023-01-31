@@ -254,7 +254,7 @@ def load_dataset(
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
-            RandAugment(num_ops=4),
+            RandAugment(num_ops=8, magnitude=10),
         ]
     )
 
