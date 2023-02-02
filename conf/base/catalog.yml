@@ -3,6 +3,11 @@ mars_dataset_spec:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/mars_dataset.yml
 
+# Hyperparameters to use for semi-supervised validation.
+valid_hyperparams:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/valid_hyperparams.yml
+
 # Metadata associated with the MARS dataset.
 mars_dataset_meta:
   type: pandas.FeatherDataSet

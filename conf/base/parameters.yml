@@ -1,1 +1,2 @@
-
+# Entity to use for WandB. Should be your username or team name.
+wandb_entity: djpetti

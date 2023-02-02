@@ -1,0 +1,23 @@
+# Location of the annotated flower dataset.
+super_dataset_path: "data/05_model_input/flower_dataset/dataset.yaml"
+
+# Number of epochs to train for.
+super_num_epochs: 100
+# Initial learning rate to use.
+super_learning_rate: 0.001
+# Number of steps to use for LR warmup.
+super_warmup_steps: 100
+
+# Alpha parameter for heatmap focal loss.
+super_focal_alpha: 2.0
+# Beta parameter for heatmap focal loss.
+super_focal_beta: 4.0
+# Weight for size loss.
+super_size_loss_weight: 0.1
+# Weight for offset loss.
+super_offset_loss_weight: 0.1
+
+# Square size of the input images.
+super_input_size: 512
+# Square size of the heatmaps.
+super_heatmap_size: 128

@@ -18,8 +18,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
 from torchmetrics import Metric
 from torchvision.transforms import CenterCrop, Compose, Lambda, RandAugment
-from torchvision.transforms.functional import normalize
 
+from ..torch_common import normalize
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
@@ -52,28 +52,6 @@ def _collate_pairs(pairs: List[Tensor]) -> Tuple[Tensor, Tensor]:
     right_batch = unified_batch[right_batch_indices]
 
     return left_batch, right_batch
-
-
-def _normalize(images: Tensor) -> Tensor:
-    """
-    Normalizes input images, converting to floats and giving them a
-    mean of 1 and a standard deviation of 0.
-
-    Args:
-        images: The images to normalize.
-
-    Returns:
-        The normalized images.
-
-    """
-    images = images.to(torch.float).to(DEVICE, non_blocking=True)
-
-    mean = images.mean(dim=(2, 3), keepdims=True)
-    std = images.std(dim=(2, 3), keepdims=True)
-    # Occasionally, due to weird augmentation, this can be zero, which we can't
-    # divide by.
-    std = std.clamp(min=0.01)
-    return normalize(images, mean, std)
 
 
 class TrainingLoop:
@@ -186,8 +164,10 @@ class TrainingLoop:
                 self.__log_first_batch(
                     left_inputs=left_inputs, right_inputs=right_inputs
                 )
-            left_inputs = _normalize(left_inputs)
-            right_inputs = _normalize(right_inputs)
+            left_inputs = left_inputs.to(DEVICE, non_blocking=True)
+            right_inputs = right_inputs.to(DEVICE, non_blocking=True)
+            left_inputs = normalize(left_inputs)
+            right_inputs = normalize(right_inputs)
 
             # Compute loss.
             with torch.autocast(device_type=DEVICE, dtype=torch.float16):
