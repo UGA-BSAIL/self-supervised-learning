@@ -13,10 +13,12 @@ from torch.cuda.amp import GradScaler
 from torch.optim import AdamW, Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torchvision.models import convnext_small
 
 from ..torch_common import normalize
 from .centernet import CenterNet
+from .heatmaps import boxes_from_heatmaps
 from .losses import HeatMapFocalLoss, SparseL1Loss
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -65,6 +67,7 @@ class TrainingLoop:
         optimizer: Optimizer,
         scaler: GradScaler,
         warmup: BaseWarmup,
+        map_metric: MeanAveragePrecision,
         checkpoint_dir: Path = Path("checkpoints"),
     ):
         """
@@ -75,6 +78,8 @@ class TrainingLoop:
             optimizer: The optimizer to use.
             scaler: Gradient scaler to use.
             warmup: Warmup controller to use.
+            map_metric: Metric to use for computing mean average precision.
+                Should take bounding boxes in `[cx,cy,w,h]` format.
             checkpoint_dir: The directory to use for saving intermediate
                 model checkpoints.
 
@@ -85,6 +90,7 @@ class TrainingLoop:
         self.__optimizer = optimizer
         self.__scaler = scaler
         self.__warmup = warmup
+        self.__map_metric = map_metric
         self.__checkpoint_dir = checkpoint_dir
         self.__checkpoint_dir.mkdir(exist_ok=True)
 
@@ -122,6 +128,25 @@ class TrainingLoop:
             }
         )
 
+    def __log_epoch_end(self, prefix: str = "train") -> None:
+        """
+        Logs data at the end of an epoch.
+
+        Args:
+            prefix: The prefix to use for log messages.
+
+        """
+        # Compute metrics.
+        print("Starting compute...")
+        all_metrics = self.__map_metric.compute()
+        print("Compute finished.")
+
+        # Add the proper prefix.
+        all_metrics = {f"{prefix}/{k}": v for k, v in all_metrics.items()}
+        wandb.log({"global_step": self.__global_step, **all_metrics})
+
+        self.__map_metric.reset()
+
     def __save_checkpoint(self) -> None:
         """
         Saves a model checkpoint.
@@ -137,7 +162,8 @@ class TrainingLoop:
         self, images: Tensor, heatmaps: Tensor, boxes: List[Tensor]
     ) -> Tensor:
         """
-        Applies the model and computes the loss value.
+        Applies the model and computes the loss value, logging the
+        loss and metrics.
 
         Args:
             images: The input images.
@@ -157,6 +183,14 @@ class TrainingLoop:
             target_boxes=boxes,
         )
 
+        self.__update_map(
+            pred_heatmaps=pred_heatmaps,
+            pred_sizes=pred_sizes,
+            pred_offsets=pred_offsets,
+            target_boxes=boxes,
+            input_shape=images.shape,
+        )
+
         wandb.log(
             {
                 "global_step": self.__global_step,
@@ -166,6 +200,66 @@ class TrainingLoop:
         )
 
         return heatmap_loss + geometry_loss
+
+    def __update_map(
+        self,
+        *,
+        pred_heatmaps: Tensor,
+        pred_sizes: Tensor,
+        pred_offsets: Tensor,
+        target_boxes: List[Tensor],
+        input_shape: torch.Size,
+    ) -> None:
+        """
+        Updates the mAP of the model.
+
+        Args:
+            pred_heatmaps: The predicted heatmaps from the model.
+            pred_sizes: The predicted sizes from the model.
+            pred_offsets: The predicted offsets from the model.
+            target_boxes: The target bounding boxes. Each list element contains
+                boxes for one example, and should have a shape of
+                `[N, 4]`, where the columns are
+                `[center_x, center_y, width, height, offset_x, offset_y]`
+
+        """
+        # Strip the offsets from the target bounding boxes.
+        target_boxes = [b[:, :4] for b in target_boxes]
+
+        # Convert to bounding boxes.
+        boxes, confidence = boxes_from_heatmaps(
+            heatmaps=pred_heatmaps,
+            sizes=pred_sizes,
+            offsets=pred_offsets,
+            max_boxes=15,
+        )
+
+        input_width_height = torch.as_tensor(
+            input_shape[:-2][::-1], device=DEVICE
+        ).tile(2)
+        boxes = [b * input_width_height for b in boxes]
+        target_boxes = [b * input_width_height for b in target_boxes]
+
+        # Update the metric.
+        predictions = [
+            dict(
+                boxes=b,
+                scores=c,
+                # There is only one class, so the labels are zero.
+                labels=torch.zeros_like(c, dtype=torch.int),
+            )
+            for b, c in zip(boxes, confidence)
+        ]
+        targets = [
+            dict(
+                boxes=b,
+                labels=torch.zeros(
+                    (b.shape[0],), dtype=torch.int, device=b.device
+                ),
+            )
+            for b in target_boxes
+        ]
+        self.__map_metric.update(predictions, targets)
 
     @staticmethod
     def __iter_data_loader(
@@ -247,18 +341,25 @@ class TrainingLoop:
             THe average loss on the testing data.
 
         """
+        # Make sure we're only computing mAP on the validation.
+        self.__map_metric.reset()
+
         total_loss = 0.0
         batch_i = 0
-        for batch_i, (_, images, heatmaps, boxes) in enumerate(
-            self.__iter_data_loader(data_loader)
-        ):
-            # Compute loss.
-            with torch.autocast(device_type=DEVICE, dtype=torch.float16):
-                loss = self.__compute_loss(images, heatmaps, boxes)
+        with torch.no_grad():
+            for batch_i, (_, images, heatmaps, boxes) in enumerate(
+                self.__iter_data_loader(data_loader)
+            ):
+                # Compute loss.
+                with torch.autocast(device_type=DEVICE, dtype=torch.float16):
+                    loss = self.__compute_loss(images, heatmaps, boxes)
 
-                logger.debug("Testing batch {}: loss={}", batch_i, loss.item())
-                total_loss += loss.item()
+                    logger.debug(
+                        "Testing batch {}: loss={}", batch_i, loss.item()
+                    )
+                    total_loss += loss.item()
 
+        self.__log_epoch_end(prefix="test")
         return total_loss / batch_i
 
 
@@ -318,6 +419,7 @@ def train_model(
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=3)
     warmup = LinearWarmup(optimizer, warmup_period=warmup_steps)
     scaler = GradScaler()
+    map_metric = MeanAveragePrecision(box_format="cxcywh")
 
     data_loader_params = dict(
         batch_size=batch_size,
@@ -339,6 +441,7 @@ def train_model(
         heatmap_loss_fn=heatmap_loss_fn,
         geometry_loss_fn=geometry_loss_fn,
         warmup=warmup,
+        map_metric=map_metric,
     )
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)
