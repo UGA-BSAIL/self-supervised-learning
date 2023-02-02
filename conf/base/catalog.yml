@@ -28,3 +28,8 @@ trained_model:
 training_data:
   type: MemoryDataSet
   copy_mode: assign
+
+# Testing dataset.
+testing_data:
+  type: MemoryDataSet
+  copy_mode: assign

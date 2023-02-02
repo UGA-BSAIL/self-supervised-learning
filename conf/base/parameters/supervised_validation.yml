@@ -1,5 +1,7 @@
 # Location of the annotated flower dataset.
 super_dataset_path: "data/05_model_input/flower_dataset/dataset.yaml"
+# Whether to enable cacheing when loading the dataset.
+enable_cache: true
 
 # Number of epochs to train for.
 super_num_epochs: 100

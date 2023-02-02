@@ -2,9 +2,8 @@
 Node definitions for the `supervised_validation` pipeline.
 """
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, Iterable, List, Tuple
 
-import numpy as np
 import torch
 import wandb
 from loguru import logger
@@ -92,6 +91,10 @@ class TrainingLoop:
         # Keeps track of the current global training step.
         self.__global_step = 0
 
+    @property
+    def global_step(self) -> int:
+        return self.__global_step
+
     def __log_first_batch(self, inputs: Tensor) -> None:
         """
         Logs data from the first batch of an epoch.
@@ -164,6 +167,30 @@ class TrainingLoop:
 
         return heatmap_loss + geometry_loss
 
+    @staticmethod
+    def __iter_data_loader(
+        data_loader: data.DataLoader,
+    ) -> Iterable[Tuple[Tensor, Tensor, Tensor, List[Tensor]]]:
+        """
+        Iterates through the items in the `DataLoader`, and pre-processes them
+        appropriately.
+
+        Args:
+            data_loader: The `DataLoader` to iterate.
+
+        Yields:
+            The raw images, pre-processed images, pre-processed heatmaps,
+            and pre-processed bounding boxes.
+
+        """
+        for raw_images, heatmaps, boxes in data_loader:
+            images = raw_images.to(DEVICE, non_blocking=True)
+            heatmaps = heatmaps.to(DEVICE, non_blocking=True)
+            boxes = [b.to(DEVICE, non_blocking=True) for b in boxes]
+            images = normalize(images)
+
+            yield raw_images, images, heatmaps, boxes
+
     def train_epoch(self, data_loader: data.DataLoader) -> float:
         """
         Trains the model for a single epoch on some data.
@@ -175,13 +202,11 @@ class TrainingLoop:
             The average loss for this epoch.
 
         """
-        losses = []
-        for batch_i, (raw_images, heatmaps, boxes) in enumerate(data_loader):
-            images = raw_images.to(DEVICE, non_blocking=True)
-            heatmaps = heatmaps.to(DEVICE, non_blocking=True)
-            boxes = [b.to(DEVICE, non_blocking=True) for b in boxes]
-            images = normalize(images)
-
+        total_loss = 0.0
+        batch_i = 0
+        for batch_i, (raw_images, images, heatmaps, boxes) in enumerate(
+            self.__iter_data_loader(data_loader)
+        ):
             # Compute loss.
             with torch.autocast(device_type=DEVICE, dtype=torch.float16):
                 loss = self.__compute_loss(images, heatmaps, boxes)
@@ -206,10 +231,35 @@ class TrainingLoop:
             self.__global_step += 1
             with self.__warmup.dampening():
                 pass
-            losses.append(loss.item())
+            total_loss += loss.item()
 
         self.__save_checkpoint()
-        return np.mean(losses)
+        return total_loss / batch_i
+
+    def test_model(self, data_loader: data.DataLoader) -> float:
+        """
+        Tests the model.
+
+        Args:
+            data_loader: The data to test on.
+
+        Returns:
+            THe average loss on the testing data.
+
+        """
+        total_loss = 0.0
+        batch_i = 0
+        for batch_i, (_, images, heatmaps, boxes) in enumerate(
+            self.__iter_data_loader(data_loader)
+        ):
+            # Compute loss.
+            with torch.autocast(device_type=DEVICE, dtype=torch.float16):
+                loss = self.__compute_loss(images, heatmaps, boxes)
+
+                logger.debug("Testing batch {}: loss={}", batch_i, loss.item())
+                total_loss += loss.item()
+
+        return total_loss / batch_i
 
 
 def build_model() -> CenterNet:
@@ -228,6 +278,7 @@ def train_model(
     model: nn.Module,
     *,
     training_data: data.Dataset,
+    testing_data: data.Dataset,
     num_epochs: int,
     batch_size: int,
     learning_rate: float = 0.001,
@@ -243,6 +294,7 @@ def train_model(
     Args:
         model: The model to train.
         training_data: The training dataset.
+        testing_data: The testing dataset.
         num_epochs: The number of epochs to train for.
         batch_size: The batch size to use for training.
         learning_rate: The learning rate to use.
@@ -267,14 +319,18 @@ def train_model(
     warmup = LinearWarmup(optimizer, warmup_period=warmup_steps)
     scaler = GradScaler()
 
-    data_loader = data.DataLoader(
-        training_data,
+    data_loader_params = dict(
         batch_size=batch_size,
         collate_fn=_collate_fn,
         pin_memory=True,
         num_workers=8,
-        shuffle=True,
     )
+    training_data_loader = data.DataLoader(
+        training_data,
+        shuffle=True,
+        **data_loader_params,
+    )
+    testing_data_loader = data.DataLoader(testing_data, **data_loader_params)
 
     training_loop = TrainingLoop(
         model=model,
@@ -286,10 +342,18 @@ def train_model(
     )
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)
-        average_loss = training_loop.train_epoch(data_loader)
+        training_loss = training_loop.train_epoch(training_data_loader)
+        testing_loss = training_loop.test_model(testing_data_loader)
 
-        logger.info("Epoch {} loss: {}", i, average_loss)
+        wandb.log(
+            {
+                "global_step": training_loop.global_step,
+                "train/epoch_loss": training_loss,
+                "test/epoch_loss": testing_loss,
+            }
+        )
+
         with warmup.dampening():
-            scheduler.step(average_loss)
+            scheduler.step(testing_loss)
 
     return model

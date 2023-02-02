@@ -3,14 +3,29 @@ Pipeline definition for supervised validation.
 """
 
 
+from functools import partial
+
 from kedro.pipeline import Pipeline, node, pipeline
 
 from ..common_nodes import init_wandb
-from .dataset_io import get_dataset
+from .dataset_io import Split, get_dataset
 from .nodes import build_model, train_model
 
 
 def create_pipeline(**_) -> Pipeline:
+    get_training_dataset = partial(get_dataset, split=Split.TRAINING)
+    get_testing_dataset = partial(get_dataset, split=Split.TESTING)
+
+    # Common parameters when loading datasets.
+    dataset_params = dict(
+        dataset="params:super_dataset_path",
+        image_size="params:super_input_size",
+        heatmap_size="params:super_heatmap_size",
+        batch_size="params:batch_size",
+        hyperparams="valid_hyperparams",
+        cache="params:enable_cache",
+    )
+
     return pipeline(
         [
             # Initialize WandB.
@@ -33,15 +48,14 @@ def create_pipeline(**_) -> Pipeline:
             ),
             # Load the datasets.
             node(
-                get_dataset,
-                dict(
-                    dataset="params:super_dataset_path",
-                    image_size="params:super_input_size",
-                    heatmap_size="params:super_heatmap_size",
-                    batch_size="params:batch_size",
-                    hyperparams="valid_hyperparams",
-                ),
+                get_training_dataset,
+                dataset_params,
                 "training_data",
+            ),
+            node(
+                get_testing_dataset,
+                dataset_params,
+                "testing_data",
             ),
             # Train the model.
             node(build_model, None, "initial_model"),
@@ -50,6 +64,7 @@ def create_pipeline(**_) -> Pipeline:
                 dict(
                     model="initial_model",
                     training_data="training_data",
+                    testing_data="testing_data",
                     num_epochs="params:super_num_epochs",
                     batch_size="params:super_batch_size",
                     learning_rate="params:super_learning_rate",
