@@ -14,6 +14,11 @@ mars_dataset_meta:
   filepath: data/05_model_input/mars_dataset_meta.feather
   versioned: True
 
+# Encoder pre-trained on ImageNet.
+imagenet_encoder:
+  type: MemoryDataSet
+  copy_mode: assign
+
 # Initial, untrained model
 initial_model:
   type: MemoryDataSet

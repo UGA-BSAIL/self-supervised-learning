@@ -9,7 +9,7 @@ from kedro.pipeline import Pipeline, node, pipeline
 
 from ..common_nodes import init_wandb
 from .dataset_io import Split, get_dataset
-from .nodes import build_model, train_model
+from .nodes import build_model, get_pretrained_encoder, train_model
 
 
 def create_pipeline(**_) -> Pipeline:
@@ -58,7 +58,14 @@ def create_pipeline(**_) -> Pipeline:
                 "testing_data",
             ),
             # Train the model.
-            node(build_model, None, "initial_model"),
+            node(get_pretrained_encoder, None, "imagenet_encoder"),
+            node(
+                build_model,
+                dict(
+                    encoder="imagenet_encoder",
+                ),
+                "initial_model",
+            ),
             node(
                 train_model,
                 dict(
