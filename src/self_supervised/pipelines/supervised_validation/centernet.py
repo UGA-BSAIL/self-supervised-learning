@@ -203,7 +203,6 @@ class CenterNet(nn.Module):
         self.offsets = PredictionHead(output_channels=2)
 
         self.heatmap_act = nn.Sigmoid()
-        self.ensure_positive = nn.ReLU()
 
     def forward(self, inputs: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         """
@@ -222,8 +221,7 @@ class CenterNet(nn.Module):
         sizes = self.sizes(features)
         offsets = self.offsets(features)
 
-        # Heatmaps and sizes should never be <0.
+        # Heatmaps should be a pixel-wise probability.
         heatmaps = self.heatmap_act(heatmaps)
-        sizes = self.ensure_positive(sizes)
 
         return heatmaps, sizes, offsets

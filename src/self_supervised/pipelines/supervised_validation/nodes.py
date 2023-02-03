@@ -137,9 +137,7 @@ class TrainingLoop:
 
         """
         # Compute metrics.
-        print("Starting compute...")
         all_metrics = self.__map_metric.compute()
-        print("Compute finished.")
 
         # Add the proper prefix.
         all_metrics = {f"{prefix}/{k}": v for k, v in all_metrics.items()}
