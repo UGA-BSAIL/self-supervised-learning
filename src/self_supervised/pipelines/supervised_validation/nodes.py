@@ -404,9 +404,9 @@ class TrainingLoop:
         )
         if log_boxes:
             self.__log_boxes(
-                images=images,
-                pred_boxes=boxes,
-                pred_confidence=confidence,
+                images=images[:16],
+                pred_boxes=boxes[:16],
+                pred_confidence=confidence[:16],
                 prefix=prefix,
             )
 

@@ -14,7 +14,9 @@ from .nodes import build_model, get_pretrained_encoder, train_model
 
 def create_pipeline(**_) -> Pipeline:
     get_training_dataset = partial(get_dataset, split=Split.TRAINING)
-    get_testing_dataset = partial(get_dataset, split=Split.TESTING)
+    get_testing_dataset = partial(
+        get_dataset, split=Split.TESTING, augment=False
+    )
 
     # Common parameters when loading datasets.
     dataset_params = dict(

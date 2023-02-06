@@ -15,9 +15,9 @@ super_focal_alpha: 2.0
 # Beta parameter for heatmap focal loss.
 super_focal_beta: 4.0
 # Weight for size loss.
-super_size_loss_weight: 0.1
+super_size_loss_weight: 1.0
 # Weight for offset loss.
-super_offset_loss_weight: 0.1
+super_offset_loss_weight: 1.0
 
 # Square size of the input images.
 super_input_size: 512

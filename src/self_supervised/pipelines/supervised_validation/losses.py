@@ -90,7 +90,7 @@ def sparse_l1_loss(
             should be provided.
         target_points: The ground-truth object center point locations.
             Should have the same shape as `targets`. The two columns should
-            be the y and x coordinates.
+            be the x and y coordinates.
 
     Returns:
         The L1 loss at the target points.
@@ -104,7 +104,7 @@ def sparse_l1_loss(
 
     # Compute the indices in the dense predictions that we're interested in.
     points_index = target_points * torch.as_tensor(
-        predictions.shape[2:], device=target_points.device
+        predictions.shape[2:][::-1], device=target_points.device
     )
     points_index = points_index.to(torch.long)
 
