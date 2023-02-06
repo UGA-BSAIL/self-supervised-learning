@@ -31,7 +31,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                 ),
                 "training_data",
             ),
-            node(build_model, None, "initial_model"),
+            node(build_model, "yolov5_s_description", "initial_model"),
             node(
                 train_model,
                 dict(

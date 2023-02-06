@@ -4,7 +4,7 @@ Nodes for the `train_simclr` pipeline.
 
 
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -23,7 +23,7 @@ from torchvision.transforms.functional import normalize
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
-from .simclr_model import ConvNeXtSmallEncoder, SimClrModel
+from .simclr_model import SimClrModel, YoloEncoder
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using {} device.", DEVICE)
@@ -221,15 +221,19 @@ class TrainingLoop:
         return np.mean(losses)
 
 
-def build_model() -> nn.Module:
+def build_model(yolo_description: Dict[str, Any]) -> nn.Module:
     """
     Builds the complete SimCLR model.
+
+    Args:
+        yolo_description: The description of the YOLO model to use for the
+            backbone.
 
     Returns:
         The model that it built.
 
     """
-    encoder = ConvNeXtSmallEncoder()
+    encoder = YoloEncoder(yolo_description)
     return SimClrModel(encoder=encoder).to(DEVICE)
 
 

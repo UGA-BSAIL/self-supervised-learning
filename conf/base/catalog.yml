@@ -9,6 +9,11 @@ mars_dataset_meta:
   filepath: data/05_model_input/mars_dataset_meta.feather
   versioned: True
 
+# Description of the YOLOv5-S model.
+yolov5_s_description:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/yolov5_s.yml
+
 # Initial, untrained model
 initial_model:
   type: MemoryDataSet

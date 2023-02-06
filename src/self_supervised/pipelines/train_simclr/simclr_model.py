@@ -3,11 +3,11 @@ Implements the SimCLR-specific portions of the model.
 """
 
 
-from torch import nn
-from torch import Tensor
-from typing import Any
+from typing import Any, Dict, Tuple
+
+from torch import Tensor, nn
 from torchvision.models import convnext_small, efficientnet_v2_s
-from typing import Tuple
+from yolov5.models.yolo import DetectionModel
 
 
 class ProjectionHead(nn.Module):
@@ -137,4 +137,32 @@ class EfficientNetSmallEncoder(nn.Module):
 
     def forward(self, inputs: Tensor) -> Tensor:
         features = self.efficient_net.features(inputs)
+        return self.projection(features)
+
+
+class YoloEncoder(nn.Module):
+    """
+    Encoder module that uses the YOLOv5 backbone + pyramid.
+    """
+
+    def __init__(
+        self, model_description: Dict[str, Any], num_features: int = 2048
+    ):
+        """
+        Args:
+            model_description: The description of the YOLO model we are basing
+                this on, as a dictionary.
+            num_features: The number of output features that we want.
+        """
+        super().__init__()
+
+        # The last layer is going to be the head, so get rid of that.
+        model_description["head"] = model_description["head"][:-1]
+        self.yolo = DetectionModel(model_description)
+        # Internal projection head used to get the right number of output
+        # features for the representation.
+        self.projection = nn.Conv2d(512, num_features, (1, 1), padding="same")
+
+    def forward(self, inputs: Tensor) -> Tensor:
+        features = self.yolo(inputs)
         return self.projection(features)

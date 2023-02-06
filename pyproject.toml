@@ -24,6 +24,7 @@ torchvision = "0.14"
 methodtools = "^0.4.5"
 wandb = "^0.13.9"
 torchmetrics = "^0.11.0"
+yolov5 = "^7.0.8"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
