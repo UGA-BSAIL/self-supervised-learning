@@ -58,4 +58,4 @@ poetry run python -m yolov5.train --cfg data/01_raw/yolov5_l.yml --epochs 100 \
   --batch-size 128 --imgsz 640 --cache ram --workers 8 \
   --project self_supervised --name yolo_val --entity djpetti \
   --weights="" \
-  --data data/05_model_input/flower_dataset/dataset.yaml
+  --data data/05_model_input/flower_dataset/dataset_half.yaml
