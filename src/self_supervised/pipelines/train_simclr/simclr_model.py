@@ -159,9 +159,10 @@ class YoloEncoder(nn.Module):
         # The last layer is going to be the head, so get rid of that.
         model_description["head"] = model_description["head"][:-1]
         self.yolo = DetectionModel(model_description)
+
         # Internal projection head used to get the right number of output
         # features for the representation.
-        self.projection = nn.Conv2d(512, num_features, (1, 1), padding="same")
+        self.projection = nn.LazyConv2d(num_features, (1, 1), padding="same")
 
     def forward(self, inputs: Tensor) -> Tensor:
         features = self.yolo(inputs)

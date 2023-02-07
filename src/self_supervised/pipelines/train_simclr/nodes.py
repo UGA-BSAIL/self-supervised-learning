@@ -124,11 +124,13 @@ class TrainingLoop:
             right_inputs: The right side inputs.
 
         """
+        # Log gradients
+        wandb.watch(self.__model, log_freq=500)
 
         def _to_wandb_image(image: Tensor) -> wandb.Image:
             # WandB doesn't seem to like initializing images from pure
             # tensors, so we have to do some fancy stuff.
-            return wandb.Image(image.permute((1, 2, 0)).numpy())
+            return wandb.Image(image.permute((1, 2, 0)).cpu().numpy())
 
         # Take at most 25 images from each batch.
         wandb.log(
@@ -182,10 +184,6 @@ class TrainingLoop:
         """
         losses = []
         for batch_i, (left_inputs, right_inputs) in enumerate(data_loader):
-            if batch_i == 0:
-                self.__log_first_batch(
-                    left_inputs=left_inputs, right_inputs=right_inputs
-                )
             left_inputs = _normalize(left_inputs)
             right_inputs = _normalize(right_inputs)
 
@@ -193,6 +191,11 @@ class TrainingLoop:
             with torch.autocast(device_type=DEVICE, dtype=torch.float16):
                 left_pred, right_pred = self.__model(left_inputs, right_inputs)
                 loss = self.__loss_fn(left_pred, right_pred)
+
+            if batch_i == 0:
+                self.__log_first_batch(
+                    left_inputs=left_inputs, right_inputs=right_inputs
+                )
 
             # Backward pass.
             self.__optimizer.zero_grad()
@@ -303,9 +306,6 @@ def train_model(
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE)
-
-    # Log gradients
-    wandb.watch(model, log_freq=500)
 
     data_loader = data.DataLoader(
         training_data,
