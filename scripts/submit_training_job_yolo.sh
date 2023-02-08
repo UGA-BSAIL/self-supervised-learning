@@ -12,7 +12,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:a100:1
-#SBATCH --time=24:00:00
+#SBATCH --time=1:00:00
 #SBATCH --mem=40gb
 #SBATCH --mail-user=djpetti@gmail.com
 #SBATCH --mail-type=END,FAIL
@@ -57,5 +57,5 @@ source scripts/load_common.sh
 poetry run python -m yolov5.train --cfg data/01_raw/yolov5_l.yml --epochs 100 \
   --batch-size 128 --imgsz 640 --cache ram --workers 8 \
   --project self_supervised --name yolo_val --entity djpetti \
-  --weights simclr_yolov5l.pt \
-  --data data/05_model_input/flower_dataset/dataset_quarter.yaml
+  --weights "" \
+  --data data/05_model_input/flower_dataset/dataset_eighth.yaml
