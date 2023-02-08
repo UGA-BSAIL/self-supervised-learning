@@ -3,11 +3,12 @@ Loads/stores Pytorch models.
 """
 
 
+from pathlib import Path, PurePosixPath
+from typing import Any, Dict, Optional
+
 import torch
-from kedro.io import AbstractVersionedDataSet
-from kedro.io import Version
-from pathlib import PurePosixPath, Path
-from typing import Optional, Dict, Any
+from kedro.io import AbstractVersionedDataSet, Version
+from loguru import logger
 from torch import nn
 
 
@@ -17,7 +18,9 @@ class PytorchModelDataSet(AbstractVersionedDataSet[nn.Module, nn.Module]):
     """
 
     def __init__(
-        self, filepath: PurePosixPath, version: Optional[Version] = None
+        self,
+        filepath: PurePosixPath,
+        version: Optional[Version] = None,
     ):
         """
         Args:
@@ -33,7 +36,16 @@ class PytorchModelDataSet(AbstractVersionedDataSet[nn.Module, nn.Module]):
             The loaded model.
 
         """
-        return torch.load(self._get_load_path().as_posix())
+        load_args = {}
+        if not torch.cuda.is_available():
+            # In this case, we probably need to map to the CPU.
+            logger.warning(
+                "CUDA not available, automatically mapping "
+                "variables to the CPU."
+            )
+            load_args["map_location"] = torch.device("cpu")
+
+        return torch.load(self._get_load_path().as_posix(), **load_args)
 
     def _save(self, model: nn.Module) -> None:
         """
