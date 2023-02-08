@@ -207,14 +207,15 @@ class TrainingLoop:
             batch_acc = self.__accuracy(left_pred, right_pred)
 
             logger.debug("batch {}: loss={}", batch_i, loss.item())
-            wandb.log(
-                {
-                    "global_step": self.__global_step,
-                    "train/loss": loss.item(),
-                    "train/acc_batch": batch_acc.item(),
-                    "lr": self.__optimizer.param_groups[0]["lr"],
-                }
-            )
+            if self.__global_step % 100 == 0:
+                wandb.log(
+                    {
+                        "global_step": self.__global_step,
+                        "train/loss": loss.item(),
+                        "train/acc_batch": batch_acc.item(),
+                        "lr": self.__optimizer.param_groups[0]["lr"],
+                    }
+                )
 
             self.__global_step += 1
             losses.append(loss.item())
