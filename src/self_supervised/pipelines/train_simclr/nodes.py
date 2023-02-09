@@ -259,6 +259,7 @@ def load_dataset(
 
     augmentation = Compose(
         [
+            RandomCrop(350),
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
@@ -269,7 +270,6 @@ def load_dataset(
     single_frames = SingleFrameDataset(
         mars_metadata=metadata,
         image_folder=image_folder,
-        augmentation=RandomCrop(256),
     )
     paired_frames = PairedAugmentedDataset(
         image_dataset=single_frames, augmentation=augmentation
