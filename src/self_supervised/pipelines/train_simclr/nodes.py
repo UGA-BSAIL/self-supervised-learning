@@ -17,7 +17,13 @@ from torch.optim import AdamW, Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
 from torchmetrics import Metric
-from torchvision.transforms import Compose, Lambda, RandAugment, RandomCrop
+from torchvision.transforms import (
+    Compose,
+    InterpolationMode,
+    Lambda,
+    RandAugment,
+    RandomResizedCrop,
+)
 from torchvision.transforms.functional import normalize
 
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
@@ -259,7 +265,7 @@ def load_dataset(
 
     augmentation = Compose(
         [
-            RandomCrop(350),
+            RandomResizedCrop(350, interpolation=InterpolationMode.NEAREST),
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
