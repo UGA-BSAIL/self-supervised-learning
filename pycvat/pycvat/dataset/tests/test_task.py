@@ -188,7 +188,9 @@ class TestTask:
             assert got_image.tobytes() == fake_image
 
     def test_get_image_size(
-        self, config: ConfigForTests, faker: Faker,
+        self,
+        config: ConfigForTests,
+        faker: Faker,
     ) -> None:
         """
         Tests that `get_image_size` works.
@@ -290,7 +292,7 @@ class TestTask:
         mock_task_data.segments = [mock_segment_1, mock_segment_2]
 
         # Act and assert.
-        assert config.task.num_frames == 1800
+        assert config.task.num_anchor_frames == 1800
 
     def test_find_label(self, config: ConfigForTests, faker: Faker) -> None:
         """
@@ -340,7 +342,9 @@ class TestTask:
             config.task.find_label("invalid")
 
     def test_find_image_frame_num(
-        self, config: ConfigForTests, faker: Faker,
+        self,
+        config: ConfigForTests,
+        faker: Faker,
     ) -> None:
         """
         Tests that `find_image_frame_num` works.

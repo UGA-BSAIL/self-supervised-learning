@@ -4,11 +4,14 @@ task.
 """
 
 
-import pandas as pd
-from typing import Tuple
-from ..schemas import MarsMetadata
-from loguru import logger
 import random
+from functools import cached_property
+from typing import Tuple
+
+import pandas as pd
+from loguru import logger
+
+from ..schemas import MarsMetadata
 
 
 class FrameSelector:
@@ -126,14 +129,65 @@ class FrameSelector:
         else:
             return anchor_metadata, positive_metadata, negative_metadata
 
-    def select_example(
-        self, multi_camera: bool = True
+    @cached_property
+    def __possible_anchor_frames(self) -> pd.DataFrame:
+        """
+        Returns:
+            A subset of the metadata frames that can reasonably be used
+            as anchor frames.
+
+        """
+        possible_anchor_frames = []
+
+        clips = self.__metadata.index.to_frame()[
+            MarsMetadata.CLIP.value
+        ].unique()
+        for clip in clips:
+            clip_metadata = self.__metadata.loc[clip]
+
+            # Find the frames that we can use as anchors while still having
+            # enough space to select a negative example.
+            _, negative_example_max = self.__negative_time_range
+            clip_timestamps = clip_metadata[MarsMetadata.TIMESTAMP.value]
+            max_anchor_timestamp = clip_timestamps.max() - negative_example_max
+            possible_anchor_frames.append(
+                clip_metadata[clip_timestamps <= max_anchor_timestamp]
+            )
+
+        return pd.concat(possible_anchor_frames)
+
+    @cached_property
+    def num_anchor_frames(self) -> int:
+        """
+        Returns:
+            The total number of unique anchor frames in this dataset. Frames
+            visible from multiple cameras are counted once.
+
+        """
+        # Get data from a single camera.
+        camera = list(self.__by_camera.groups.keys())[0]
+        camera_data = self.__by_camera.get_group(camera)
+
+        return len(camera_data)
+
+    @property
+    def metadata(self) -> pd.DataFrame:
+        """
+        Returns:
+            The underlying metadata.
+
+        """
+        return self.__metadata.copy()
+
+    def get_example(
+        self, *, anchor_index: int, multi_camera: bool = True
     ) -> Tuple[str, str, str]:
         """
-        Selects a new training example.
+        Selects an example using a specific anchor frame.
 
         Args:
-            multi_camera: Whether to use different cameras within the same
+            anchor_index: The index of the anchor frame to use.
+            multi_camera: Whether to use difference cameras within the same
                 triplet. If false, all three examples will use the same camera.
 
         Returns:
@@ -148,8 +202,8 @@ class FrameSelector:
             negative_metadata,
         ) = self.__get_camera_metadata(multi_camera=multi_camera)
 
-        # Select the anchor clip randomly.
-        anchor_clip, _ = self.__random_row(anchor_metadata).name
+        # Select the anchor clip first.
+        anchor_clip, _ = anchor_metadata.iloc[anchor_index].name
         clip_metadata = anchor_metadata.loc[anchor_clip]
 
         # Select the anchor frame, making sure we leave enough space for
@@ -179,3 +233,23 @@ class FrameSelector:
 
         id_key = MarsMetadata.FILE_ID.value
         return anchor_row[id_key], positive_row[id_key], negative_row[id_key]
+
+    def select_random_example(
+        self, multi_camera: bool = True
+    ) -> Tuple[str, str, str]:
+        """
+        Selects a new training example.
+
+        Args:
+            multi_camera: Whether to use different cameras within the same
+                triplet. If false, all three examples will use the same camera.
+
+        Returns:
+            The file IDs of the anchor frame, positive pair frame, and negative
+            pair frame that it selected.
+
+        """
+        return self.get_example(
+            anchor_index=random.randint(0, self.num_anchor_frames),
+            multi_camera=multi_camera,
+        )
