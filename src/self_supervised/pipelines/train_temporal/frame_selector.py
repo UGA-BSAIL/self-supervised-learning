@@ -10,6 +10,7 @@ from typing import Tuple
 
 import pandas as pd
 from loguru import logger
+from pandas.core.groupby.generic import DataFrameGroupBy
 
 from ..schemas import MarsMetadata
 
@@ -47,8 +48,6 @@ class FrameSelector:
             ],
             inplace=True,
         )
-        # Groups the metadata by camera.
-        self.__by_camera = self.__metadata.groupby(MarsMetadata.CAMERA.value)
 
     def __filter_short_clips(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """
@@ -98,7 +97,7 @@ class FrameSelector:
             The random row.
 
         """
-        row_index = random.randint(0, len(frame) - 1)
+        row_index = random.randrange(0, len(frame))
         return frame.iloc[row_index]
 
     def __get_camera_metadata(
@@ -117,17 +116,22 @@ class FrameSelector:
             examples.
 
         """
-        # Choose the cameras randomly.
-        cameras = random.choices(list(self.__by_camera.groups.keys()), k=3)
-        anchor_metadata, positive_metadata, negative_metadata = [
-            self.__by_camera.get_group(c) for c in cameras
+        if multi_camera:
+            # Choose the cameras randomly.
+            cameras = random.choices(list(self.__by_camera.groups.keys()), k=3)
+        else:
+            # Use the same camera for all.
+            cameras = (
+                random.choices(list(self.__by_camera.groups.keys()), k=1) * 3
+            )
+
+        # Draw anchor metadata from the set of possible anchor frames.
+        anchor_metadata = self.__anchors_by_camera.get_group(cameras[0])
+        positive_metadata, negative_metadata = [
+            self.__by_camera.get_group(c) for c in cameras[1:]
         ]
 
-        if not multi_camera:
-            # Use the same camera for all.
-            return anchor_metadata, anchor_metadata, anchor_metadata
-        else:
-            return anchor_metadata, positive_metadata, negative_metadata
+        return anchor_metadata, positive_metadata, negative_metadata
 
     @cached_property
     def __possible_anchor_frames(self) -> pd.DataFrame:
@@ -143,7 +147,7 @@ class FrameSelector:
             MarsMetadata.CLIP.value
         ].unique()
         for clip in clips:
-            clip_metadata = self.__metadata.loc[clip]
+            clip_metadata = self.__metadata.xs(clip, drop_level=False)
 
             # Find the frames that we can use as anchors while still having
             # enough space to select a negative example.
@@ -151,10 +155,28 @@ class FrameSelector:
             clip_timestamps = clip_metadata[MarsMetadata.TIMESTAMP.value]
             max_anchor_timestamp = clip_timestamps.max() - negative_example_max
             possible_anchor_frames.append(
-                clip_metadata[clip_timestamps <= max_anchor_timestamp]
+                clip_metadata[clip_timestamps < max_anchor_timestamp]
             )
 
         return pd.concat(possible_anchor_frames)
+
+    @cached_property
+    def __by_camera(self) -> DataFrameGroupBy:
+        """
+        Returns:
+            The metadata grouped by camera.
+
+        """
+        return self.__metadata.groupby(MarsMetadata.CAMERA.value)
+
+    @cached_property
+    def __anchors_by_camera(self) -> DataFrameGroupBy:
+        """
+        Returns:
+            The possible anchor frames grouped by camera.
+
+        """
+        return self.__possible_anchor_frames.groupby(MarsMetadata.CAMERA.value)
 
     @cached_property
     def num_anchor_frames(self) -> int:
@@ -165,8 +187,8 @@ class FrameSelector:
 
         """
         # Get data from a single camera.
-        camera = list(self.__by_camera.groups.keys())[0]
-        camera_data = self.__by_camera.get_group(camera)
+        camera = list(self.__anchors_by_camera.groups.keys())[0]
+        camera_data = self.__anchors_by_camera.get_group(camera)
 
         return len(camera_data)
 
@@ -202,20 +224,13 @@ class FrameSelector:
             negative_metadata,
         ) = self.__get_camera_metadata(multi_camera=multi_camera)
 
-        # Select the anchor clip first.
-        anchor_clip, _ = anchor_metadata.iloc[anchor_index].name
-        clip_metadata = anchor_metadata.loc[anchor_clip]
-
-        # Select the anchor frame, making sure we leave enough space for
-        # positive/negative example generation.
-        _, negative_example_max = self.__negative_time_range
-        clip_timestamps = clip_metadata[MarsMetadata.TIMESTAMP.value]
-        max_anchor_timestamp = clip_timestamps.max() - negative_example_max
-        possible_anchor_frames = clip_metadata[
-            clip_timestamps <= max_anchor_timestamp
-        ]
-        anchor_row = self.__random_row(possible_anchor_frames)
+        # Select the anchor frame.
+        anchor_row = anchor_metadata.iloc[anchor_index]
+        anchor_clip, _ = anchor_row.name
         anchor_timestamp = anchor_row[MarsMetadata.TIMESTAMP.value]
+
+        clip_metadata = positive_metadata.loc[anchor_clip]
+        clip_timestamps = clip_metadata[MarsMetadata.TIMESTAMP.value]
 
         # Choose the positive and negative pairs from within the same clip.
         anchor_offsets = clip_timestamps - anchor_timestamp

@@ -25,8 +25,14 @@ set -e
 OUTPUT_BASE_DIR="/blue/cli2/$(whoami)/job_scratch/"
 # Directory where our data and venv are located.
 LARGE_FILES_DIR="/blue/cli2/$(whoami)/ssl/"
+# Local copy of the dataset.
+LOCAL_DATA_DIR="${SLURM_TMPDIR}/data/"
 
 function prepare_environment() {
+  # Copy the entire dataset to local scratch.
+  echo "Copying dataset..."
+  rsync -a "${LARGE_FILES_DIR}/data/"* "${LOCAL_DATA_DIR}"
+
   # Create the working directory for this job.
   job_dir="${OUTPUT_BASE_DIR}/job_${SLURM_JOB_ID}"
   mkdir "${job_dir}"
@@ -37,7 +43,7 @@ function prepare_environment() {
 
   # Link to the input data directory and venv.
   rm -rf "${job_dir}/data"
-  ln -s "${LARGE_FILES_DIR}/data" "${job_dir}/data"
+  ln -s "${LOCAL_DATA_DIR}" "${job_dir}/data"
   ln -s "${LARGE_FILES_DIR}/.venv" "${job_dir}/.venv"
 
   # Create output directories.
@@ -54,4 +60,4 @@ prepare_environment
 source scripts/load_common.sh
 
 # Run the training.
-poetry run kedro run --pipeline=train_simclr --env=a100 "$@"
+poetry run kedro run --pipeline=train_temporal --env=a100 "$@"

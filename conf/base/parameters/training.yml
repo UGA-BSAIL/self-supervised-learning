@@ -1,3 +1,6 @@
+# Entity to use for WandB. Should be your username or team name.
+wandb_entity: djpetti
+
 # Tensorboard parameters.
 # Log directory.
 tensorboard_output_dir: ${log_dir}/tensorboard

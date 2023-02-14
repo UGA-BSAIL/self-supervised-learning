@@ -26,10 +26,10 @@ from torchvision.transforms import (
 )
 from torchvision.transforms.functional import normalize
 
+from ..representation_model import RepresentationModel, YoloEncoder
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
-from .simclr_model import SimClrModel, YoloEncoder
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using {} device.", DEVICE)
@@ -244,7 +244,7 @@ def build_model(yolo_description: Dict[str, Any]) -> nn.Module:
 
     """
     encoder = YoloEncoder(yolo_description)
-    return SimClrModel(encoder=encoder).to(DEVICE)
+    return RepresentationModel(encoder=encoder).to(DEVICE)
 
 
 def load_dataset(
