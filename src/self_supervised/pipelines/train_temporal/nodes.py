@@ -286,14 +286,14 @@ def load_dataset(
 
     augmentation = Compose(
         [
-            CenterCrop(512)
+            CenterCrop(512),
             # RandomResizedCrop(
             #     512, scale=(0.5, 1.0), interpolation=InterpolationMode.NEAREST
             # ),
-            # # Apparently, crops sometimes produce non-contiguous views,
-            # # and RandAugment doesn't like that.
-            # Lambda(lambda t: t.contiguous()),
-            # RandAugment(),
+            # Apparently, crops sometimes produce non-contiguous views,
+            # and RandAugment doesn't like that.
+            Lambda(lambda t: t.contiguous()),
+            RandAugment(magnitude=6, interpolation=InterpolationMode.NEAREST),
         ]
     )
 
@@ -342,7 +342,7 @@ def train_model(
         margin=margin, regularization=regularization
     ).to(DEVICE)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
-    scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
+    scheduler = ReduceLROnPlateau(optimizer, "min", patience=1)
     scaler = GradScaler()
     accuracy = ContrastiveAccuracy().to(DEVICE)
 

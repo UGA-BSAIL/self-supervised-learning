@@ -8,10 +8,10 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from torch import Tensor, linalg
-from torchmetrics.classification import MulticlassAccuracy
+from torchmetrics.classification import BinaryAccuracy
 
 
-class ContrastiveAccuracy(MulticlassAccuracy):
+class ContrastiveAccuracy(BinaryAccuracy):
     """
     Computes the accuracy for a contrastive learning problem where
     we have anchor, positive, and negative examples.
@@ -52,7 +52,7 @@ class ContrastiveAccuracy(MulticlassAccuracy):
 
         # Treat these distances as predictions in a classification problem.
         predictions = torch.cat([positive_distance, negative_distance], 1)
-        predictions = F.softmax(predictions, dim=1)
+        predictions = F.softmax(predictions, dim=1)[:, 1]
         print(predictions)
 
         # We always want to predict the negative sample as being farther away.

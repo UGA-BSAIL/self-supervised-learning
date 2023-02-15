@@ -1,9 +1,9 @@
 """
-Implements the SimCLR-specific portions of the model.
+Common components of models for representation learning.
 """
 
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Iterable, Tuple
 
 from torch import Tensor, nn
 from torchvision.models import convnext_small, efficientnet_v2_s
@@ -37,57 +37,6 @@ class ProjectionHead(nn.Module):
         pooled = pooled.squeeze(2).squeeze(2)
 
         return self.hidden(self.act(self.bn(pooled)))
-
-
-class SimClrModel(nn.Module):
-    """
-    Class that encapsulates the entire SimCLR model.
-    """
-
-    def __init__(
-        self,
-        *,
-        encoder: nn.Module,
-        num_features: int = 2048,
-        num_projected_outputs: int = 256
-    ):
-        """
-        Args:
-            encoder: This is `f()` in the paper. It will be applied to
-                input images and used to generate representations.
-            num_features: The number of features that we expect to be produced
-                by the encoder.
-            num_projected_outputs: Output size of the projection head.
-
-        """
-        super().__init__()
-
-        self.encoder = encoder
-        self.projection = ProjectionHead(
-            num_inputs=num_features, num_outputs=num_projected_outputs
-        )
-
-    def forward(
-        self, left_inputs: Tensor, right_inputs: Tensor
-    ) -> Tuple[Tensor, Tensor]:
-        """
-        Args:
-            left_inputs: The images to apply the model to.
-            right_inputs: The same images, but with different augmentations.
-
-        Returns:
-            The computed and projected encodings for each input.
-
-        """
-        # Get the representations.
-        left_rep = self.encoder(left_inputs)
-        right_rep = self.encoder(right_inputs)
-
-        # Apply the projection.
-        left_projected = self.projection(left_rep)
-        right_projected = self.projection(right_rep)
-
-        return left_projected, right_projected
 
 
 class ConvNeXtSmallEncoder(nn.Module):
@@ -167,3 +116,48 @@ class YoloEncoder(nn.Module):
     def forward(self, inputs: Tensor) -> Tensor:
         features = self.yolo(inputs)
         return self.projection(features)
+
+
+class RepresentationModel(nn.Module):
+    """
+    Class that encapsulates a model for representation learning.
+    """
+
+    def __init__(
+        self,
+        *,
+        encoder: nn.Module,
+        num_features: int = 2048,
+        num_projected_outputs: int = 256
+    ):
+        """
+        Args:
+            encoder: This is `f()` in the paper. It will be applied to
+                input images and used to generate representations.
+            num_features: The number of features that we expect to be produced
+                by the encoder.
+            num_projected_outputs: Output size of the projection head.
+
+        """
+        super().__init__()
+
+        self.encoder = encoder
+        self.projection = ProjectionHead(
+            num_inputs=num_features, num_outputs=num_projected_outputs
+        )
+
+    def forward(self, *images: Iterable[Tensor]) -> Tuple[Tensor, ...]:
+        """
+        Args:
+            *images: The images to apply the model to.
+
+        Returns:
+            The computed and projected encodings for each input.
+
+        """
+        # Get the representations.
+        reps = [self.encoder(i) for i in images]
+        # Apply the projection.
+        projected = [self.projection(r) for r in reps]
+
+        return tuple(projected)
