@@ -18,6 +18,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
 from torchmetrics import Metric
 from torchvision.transforms import (
+    CenterCrop,
     Compose,
     InterpolationMode,
     Lambda,
@@ -285,13 +286,14 @@ def load_dataset(
 
     augmentation = Compose(
         [
-            RandomResizedCrop(
-                512, scale=(0.5, 1.0), interpolation=InterpolationMode.NEAREST
-            ),
-            # Apparently, crops sometimes produce non-contiguous views,
-            # and RandAugment doesn't like that.
-            Lambda(lambda t: t.contiguous()),
-            RandAugment(),
+            CenterCrop(512)
+            # RandomResizedCrop(
+            #     512, scale=(0.5, 1.0), interpolation=InterpolationMode.NEAREST
+            # ),
+            # # Apparently, crops sometimes produce non-contiguous views,
+            # # and RandAugment doesn't like that.
+            # Lambda(lambda t: t.contiguous()),
+            # RandAugment(),
         ]
     )
 

@@ -6,6 +6,7 @@ Custom metrics for temporal order verification.
 from typing import Any
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, linalg
 from torchmetrics.classification import MulticlassAccuracy
 
@@ -51,6 +52,7 @@ class ContrastiveAccuracy(MulticlassAccuracy):
 
         # Treat these distances as predictions in a classification problem.
         predictions = torch.cat([positive_distance, negative_distance], 1)
+        predictions = F.softmax(predictions, dim=1)
         print(predictions)
 
         # We always want to predict the negative sample as being farther away.

@@ -51,6 +51,6 @@ class RegularizedTripletLoss(nn.Module):
         norms = [
             linalg.vector_norm(r, dim=1) for r in (anchor, positive, negative)
         ]
-        total_norm = torch.sum(sum(norms))
+        total_norm = torch.mean(sum(norms))
 
         return triplet_loss + self.regularization * total_norm
