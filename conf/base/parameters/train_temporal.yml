@@ -1,7 +1,7 @@
 # The margin to use for the triplet loss.
 margin: 1.0
 # The regularization factor to use for the loss.
-regularization: 0.1
+regularization: 0.01
 
 # Time range for picking positive frames, in seconds away from the anchor.
 positive_time_range: [0.1, 0.5]
