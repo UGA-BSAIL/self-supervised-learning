@@ -15,11 +15,10 @@ class ProjectionHead(nn.Module):
     The projection head `g()` that gets applied to the representations.
     """
 
-    def __init__(self, *, num_inputs: int, num_outputs: int = 256):
+    def __init__(self, *, num_inputs: int):
         """
         Args:
             num_inputs: The number of input features to the projection.
-            num_outputs: The number of output features from the projection.
 
         """
         super().__init__()
@@ -27,16 +26,12 @@ class ProjectionHead(nn.Module):
         # Global average pooling.
         self.average_pool = nn.AdaptiveAvgPool2d(1)
 
-        self.hidden = nn.Linear(num_inputs, num_outputs)
-        self.bn = nn.BatchNorm1d(num_inputs)
-        self.act = nn.ReLU()
-
     def forward(self, inputs: Tensor) -> Tensor:
         # Perform global average pooling.
         pooled = self.average_pool(inputs)
         pooled = pooled.squeeze(2).squeeze(2)
 
-        return self.hidden(self.act(self.bn(pooled)))
+        return pooled
 
 
 class ConvNeXtSmallEncoder(nn.Module):
@@ -95,7 +90,7 @@ class YoloEncoder(nn.Module):
     """
 
     def __init__(
-        self, model_description: Dict[str, Any], num_features: int = 2048
+        self, model_description: Dict[str, Any], num_features: int = 256
     ):
         """
         Args:
@@ -127,8 +122,7 @@ class RepresentationModel(nn.Module):
         self,
         *,
         encoder: nn.Module,
-        num_features: int = 2048,
-        num_projected_outputs: int = 256
+        num_features: int = 256,
     ):
         """
         Args:
@@ -136,15 +130,12 @@ class RepresentationModel(nn.Module):
                 input images and used to generate representations.
             num_features: The number of features that we expect to be produced
                 by the encoder.
-            num_projected_outputs: Output size of the projection head.
 
         """
         super().__init__()
 
         self.encoder = encoder
-        self.projection = ProjectionHead(
-            num_inputs=num_features, num_outputs=num_projected_outputs
-        )
+        self.projection = ProjectionHead(num_inputs=num_features)
 
     def forward(self, *images: Iterable[Tensor]) -> Tuple[Tensor, ...]:
         """
