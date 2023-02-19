@@ -130,7 +130,7 @@ class TrainingLoop:
 
         """
         # Log gradients
-        wandb.watch(self.__model, log_freq=500)
+        wandb.watch(self.__model, log_freq=1000)
 
         def _to_wandb_image(image: Tensor) -> wandb.Image:
             # WandB doesn't seem to like initializing images from pure

@@ -6,4 +6,4 @@ regularization: 0.01
 # Time range for picking positive frames, in seconds away from the anchor.
 positive_time_range: [0.1, 0.5]
 # Time range for picking negative frames, in seconds away from the anchor.
-negative_time_range: [1.5, 2.5]
+negative_time_range: [1.0, 2.0]
