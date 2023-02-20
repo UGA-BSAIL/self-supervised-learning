@@ -1,9 +1,11 @@
-import tensorflow as tf
+import torch
+from torch import Tensor
+from torchvision.transforms.functional import resize
 
 
 def _colorize_heat_maps(
-    features: tf.Tensor, *, max_color_threshold: float
-) -> tf.Tensor:
+    features: Tensor, *, max_color_threshold: float
+) -> Tensor:
     """
     Converts 2D float matrices to a false-color heat map to make them easier to
     view by humans.
@@ -18,31 +20,28 @@ def _colorize_heat_maps(
         images, ready for display.
 
     """
-    max_color_threshold = tf.constant(max_color_threshold, dtype=tf.float32)
-
     # Low values should show up as blue.
     blue_channel = max_color_threshold - features
     # Medium values should show up as yellow.
-    max_green_point = max_color_threshold / tf.constant(2.0)
+    max_green_point = max_color_threshold / 2.0
     green_channel = (
-        tf.constant(-2.0) * tf.abs(features - max_green_point)
-        + max_color_threshold
+        -2.0 * torch.abs(features - max_green_point) + max_color_threshold
     )
     # High values should show up as red.
-    red_channel = tf.constant(2.0) * (features - max_green_point)
+    red_channel = 2.0 * (features - max_green_point)
 
     # Combine into a color image.
-    color_maps = tf.concat([red_channel, green_channel, blue_channel], axis=3)
+    color_maps = torch.cat([red_channel, green_channel, blue_channel], dim=1)
 
     # Scale from 0-255 so they can be displayed easily.
-    color_maps = color_maps / max_color_threshold * tf.constant(255.0)
-    color_maps = tf.clip_by_value(color_maps, 0.0, 255.0)
-    return tf.cast(color_maps, tf.uint8)
+    color_maps = color_maps / max_color_threshold * 255.0
+    color_maps = torch.clip(color_maps, 0.0, 255.0)
+    return color_maps.to(torch.uint8)
 
 
 def visualize_heat_maps(
-    *, images: tf.Tensor, features: tf.Tensor, max_color_threshold: float = 1.0
-) -> tf.Tensor:
+    *, images: Tensor, features: Tensor, max_color_threshold: float = 1.0
+) -> Tensor:
     """
     Generates a nice visualization for density maps or feature maps that
     overlays the map on the actual image.
@@ -57,20 +56,16 @@ def visualize_heat_maps(
         A 4D tensor containing heatmap visualizations.
 
     """
-    images = tf.convert_to_tensor(images)
-    features = tf.convert_to_tensor(features)
-
     # Get the colorized density maps.
     colored_maps = _colorize_heat_maps(
         features, max_color_threshold=max_color_threshold
     )
 
     # Scale to the same size as the input.
-    input_size = tf.shape(images)[1:3]
-    colored_maps = tf.image.resize(colored_maps, size=input_size)
-    colored_maps = tf.cast(colored_maps, tf.uint8)
+    input_size = images.shape[2:]
+    colored_maps = resize(colored_maps, size=input_size)
+    colored_maps = colored_maps.to(torch.uint8)
 
     # Overlay the density maps on the images.
-    images = tf.cast(images, tf.uint8)
-    divisor = tf.constant(2, dtype=tf.uint8)
-    return images // divisor + colored_maps // divisor
+    combined = images / 2 + colored_maps / 2
+    return combined.to(torch.uint8)
