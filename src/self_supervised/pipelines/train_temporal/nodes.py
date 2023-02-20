@@ -286,14 +286,13 @@ def load_dataset(
 
     augmentation = Compose(
         [
-            CenterCrop(512),
-            # RandomResizedCrop(
-            #     512, scale=(0.5, 1.0), interpolation=InterpolationMode.NEAREST
-            # ),
+            RandomResizedCrop(
+                512, scale=(0.5, 1.0), interpolation=InterpolationMode.NEAREST
+            ),
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=7, interpolation=InterpolationMode.NEAREST),
+            RandAugment(magnitude=9, interpolation=InterpolationMode.NEAREST),
         ]
     )
 
