@@ -4,6 +4,7 @@ Pipeline for generating a dataset of MARS images.
 
 
 from kedro.pipeline import Pipeline, node, pipeline
+
 from .nodes import build_dataset
 
 
@@ -18,6 +19,7 @@ def create_pipeline(**_) -> Pipeline:
                     sync_tolerance="params:sync_tolerance",
                     max_timestamp_gap="params:max_timestamp_gap",
                     motion_threshold="params:motion_threshold",
+                    green_threshold="params:green_threshold",
                 ),
                 "mars_dataset_meta",
             )

@@ -3,18 +3,19 @@ Nodes for the `prepare_mars_dataset` pipeline.
 """
 
 
-from typing import Dict, Any, Iterable, List, Tuple
 from pathlib import Path
+from typing import Any, Dict, Iterable, List, Tuple
 
 import cv2
 import kedro.io
-import pandas as pd
-from .dataset import Dataset
 import numpy as np
+import pandas as pd
 from kedro.io import PartitionedDataSet
 from loguru import logger
-from ..schemas import MarsMetadata
 from PIL import Image
+
+from ..schemas import MarsMetadata
+from .dataset import Dataset
 
 
 def _file_id(*, clip: int, frame: int, camera: int) -> str:
@@ -65,6 +66,26 @@ def _quantify_motion(frame1: np.ndarray, frame2: np.ndarray) -> float:
     return float(np.mean(frame_diff))
 
 
+def _excess_green(frame: np.array) -> float:
+    """
+    Quantifies the excess green for a particular frame.
+
+    Args:
+        frame: The frame to compute excess green for.
+
+    Returns:
+        The excess green value.
+
+    """
+    frame = frame.astype(np.float32) / 255.0
+    red = frame[:, :, 0]
+    green = frame[:, :, 1]
+    blue = frame[:, :, 2]
+
+    excess_green = 2 * green - blue - red
+    return np.count_nonzero(excess_green > 0.5) / np.prod(excess_green.shape)
+
+
 def _minimum_motion(
     frames1: List[np.ndarray], frames2: List[np.ndarray]
 ) -> float:
@@ -83,6 +104,22 @@ def _minimum_motion(
     return np.min(motions)
 
 
+def _maximum_excess_green(frames: List[np.ndarray]) -> float:
+    """
+    Determines the excess green value across multiple cameras, and then takes
+    the maximum.
+
+    Args:
+        frames: The set of frames from all the cameras.
+
+    Returns:
+        The maximum excess green value across all frames.
+
+    """
+    excess_greens = [_excess_green(f) for f in frames]
+    return np.max(excess_greens)
+
+
 def _write_until_clip_end(
     frame_iter: Iterable[Tuple[float, List[np.ndarray]]],
     *,
@@ -90,6 +127,7 @@ def _write_until_clip_end(
     clip_num: int,
     max_gap: float,
     motion_threshold: float,
+    green_threshold: float,
 ) -> Tuple[bool, pd.DataFrame]:
     """
     Writes a complete clip to the disk. Will continue to write until it detects
@@ -103,6 +141,9 @@ def _write_until_clip_end(
             to have ended.
         motion_threshold: Minimum amount of motion we expect between images. If
             not reached, the images will be considered stationary and ignored.
+        green_threshold: The excess green threshold. If all images from a
+            particular timestep have excess green values lower than this,
+            they will be discarded.
 
     Returns:
         Whether there are any more frames to read, and metadata for the clip.
@@ -131,6 +172,12 @@ def _write_until_clip_end(
         if _minimum_motion(previous_frames, frames) < motion_threshold:
             logger.debug(
                 "Dropping frame {} because it is stationary.", frame_num
+            )
+            continue
+        if _maximum_excess_green(frames) < green_threshold:
+            logger.debug(
+                "Dropping frame {} because it has tto little vegetation.",
+                frame_num,
             )
             continue
 
@@ -171,6 +218,7 @@ def build_dataset(
     sync_tolerance: float = 0.05,
     max_timestamp_gap: float = 0.5,
     motion_threshold: float = 5.0,
+    green_threshold: float = 0.006,
 ) -> pd.DataFrame:
     """
     Builds the dataset, preprocessing the images and writing them out to disk.
@@ -184,6 +232,9 @@ def build_dataset(
             between consecutive frames in a clip.
         motion_threshold: Minimum amount of motion we expect between images. If
             not reached, the images will be considered stationary and ignored.
+        green_threshold: The excess green threshold. If all images from a
+            particular timestep have excess green values lower than this,
+            they will be discarded.
 
     Returns:
         A table containing the metadata for the dataset.
@@ -215,6 +266,7 @@ def build_dataset(
                 clip_num=clip_num,
                 max_gap=max_timestamp_gap,
                 motion_threshold=motion_threshold,
+                green_threshold=green_threshold,
             )
             metadata = pd.concat([metadata, clip_metadata], ignore_index=True)
 
