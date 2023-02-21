@@ -12,7 +12,7 @@ import pandas as pd
 from loguru import logger
 from pandas.core.groupby.generic import DataFrameGroupBy
 
-from ..schemas import MarsMetadata
+from .schemas import MarsMetadata
 
 
 class FrameSelector:
@@ -192,6 +192,20 @@ class FrameSelector:
 
         return len(camera_data)
 
+    @cached_property
+    def num_frames(self) -> int:
+        """
+        Returns:
+            The total number of frames in this dataset. Frames visible
+            from multiple cameras are counted once.
+
+        """
+        # Get data from a single camera.
+        camera = list(self.__by_camera.groups.keys())[0]
+        camera_data = self.__by_camera.get_group(camera)
+
+        return len(camera_data)
+
     @property
     def metadata(self) -> pd.DataFrame:
         """
@@ -201,11 +215,11 @@ class FrameSelector:
         """
         return self.__metadata.copy()
 
-    def get_example(
+    def get_triplet(
         self, *, anchor_index: int, multi_camera: bool = True
     ) -> Tuple[str, str, str]:
         """
-        Selects an example using a specific anchor frame.
+        Selects a triplet using a specific anchor frame.
 
         Args:
             anchor_index: The index of the anchor frame to use.
@@ -249,7 +263,34 @@ class FrameSelector:
         id_key = MarsMetadata.FILE_ID.value
         return anchor_row[id_key], positive_row[id_key], negative_row[id_key]
 
-    def select_random_example(
+    def get_pair(self, frame_index: int) -> Tuple[str, str]:
+        """
+        Selects a pair (the same image from multiple cameras) using a specific
+        frame. Cameras will be chosen randomly.
+
+        Args:
+            frame_index: The index of the frame.
+
+        Returns:
+            The file IDs of the two frames it selected.
+
+        """
+        # Choose the cameras randomly.
+        camera1, camera2 = random.choices(
+            list(self.__by_camera.groups.keys()), k=2
+        )
+        metadata1 = self.__by_camera.get_group(camera1)
+        metadata2 = self.__by_camera.get_group(camera2)
+
+        # Select the frames.
+        row_index = random.randrange(0, len(metadata1))
+        row1 = metadata1.iloc[row_index]
+        row2 = metadata2.iloc[row_index]
+
+        id_key = MarsMetadata.FILE_ID.value
+        return row1[id_key], row2[id_key]
+
+    def select_random_triplet(
         self, multi_camera: bool = True
     ) -> Tuple[str, str, str]:
         """
@@ -264,7 +305,7 @@ class FrameSelector:
             pair frame that it selected.
 
         """
-        return self.get_example(
+        return self.get_triplet(
             anchor_index=random.randint(0, self.num_anchor_frames),
             multi_camera=multi_camera,
         )

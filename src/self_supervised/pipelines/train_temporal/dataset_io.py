@@ -6,7 +6,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision.io import read_image
 
-from .frame_selector import FrameSelector
+from ..frame_selector import FrameSelector
 
 
 class TripletDataset(Dataset):
@@ -65,7 +65,7 @@ class TripletDataset(Dataset):
             The anchor, positive, and negative examples.
 
         """
-        anchor_id, positive_id, negative_id = self.__frames.get_example(
+        anchor_id, positive_id, negative_id = self.__frames.get_triplet(
             anchor_index=index, multi_camera=self.__multi_camera
         )
 

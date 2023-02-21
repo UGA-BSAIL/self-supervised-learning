@@ -60,4 +60,4 @@ prepare_environment
 source scripts/load_common.sh
 
 # Run the training.
-poetry run kedro run --pipeline=train_temporal --env=a100 "$@"
+poetry run kedro run --pipeline=train_simclr --env=a100 "$@"

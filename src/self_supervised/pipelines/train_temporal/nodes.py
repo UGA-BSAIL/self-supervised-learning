@@ -18,7 +18,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
 from torchmetrics import Metric
 from torchvision.transforms import (
-    CenterCrop,
     Compose,
     InterpolationMode,
     Lambda,
@@ -26,9 +25,9 @@ from torchvision.transforms import (
     RandomResizedCrop,
 )
 
+from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
 from .dataset_io import TripletDataset
-from .frame_selector import FrameSelector
 from .losses import RegularizedTripletLoss
 from .metrics import ContrastiveAccuracy
 

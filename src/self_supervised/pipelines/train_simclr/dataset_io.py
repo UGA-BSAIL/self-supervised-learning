@@ -11,8 +11,9 @@ import torch
 from loguru import logger
 from torch import Tensor
 from torch.utils.data import Dataset
-from torchvision.io import read_image
+from torchvision.io import decode_jpeg, read_file, read_image
 
+from ..frame_selector import FrameSelector
 from ..schemas import MarsMetadata
 
 
@@ -109,3 +110,70 @@ class PairedAugmentedDataset(Dataset):
         augmentation_2 = self.__augmentation(image)
 
         return torch.stack((augmentation_1, augmentation_2))
+
+
+class MultiViewDataset(Dataset):
+    """
+    Creates image pairs from multiple corresponding camera views.
+    """
+
+    def __init__(
+        self,
+        *,
+        frames: FrameSelector,
+        image_folder: Path,
+        augmentation: Callable[[Tensor], Tensor] = lambda x: x,
+        decode_device: str = "cpu",
+    ):
+        """
+        Args:
+            frames: The frame selector to use for extracting frames.
+            image_folder: The folder that contains all the dataset images.
+            augmentation: The data augmentation to apply to the frames.
+            decode_device: The device to use for decoding images.
+
+        """
+        self.__frames = frames
+        logger.info("Loading dataset images from {}.", image_folder)
+        self.__image_folder = image_folder
+        self.__augmentation = augmentation
+        self.__decode_device = decode_device
+
+    def __len__(self) -> int:
+        return self.__frames.num_frames
+
+    def __read_single_image(self, file_id: str) -> Tensor:
+        """
+        Reads a single image from the dataset.
+
+        Args:
+            file_id: The file ID of the image to read.
+
+        Returns:
+            The image that it read.
+
+        """
+        file_path = self.__image_folder / f"{file_id}.jpg"
+        image_compressed = read_file(file_path.as_posix())
+        image = decode_jpeg(image_compressed, device=self.__decode_device)
+
+        # Apply augmentations.
+        return self.__augmentation(image)
+
+    def __getitem__(self, index: int) -> Tensor:
+        """
+        Args:
+            index: The index of the image in the dataset.
+
+        Returns:
+            The two frames for this example, as a tensor with a batch
+            dimension of size 2.
+
+        """
+        frame1_id, frame2_id = self.__frames.get_pair(index)
+
+        # Read the images.
+        image1 = self.__read_single_image(frame1_id)
+        image2 = self.__read_single_image(frame2_id)
+
+        return torch.stack((image1, image2))

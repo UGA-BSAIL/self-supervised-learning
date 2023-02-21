@@ -26,8 +26,9 @@ from torchvision.transforms import (
 )
 from torchvision.transforms.functional import normalize
 
+from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
-from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
+from .dataset_io import MultiViewDataset
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
 
@@ -72,14 +73,7 @@ def _normalize(images: Tensor) -> Tensor:
         The normalized images.
 
     """
-    images = images.to(torch.float).to(DEVICE, non_blocking=True)
-
-    mean = images.mean(dim=(2, 3), keepdims=True)
-    std = images.std(dim=(2, 3), keepdims=True)
-    # Occasionally, due to weird augmentation, this can be zero, which we can't
-    # divide by.
-    std = std.clamp(min=0.01)
-    return normalize(images, mean, std)
+    return images.to(torch.float).to(DEVICE, non_blocking=True) / 255
 
 
 class TrainingLoop:
@@ -131,7 +125,7 @@ class TrainingLoop:
 
         """
         # Log gradients
-        wandb.watch(self.__model, log_freq=500)
+        wandb.watch(self.__model, log_freq=2000)
 
         def _to_wandb_image(image: Tensor) -> wandb.Image:
             # WandB doesn't seem to like initializing images from pure
@@ -265,20 +259,19 @@ def load_dataset(
 
     augmentation = Compose(
         [
-            RandomResizedCrop(350, interpolation=InterpolationMode.NEAREST),
+            RandomResizedCrop(410, interpolation=InterpolationMode.NEAREST),
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
-            RandAugment(num_ops=4, magnitude=10),
+            RandAugment(magnitude=9, interpolation=InterpolationMode.NEAREST),
         ]
     )
 
-    single_frames = SingleFrameDataset(
-        mars_metadata=metadata,
+    frame_selector = FrameSelector(mars_metadata=metadata)
+    paired_frames = MultiViewDataset(
+        frames=frame_selector,
         image_folder=image_folder,
-    )
-    paired_frames = PairedAugmentedDataset(
-        image_dataset=single_frames, augmentation=augmentation
+        augmentation=augmentation,
     )
 
     return paired_frames
