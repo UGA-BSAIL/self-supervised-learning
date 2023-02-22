@@ -4,7 +4,7 @@ Nodes for the `train_simclr` pipeline.
 
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,6 @@ from torchvision.transforms import (
     RandAugment,
     RandomResizedCrop,
 )
-from torchvision.transforms.functional import normalize
 
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
@@ -36,44 +35,19 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using {} device.", DEVICE)
 
 
-def _collate_pairs(pairs: List[Tensor]) -> Tuple[Tensor, Tensor]:
+def _collate_views(views: List[List[Tensor]]) -> List[Tensor]:
     """
-    Collates a list of image pairs from a `PairedAugmentedDataset` into two
-    separate batches of corresponding images with different augmentations.
+    Collates a list of image pairs from a `MultiViewDataset` into
+    separate batches of corresponding images with different views.
 
     Args:
-        pairs: The pairs of augmented images.
+        views: The views of each image.
 
     Returns:
         The two corresponding batches.
 
     """
-    # Combine into a single batch.
-    unified_batch = torch.cat(pairs, 0)
-
-    # Now, separate that into two batches.
-    left_batch_indices = torch.arange(0, len(pairs), 2)
-    right_batch_indices = torch.arange(1, len(pairs), 2)
-
-    left_batch = unified_batch[left_batch_indices]
-    right_batch = unified_batch[right_batch_indices]
-
-    return left_batch, right_batch
-
-
-def _normalize(images: Tensor) -> Tensor:
-    """
-    Normalizes input images, converting to floats and giving them a
-    mean of 1 and a standard deviation of 0.
-
-    Args:
-        images: The images to normalize.
-
-    Returns:
-        The normalized images.
-
-    """
-    return images.to(torch.float).to(DEVICE, non_blocking=True) / 255
+    return [torch.stack(b, dim=0) for b in zip(*views)]
 
 
 class TrainingLoop:
@@ -90,6 +64,7 @@ class TrainingLoop:
         scaler: GradScaler,
         accuracy: Metric,
         checkpoint_dir: Path = Path("checkpoints"),
+        augmentation: Callable[[Tensor], Tensor] = lambda x: x,
     ):
         """
         Args:
@@ -100,6 +75,7 @@ class TrainingLoop:
             accuracy: Metric to use for computing accuracy.
             checkpoint_dir: The directory to use for saving intermediate
                 model checkpoints.
+            augmentation: The data augmentation to apply.
 
         """
         self.__model = model
@@ -109,11 +85,27 @@ class TrainingLoop:
         self.__accuracy = accuracy
         self.__checkpoint_dir = checkpoint_dir
         self.__checkpoint_dir.mkdir(exist_ok=True)
+        self.__augmentation = augmentation
 
         # Keeps track of the current global training step.
         self.__global_step = 0
         # Whether we have already started gradient logging.
         self.__is_watching = False
+
+    def __preprocess(self, images: Tensor) -> Tensor:
+        """
+        Normalizes input images, converting to floats and giving them a
+        mean of 1 and a standard deviation of 0.
+
+        Args:
+            images: The images to normalize.
+
+        Returns:
+            The normalized images.
+
+        """
+        images = self.__augmentation(images.to(DEVICE, non_blocking=True))
+        return images.to(torch.float) / 255
 
     def __log_first_batch(self, *, view_inputs: Iterable[Tensor]) -> None:
         """
@@ -134,9 +126,12 @@ class TrainingLoop:
             return wandb.Image(image.permute((1, 2, 0)).cpu().numpy())
 
         # Take at most 25 images from each batch.
+        wandb_images = [
+            [_to_wandb_image(im) for im in batch] for batch in view_inputs
+        ]
         images_log = {
-            f"view_{i}_input_examples": _to_wandb_image(im)
-            for i, im in enumerate(view_inputs)
+            f"view_{i}_input_examples": e[:15]
+            for i, e in enumerate(wandb_images)
         }
         wandb.log(dict(global_step=self.__global_step, **images_log))
 
@@ -179,7 +174,7 @@ class TrainingLoop:
         """
         losses = []
         for batch_i, view_inputs in enumerate(data_loader):
-            view_inputs = [_normalize(view) for view in view_inputs]
+            view_inputs = [self.__preprocess(view) for view in view_inputs]
 
             # Compute loss.
             with torch.autocast(device_type=DEVICE, dtype=torch.float16):
@@ -249,21 +244,10 @@ def load_dataset(
     """
     image_folder = Path(image_folder)
 
-    augmentation = Compose(
-        [
-            RandomResizedCrop(410, interpolation=InterpolationMode.NEAREST),
-            # Apparently, crops sometimes produce non-contiguous views,
-            # and RandAugment doesn't like that.
-            Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=9, interpolation=InterpolationMode.NEAREST),
-        ]
-    )
-
     frame_selector = FrameSelector(mars_metadata=metadata)
     paired_frames = MultiViewDataset(
         frames=frame_selector,
         image_folder=image_folder,
-        augmentation=augmentation,
     )
 
     return paired_frames
@@ -303,19 +287,31 @@ def train_model(
     data_loader = data.DataLoader(
         training_data,
         batch_size=batch_size,
-        collate_fn=_collate_pairs,
+        collate_fn=_collate_views,
         pin_memory=True,
         num_workers=8,
         shuffle=True,
         drop_last=True,
     )
 
+    augmentation = Compose(
+        [
+            RandomResizedCrop(
+                410, scale=(0.5, 1.0), interpolation=InterpolationMode.NEAREST
+            ),
+            # Apparently, crops sometimes produce non-contiguous views,
+            # and RandAugment doesn't like that.
+            Lambda(lambda t: t.contiguous()),
+            RandAugment(magnitude=9, interpolation=InterpolationMode.NEAREST),
+        ]
+    )
     training_loop = TrainingLoop(
         model=model,
         optimizer=optimizer,
         loss_fn=loss_fn,
         scaler=scaler,
         accuracy=accuracy,
+        augmentation=augmentation,
     )
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)

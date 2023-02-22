@@ -4,7 +4,7 @@ Custom metrics for SimCLR.
 
 
 import itertools
-from typing import Iterable
+from typing import List
 
 import torch
 from torch import Tensor
@@ -45,7 +45,7 @@ class ProxyClassAccuracy(BinaryAccuracy):
 
         return super().forward(predicted_classes, targets)
 
-    def forward(self, feature_set: Iterable[Tensor]) -> Tensor:
+    def forward(self, feature_set: List[Tensor]) -> Tensor:
         """
         Args:
             feature_set: The set of all the corresponding features.
@@ -54,7 +54,7 @@ class ProxyClassAccuracy(BinaryAccuracy):
             The computed accuracy.
 
         """
-        total_acc = torch.zeros(0)
+        total_acc = torch.scalar_tensor(0, device=feature_set[0].device)
 
         # Compute the accuracy for every pair.
         all_pairs = itertools.combinations(feature_set, 2)

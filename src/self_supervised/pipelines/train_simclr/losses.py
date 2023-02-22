@@ -1,5 +1,5 @@
 import itertools
-from typing import Iterable
+from typing import List
 
 import torch
 import torch.nn.functional as F
@@ -137,7 +137,7 @@ class FullGraphLoss(nn.Module):
 
         self.pair_loss = pair_loss
 
-    def forward(self, feature_set: Iterable[Tensor]) -> Tensor:
+    def forward(self, feature_set: List[Tensor]) -> Tensor:
         """
         Computes the loss.
 
@@ -148,7 +148,7 @@ class FullGraphLoss(nn.Module):
             The computed loss.
 
         """
-        total_loss = torch.zeros(0)
+        total_loss = torch.scalar_tensor(0, device=feature_set[0].device)
 
         # Compute similarities between every pair.
         all_pairs = itertools.combinations(feature_set, 2)

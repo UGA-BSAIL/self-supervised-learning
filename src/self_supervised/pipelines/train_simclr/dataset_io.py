@@ -4,7 +4,7 @@ Utilities for loading the image data.
 
 
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import pandas as pd
 import torch
@@ -160,7 +160,7 @@ class MultiViewDataset(Dataset):
         # Apply augmentations.
         return self.__augmentation(image)
 
-    def __getitem__(self, index: int) -> Tensor:
+    def __getitem__(self, index: int) -> List[Tensor]:
         """
         Args:
             index: The index of the image in the dataset.
@@ -173,5 +173,4 @@ class MultiViewDataset(Dataset):
         frame_ids = self.__frames.get_all_views(index)
 
         # Read the images.
-        images = [self.__read_single_image(f) for f in frame_ids]
-        return torch.stack(images)
+        return [self.__read_single_image(f) for f in frame_ids]
