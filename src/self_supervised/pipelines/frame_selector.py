@@ -6,7 +6,7 @@ task.
 
 import random
 from functools import cached_property
-from typing import Tuple
+from typing import List, Tuple
 
 import pandas as pd
 from loguru import logger
@@ -263,32 +263,27 @@ class FrameSelector:
         id_key = MarsMetadata.FILE_ID.value
         return anchor_row[id_key], positive_row[id_key], negative_row[id_key]
 
-    def get_pair(self, frame_index: int) -> Tuple[str, str]:
+    def get_all_views(self, frame_index: int) -> List[str]:
         """
-        Selects a pair (the same image from multiple cameras) using a specific
-        frame. Cameras will be chosen randomly.
+        Selects the corresponding frames from all cameras at a particular
+        time.
 
         Args:
-            frame_index: The index of the frame.
+            frame_index: The index of the frames.
 
         Returns:
             The file IDs of the two frames it selected.
 
         """
-        # Choose the cameras randomly.
-        camera1, camera2 = random.choices(
-            list(self.__by_camera.groups.keys()), k=2
-        )
-        metadata1 = self.__by_camera.get_group(camera1)
-        metadata2 = self.__by_camera.get_group(camera2)
-
+        # Get per-camera metadata.
+        camera_metadata = [
+            self.__by_camera.get_group(c) for c in self.__by_camera.groups
+        ]
         # Select the frames.
-        row_index = random.randrange(0, len(metadata1))
-        row1 = metadata1.iloc[row_index]
-        row2 = metadata2.iloc[row_index]
+        rows = [m.iloc[frame_index] for m in camera_metadata]
 
         id_key = MarsMetadata.FILE_ID.value
-        return row1[id_key], row2[id_key]
+        return [r[id_key] for r in rows]
 
     def select_random_triplet(
         self, multi_camera: bool = True

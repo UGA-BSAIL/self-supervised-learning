@@ -166,14 +166,12 @@ class MultiViewDataset(Dataset):
             index: The index of the image in the dataset.
 
         Returns:
-            The two frames for this example, as a tensor with a batch
-            dimension of size 2.
+            The frames for this example, as a tensor with a batch
+            dimension.
 
         """
-        frame1_id, frame2_id = self.__frames.get_pair(index)
+        frame_ids = self.__frames.get_all_views(index)
 
         # Read the images.
-        image1 = self.__read_single_image(frame1_id)
-        image2 = self.__read_single_image(frame2_id)
-
-        return torch.stack((image1, image2))
+        images = [self.__read_single_image(f) for f in frame_ids]
+        return torch.stack(images)

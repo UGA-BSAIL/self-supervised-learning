@@ -4,7 +4,7 @@ Nodes for the `train_simclr` pipeline.
 
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -29,7 +29,7 @@ from torchvision.transforms.functional import normalize
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
 from .dataset_io import MultiViewDataset
-from .losses import NtXentLoss
+from .losses import FullGraphLoss, NtXentLoss
 from .metrics import ProxyClassAccuracy
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -112,20 +112,21 @@ class TrainingLoop:
 
         # Keeps track of the current global training step.
         self.__global_step = 0
+        # Whether we have already started gradient logging.
+        self.__is_watching = False
 
-    def __log_first_batch(
-        self, *, left_inputs: Tensor, right_inputs: Tensor
-    ) -> None:
+    def __log_first_batch(self, *, view_inputs: Iterable[Tensor]) -> None:
         """
         Logs data from the first batch of an epoch.
 
         Args:
-            left_inputs: The left side inputs.
-            right_inputs: The right side inputs.
+            view_inputs: The corresponding inputs from all the views.
 
         """
-        # Log gradients
-        wandb.watch(self.__model, log_freq=2000)
+        if not self.__is_watching:
+            # Log gradients
+            wandb.watch(self.__model, log_freq=2000)
+            self.__is_watching = True
 
         def _to_wandb_image(image: Tensor) -> wandb.Image:
             # WandB doesn't seem to like initializing images from pure
@@ -133,17 +134,11 @@ class TrainingLoop:
             return wandb.Image(image.permute((1, 2, 0)).cpu().numpy())
 
         # Take at most 25 images from each batch.
-        wandb.log(
-            {
-                "global_step": self.__global_step,
-                "train/left_input_examples": [
-                    _to_wandb_image(im) for im in left_inputs[:25]
-                ],
-                "train/right_input_examples": [
-                    _to_wandb_image(im) for im in right_inputs[:25]
-                ],
-            }
-        )
+        images_log = {
+            f"view_{i}_input_examples": _to_wandb_image(im)
+            for i, im in enumerate(view_inputs)
+        }
+        wandb.log(dict(global_step=self.__global_step, **images_log))
 
     def __log_epoch_end(self) -> None:
         """
@@ -183,19 +178,16 @@ class TrainingLoop:
 
         """
         losses = []
-        for batch_i, (left_inputs, right_inputs) in enumerate(data_loader):
-            left_inputs = _normalize(left_inputs)
-            right_inputs = _normalize(right_inputs)
+        for batch_i, view_inputs in enumerate(data_loader):
+            view_inputs = [_normalize(view) for view in view_inputs]
 
             # Compute loss.
             with torch.autocast(device_type=DEVICE, dtype=torch.float16):
-                left_pred, right_pred = self.__model(left_inputs, right_inputs)
-                loss = self.__loss_fn(left_pred, right_pred)
+                view_preds = self.__model(*view_inputs)
+                loss = self.__loss_fn(view_preds)
 
             if batch_i == 0:
-                self.__log_first_batch(
-                    left_inputs=left_inputs, right_inputs=right_inputs
-                )
+                self.__log_first_batch(view_inputs=view_inputs)
 
             # Backward pass.
             self.__optimizer.zero_grad()
@@ -204,7 +196,7 @@ class TrainingLoop:
             self.__scaler.update()
 
             # Compute accuracy.
-            batch_acc = self.__accuracy(left_pred, right_pred)
+            batch_acc = self.__accuracy(view_preds)
 
             logger.debug("batch {}: loss={}", batch_i, loss.item())
             if self.__global_step % 100 == 0:
@@ -301,7 +293,8 @@ def train_model(
         The trained model.
 
     """
-    loss_fn = NtXentLoss(temperature=temperature).to(DEVICE)
+    pair_loss = NtXentLoss(temperature=temperature)
+    loss_fn = FullGraphLoss(pair_loss).to(DEVICE)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
     scaler = GradScaler()

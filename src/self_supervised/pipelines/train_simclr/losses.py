@@ -1,3 +1,6 @@
+import itertools
+from typing import Iterable
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -116,3 +119,40 @@ class NtXentLoss(nn.Module):
         similarities /= self.temperature
 
         return compute_loss_all_similarities(similarities)
+
+
+class FullGraphLoss(nn.Module):
+    """
+    Generalizes a pair-wise loss to a set by computing the loss over
+    all possible pairs in the set.
+    """
+
+    def __init__(self, pair_loss: nn.Module):
+        """
+        Args:
+            pair_loss: The pair-wise loss to wrap.
+
+        """
+        super().__init__()
+
+        self.pair_loss = pair_loss
+
+    def forward(self, feature_set: Iterable[Tensor]) -> Tensor:
+        """
+        Computes the loss.
+
+        Args:
+            feature_set: The set of all the corresponding features.
+
+        Returns:
+            The computed loss.
+
+        """
+        total_loss = torch.zeros(0)
+
+        # Compute similarities between every pair.
+        all_pairs = itertools.combinations(feature_set, 2)
+        for left, right in all_pairs:
+            total_loss += self.pair_loss(left, right)
+
+        return total_loss
