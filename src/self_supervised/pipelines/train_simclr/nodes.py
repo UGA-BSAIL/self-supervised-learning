@@ -35,7 +35,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using {} device.", DEVICE)
 
 
-def _collate_views(views: List[List[Tensor]]) -> List[Tensor]:
+def _collate_views(views: List[List[Tensor]]) -> List[List[Tensor]]:
     """
     Collates a list of image pairs from a `MultiViewDataset` into
     separate batches of corresponding images with different views.
@@ -44,10 +44,10 @@ def _collate_views(views: List[List[Tensor]]) -> List[Tensor]:
         views: The views of each image.
 
     Returns:
-        The two corresponding batches.
+        The corresponding batches for each view.
 
     """
-    return [torch.stack(b, dim=0) for b in zip(*views)]
+    return [list(b) for b in zip(*views)]
 
 
 class TrainingLoop:
@@ -92,7 +92,7 @@ class TrainingLoop:
         # Whether we have already started gradient logging.
         self.__is_watching = False
 
-    def __preprocess(self, images: Tensor) -> Tensor:
+    def __preprocess(self, images: List[Tensor]) -> Tensor:
         """
         Normalizes input images, converting to floats and giving them a
         mean of 1 and a standard deviation of 0.
@@ -104,7 +104,12 @@ class TrainingLoop:
             The normalized images.
 
         """
-        images = self.__augmentation(images.to(DEVICE, non_blocking=True))
+        for i in range(len(images)):
+            images[i] = self.__augmentation(
+                images[i].to(DEVICE, non_blocking=True)
+            )
+
+        images = torch.stack(images, dim=0)
         return images.to(torch.float) / 255
 
     def __log_first_batch(self, *, view_inputs: Iterable[Tensor]) -> None:
