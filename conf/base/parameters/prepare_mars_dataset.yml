@@ -9,4 +9,4 @@ max_timestamp_gap: 0.3
 motion_threshold: 5.0
 # The excess green index threshold to use for determining whether there
 # is enough vegetation in a frame to include it.
-green_threshold: 0.006
+green_threshold: 0.6

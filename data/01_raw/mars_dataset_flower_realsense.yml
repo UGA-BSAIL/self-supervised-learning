@@ -1,0 +1,614 @@
+# Contains the specifications for the files in the MARS dataset.
+dataset:
+  # All paths will be relative to this.
+  root: "/home/daniel/lab_share/raw_data/2022/images/ground"
+  # All the sessions that make up the dataset.
+  sessions:
+    - cameras:
+        camera0:
+          video: color_img1_20220823102705163474.avi
+        camera1:
+          video: color_img2_20220823102705163474.avi
+        camera2:
+          video: color_img3_20220823102705163474.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823104502125752.avi
+        camera1:
+          video: color_img2_20220823104502125752.avi
+        camera2:
+          video: color_img3_20220823104502125752.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823110035056810.avi
+        camera1:
+          video: color_img2_20220823110035056810.avi
+        camera2:
+          video: color_img3_20220823110035056810.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823115458976106.avi
+        camera1:
+          video: color_img2_20220823115458976106.avi
+        camera2:
+          video: color_img3_20220823115458976106.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823115840913915.avi
+        camera1:
+          video: color_img2_20220823115840913915.avi
+        camera2:
+          video: color_img3_20220823115840913915.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823121058479356.avi
+        camera1:
+          video: color_img2_20220823121058479356.avi
+        camera2:
+          video: color_img3_20220823121058479356.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823121724767380.avi
+        camera1:
+          video: color_img2_20220823121724767380.avi
+        camera2:
+          video: color_img3_20220823121724767380.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823121810088338.avi
+        camera1:
+          video: color_img2_20220823121810088338.avi
+        camera2:
+          video: color_img3_20220823121810088338.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823122034931372.avi
+        camera1:
+          video: color_img2_20220823122034931372.avi
+        camera2:
+          video: color_img3_20220823122034931372.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823122115635207.avi
+        camera1:
+          video: color_img2_20220823122115635207.avi
+        camera2:
+          video: color_img3_20220823122115635207.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823122402460453.avi
+        camera1:
+          video: color_img2_20220823122402460453.avi
+        camera2:
+          video: color_img3_20220823122402460453.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823122445362917.avi
+        camera1:
+          video: color_img2_20220823122445362917.avi
+        camera2:
+          video: color_img3_20220823122445362917.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823122506103282.avi
+        camera1:
+          video: color_img2_20220823122506103282.avi
+        camera2:
+          video: color_img3_20220823122506103282.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823122919296890.avi
+        camera1:
+          video: color_img2_20220823122919296890.avi
+        camera2:
+          video: color_img3_20220823122919296890.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823123203514837.avi
+        camera1:
+          video: color_img2_20220823123203514837.avi
+        camera2:
+          video: color_img3_20220823123203514837.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823123502602748.avi
+        camera1:
+          video: color_img2_20220823123502602748.avi
+        camera2:
+          video: color_img3_20220823123502602748.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823124200289219.avi
+        camera1:
+          video: color_img2_20220823124200289219.avi
+        camera2:
+          video: color_img3_20220823124200289219.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823124534141985.avi
+        camera1:
+          video: color_img2_20220823124534141985.avi
+        camera2:
+          video: color_img3_20220823124534141985.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823124850041025.avi
+        camera1:
+          video: color_img2_20220823124850041025.avi
+        camera2:
+          video: color_img3_20220823124850041025.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823125205767014.avi
+        camera1:
+          video: color_img2_20220823125205767014.avi
+        camera2:
+          video: color_img3_20220823125205767014.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823131441680928.avi
+        camera1:
+          video: color_img2_20220823131441680928.avi
+        camera2:
+          video: color_img3_20220823131441680928.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823131925517677.avi
+        camera1:
+          video: color_img2_20220823131925517677.avi
+        camera2:
+          video: color_img3_20220823131925517677.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823132257327955.avi
+        camera1:
+          video: color_img2_20220823132257327955.avi
+        camera2:
+          video: color_img3_20220823132257327955.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823132649963211.avi
+        camera1:
+          video: color_img2_20220823132649963211.avi
+        camera2:
+          video: color_img3_20220823132649963211.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823133047808663.avi
+        camera1:
+          video: color_img2_20220823133047808663.avi
+        camera2:
+          video: color_img3_20220823133047808663.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823133406173665.avi
+        camera1:
+          video: color_img2_20220823133406173665.avi
+        camera2:
+          video: color_img3_20220823133406173665.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823151148664337.avi
+        camera1:
+          video: color_img2_20220823151148664337.avi
+        camera2:
+          video: color_img3_20220823151148664337.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220823151316071374.avi
+        camera1:
+          video: color_img2_20220823151316071374.avi
+        camera2:
+          video: color_img3_20220823151316071374.avi
+      path: 2022-08-23/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220830162825891834.avi
+        camera1:
+          video: color_img2_20220830162825891834.avi
+        camera2:
+          video: color_img3_20220830162825891834.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220830164000002468.avi
+        camera1:
+          video: color_img2_20220830164000002468.avi
+        camera2:
+          video: color_img3_20220830164000002468.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831103130551948.avi
+        camera1:
+          video: color_img2_20220831103130551948.avi
+        camera2:
+          video: color_img3_20220831103130551948.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831103241763688.avi
+        camera1:
+          video: color_img2_20220831103241763688.avi
+        camera2:
+          video: color_img3_20220831103241763688.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831103452884624.avi
+        camera1:
+          video: color_img2_20220831103452884624.avi
+        camera2:
+          video: color_img3_20220831103452884624.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831103612262195.avi
+        camera1:
+          video: color_img2_20220831103612262195.avi
+        camera2:
+          video: color_img3_20220831103612262195.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831103907635186.avi
+        camera1:
+          video: color_img2_20220831103907635186.avi
+        camera2:
+          video: color_img3_20220831103907635186.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831104141037452.avi
+        camera1:
+          video: color_img2_20220831104141037452.avi
+        camera2:
+          video: color_img3_20220831104141037452.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831104445075892.avi
+        camera1:
+          video: color_img2_20220831104445075892.avi
+        camera2:
+          video: color_img3_20220831104445075892.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831104754429906.avi
+        camera1:
+          video: color_img2_20220831104754429906.avi
+        camera2:
+          video: color_img3_20220831104754429906.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831104829559030.avi
+        camera1:
+          video: color_img2_20220831104829559030.avi
+        camera2:
+          video: color_img3_20220831104829559030.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831105203539654.avi
+        camera1:
+          video: color_img2_20220831105203539654.avi
+        camera2:
+          video: color_img3_20220831105203539654.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831105528460389.avi
+        camera1:
+          video: color_img2_20220831105528460389.avi
+        camera2:
+          video: color_img3_20220831105528460389.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831105854916355.avi
+        camera1:
+          video: color_img2_20220831105854916355.avi
+        camera2:
+          video: color_img3_20220831105854916355.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831110225395393.avi
+        camera1:
+          video: color_img2_20220831110225395393.avi
+        camera2:
+          video: color_img3_20220831110225395393.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831110543773805.avi
+        camera1:
+          video: color_img2_20220831110543773805.avi
+        camera2:
+          video: color_img3_20220831110543773805.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831111932142943.avi
+        camera1:
+          video: color_img2_20220831111932142943.avi
+        camera2:
+          video: color_img3_20220831111932142943.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831112025058582.avi
+        camera1:
+          video: color_img2_20220831112025058582.avi
+        camera2:
+          video: color_img3_20220831112025058582.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831112600748072.avi
+        camera1:
+          video: color_img2_20220831112600748072.avi
+        camera2:
+          video: color_img3_20220831112600748072.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831112821736076.avi
+        camera1:
+          video: color_img2_20220831112821736076.avi
+        camera2:
+          video: color_img3_20220831112821736076.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831113206047503.avi
+        camera1:
+          video: color_img2_20220831113206047503.avi
+        camera2:
+          video: color_img3_20220831113206047503.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831113503865190.avi
+        camera1:
+          video: color_img2_20220831113503865190.avi
+        camera2:
+          video: color_img3_20220831113503865190.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831113804225831.avi
+        camera1:
+          video: color_img2_20220831113804225831.avi
+        camera2:
+          video: color_img3_20220831113804225831.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220831113955226697.avi
+        camera1:
+          video: color_img2_20220831113955226697.avi
+        camera2:
+          video: color_img3_20220831113955226697.avi
+      path: 2022-08-31/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907101655151126.avi
+        camera1:
+          video: color_img2_20220907101655151126.avi
+        camera2:
+          video: color_img3_20220907101655151126.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907103135033181.avi
+        camera1:
+          video: color_img2_20220907103135033181.avi
+        camera2:
+          video: color_img3_20220907103135033181.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907103346256394.avi
+        camera1:
+          video: color_img2_20220907103346256394.avi
+        camera2:
+          video: color_img3_20220907103346256394.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907103911428290.avi
+        camera1:
+          video: color_img2_20220907103911428290.avi
+        camera2:
+          video: color_img3_20220907103911428290.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907105358364991.avi
+        camera1:
+          video: color_img2_20220907105358364991.avi
+        camera2:
+          video: color_img3_20220907105358364991.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907110703270653.avi
+        camera1:
+          video: color_img2_20220907110703270653.avi
+        camera2:
+          video: color_img3_20220907110703270653.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907112650174804.avi
+        camera1:
+          video: color_img2_20220907112650174804.avi
+        camera2:
+          video: color_img3_20220907112650174804.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220907123438669807.avi
+        camera1:
+          video: color_img2_20220907123438669807.avi
+        camera2:
+          video: color_img3_20220907123438669807.avi
+      path: 2022-09-07/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220914153759112220.avi
+        camera1:
+          video: color_img2_20220914153759112220.avi
+        camera2:
+          video: color_img3_20220914153759112220.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220914163551007776.avi
+        camera1:
+          video: color_img2_20220914163551007776.avi
+        camera2:
+          video: color_img3_20220914163551007776.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220914163859754307.avi
+        camera1:
+          video: color_img2_20220914163859754307.avi
+        camera2:
+          video: color_img3_20220914163859754307.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220914164525020347.avi
+        camera1:
+          video: color_img2_20220914164525020347.avi
+        camera2:
+          video: color_img3_20220914164525020347.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220915110336951468.avi
+        camera1:
+          video: color_img2_20220915110336951468.avi
+        camera2:
+          video: color_img3_20220915110336951468.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220915111643143015.avi
+        camera1:
+          video: color_img2_20220915111643143015.avi
+        camera2:
+          video: color_img3_20220915111643143015.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220915112215961946.avi
+        camera1:
+          video: color_img2_20220915112215961946.avi
+        camera2:
+          video: color_img3_20220915112215961946.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220915113047918596.avi
+        camera1:
+          video: color_img2_20220915113047918596.avi
+        camera2:
+          video: color_img3_20220915113047918596.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220915115225995743.avi
+        camera1:
+          video: color_img2_20220915115225995743.avi
+        camera2:
+          video: color_img3_20220915115225995743.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220915120515491006.avi
+        camera1:
+          video: color_img2_20220915120515491006.avi
+        camera2:
+          video: color_img3_20220915120515491006.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220915125710516612.avi
+        camera1:
+          video: color_img2_20220915125710516612.avi
+        camera2:
+          video: color_img3_20220915125710516612.avi
+      path: 2022-09-15/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220922115611896623.avi
+        camera1:
+          video: color_img2_20220922115611896623.avi
+        camera2:
+          video: color_img3_20220922115611896623.avi
+      path: 2022-09-22/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220922131953821374.avi
+        camera1:
+          video: color_img2_20220922131953821374.avi
+        camera2:
+          video: color_img3_20220922131953821374.avi
+      path: 2022-09-22/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220922132250399963.avi
+        camera1:
+          video: color_img2_20220922132250399963.avi
+        camera2:
+          video: color_img3_20220922132250399963.avi
+      path: 2022-09-22/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220922133452445474.avi
+        camera1:
+          video: color_img2_20220922133452445474.avi
+        camera2:
+          video: color_img3_20220922133452445474.avi
+      path: 2022-09-22/realsense
+    - cameras:
+        camera0:
+          video: color_img1_20220922133804355193.avi
+        camera1:
+          video: color_img2_20220922133804355193.avi
+        camera2:
+          video: color_img3_20220922133804355193.avi
+      path: 2022-09-22/realsense

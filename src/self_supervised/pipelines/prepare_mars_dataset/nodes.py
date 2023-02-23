@@ -83,7 +83,7 @@ def _excess_green(frame: np.array) -> float:
     blue = frame[:, :, 2]
 
     excess_green = 2 * green - blue - red
-    return np.count_nonzero(excess_green > 0.5) / np.prod(excess_green.shape)
+    return np.count_nonzero(excess_green > 0) / np.prod(excess_green.shape)
 
 
 def _minimum_motion(
@@ -118,6 +118,30 @@ def _maximum_excess_green(frames: List[np.ndarray]) -> float:
     """
     excess_greens = [_excess_green(f) for f in frames]
     return np.max(excess_greens)
+
+
+def _resize_shortest(image: np.array, *, shortest_side: int) -> np.array:
+    """
+    Resizes as image so that the shortest side is no longer than a given length.
+
+    Args:
+        image: The image to resize.
+        shortest_side: The length of the shortest side in pixels.
+
+    Returns:
+        The resized image.
+
+    """
+    original_size = np.array(image.shape[:2][::-1])
+    original_shortest_side = min(original_size)
+    resize_ratio = shortest_side / original_shortest_side
+    if resize_ratio > 1.0:
+        # The image is already small enough.
+        return image
+
+    new_size = original_size * resize_ratio
+
+    return cv2.resize(image, new_size.astype(int))
 
 
 def _write_until_clip_end(
@@ -174,10 +198,12 @@ def _write_until_clip_end(
                 "Dropping frame {} because it is stationary.", frame_num
             )
             continue
-        if _maximum_excess_green(frames) < green_threshold:
+        excess_green = _maximum_excess_green(frames)
+        if excess_green < green_threshold:
             logger.debug(
-                "Dropping frame {} because it has tto little vegetation.",
+                "Dropping frame {} because it has too little vegetation ({}).",
                 frame_num,
+                excess_green,
             )
             continue
 
@@ -191,7 +217,7 @@ def _write_until_clip_end(
 
             # Fix the color and resize before saving.
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, (None, None), fx=0.5, fy=0.5)
+            frame = _resize_shortest(frame, shortest_side=540)
 
             frame_files[file_id] = Image.fromarray(frame)
 
@@ -211,8 +237,22 @@ def _write_until_clip_end(
     return have_more_frames, metadata
 
 
+def load_from_spec(dataset_spec: Dict[str, Any]) -> Dataset:
+    """
+    Loads a dataset from a specification file.
+
+    Args:
+        dataset_spec: The specification file.
+
+    Returns:
+        The dataset that it loaded.
+
+    """
+    return Dataset.from_yaml(dataset_spec["dataset"])
+
+
 def build_dataset(
-    dataset_spec: Dict[str, Any],
+    dataset: Dataset,
     *,
     image_dataset_path: str,
     sync_tolerance: float = 0.05,
@@ -224,7 +264,7 @@ def build_dataset(
     Builds the dataset, preprocessing the images and writing them out to disk.
 
     Args:
-        dataset_spec: The YAML specification for the dataset.
+        dataset: The dataset to build.
         image_dataset_path: Where to write the dataset of image files.
         sync_tolerance: The maximum difference in timestamps allowed for
             synchronized frames.
@@ -247,8 +287,6 @@ def build_dataset(
         filename_suffix=".jpg",
     )
 
-    dataset = Dataset.from_yaml(dataset_spec["dataset"])
-
     # Write out the frames from the dataset.
     clip_num = 0
     metadata = pd.DataFrame(columns=[c.value for c in MarsMetadata])
@@ -260,16 +298,24 @@ def build_dataset(
 
         have_more_frames = True
         while have_more_frames:
-            have_more_frames, clip_metadata = _write_until_clip_end(
-                frame_iter,
-                frame_dataset=image_dataset,
-                clip_num=clip_num,
-                max_gap=max_timestamp_gap,
-                motion_threshold=motion_threshold,
-                green_threshold=green_threshold,
-            )
-            metadata = pd.concat([metadata, clip_metadata], ignore_index=True)
+            try:
+                have_more_frames, clip_metadata = _write_until_clip_end(
+                    frame_iter,
+                    frame_dataset=image_dataset,
+                    clip_num=clip_num,
+                    max_gap=max_timestamp_gap,
+                    motion_threshold=motion_threshold,
+                    green_threshold=green_threshold,
+                )
+                metadata = pd.concat(
+                    [metadata, clip_metadata], ignore_index=True
+                )
 
-            clip_num += 1
+                clip_num += 1
+
+            except OSError as error:
+                # Invalid video file.
+                logger.error(f"Video file is invalid: {error}")
+                break
 
     return metadata

@@ -244,7 +244,12 @@ def load_dataset(
     """
     image_folder = Path(image_folder)
 
-    frame_selector = FrameSelector(mars_metadata=metadata)
+    frame_selector = FrameSelector(
+        mars_metadata=metadata,
+        # Set the time ranges to zero so it includes even short clips.
+        positive_time_range=(0.0, 0.0),
+        negative_time_range=(0.0, 0.0),
+    )
     paired_frames = MultiViewDataset(
         frames=frame_selector,
         image_folder=image_folder,

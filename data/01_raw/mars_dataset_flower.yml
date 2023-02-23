@@ -1,0 +1,128 @@
+# Contains the specifications for the files in the MARS dataset.
+dataset:
+  # All paths will be relative to this.
+  root: "/home/daniel/lab_share/raw_data/2022/images/ground"
+  # All the sessions that make up the dataset.
+  sessions:
+    - path: 2022-08-31/mars_ihf/ENGR  # Path to the session videos.
+      cameras:
+        # Data for each camera.
+        camera0:
+          # Video file for the camera.
+          video: engr0_cam0.mp4
+          # Timestamp file for the camera.
+          times: engr0_cam0_ts.txt
+        camera1:
+          video: engr0_cam1.mp4
+          times: engr0_cam1_ts.txt
+        camera2:
+          video: engr0_cam2.mp4
+          times: engr0_cam2_ts.txt
+
+    - path: 2022-08-31/mars_ihf/SPL
+      cameras:
+        camera0:
+          video: spl0_cam0.mp4
+          times: spl0_cam0_ts.txt
+        camera1:
+          video: spl0_cam1.mp4
+          times: spl0_cam1_ts.txt
+        camera2:
+          video: spl0_cam2.mp4
+          times: spl0_cam2_ts.txt
+
+    - path: 2022-08-31/mars_ihf/SPL
+      cameras:
+        camera0:
+          video: spl1_cam0.mp4
+          times: spl1_cam0_ts.txt
+        camera1:
+          video: spl1_cam1.mp4
+          times: spl1_cam1_ts.txt
+        camera2:
+          video: spl1_cam2.mp4
+          times: spl1_cam2_ts.txt
+
+    - path: 2022-09-07/mars_ihf/ENGR
+      cameras:
+        camera0:
+          video: engr0_cam0.mp4
+          times: engr0_cam0_ts.txt
+        camera1:
+          video: engr0_cam1.mp4
+          times: engr0_cam1_ts.txt
+        camera2:
+          video: engr0_cam2.mp4
+          times: engr0_cam2_ts.txt
+
+    - path: 2022-09-07/mars_ihf/ENGR
+      cameras:
+        camera0:
+          video: engr2_cam0.mp4
+          times: engr2_cam0_ts.txt
+        camera1:
+          video: engr2_cam1.mp4
+          times: engr2_cam1_ts.txt
+        camera2:
+          video: engr2_cam2.mp4
+          times: engr2_cam2_ts.txt
+
+    - path: 2022-09-07/mars_ihf/ENGR
+      cameras:
+        camera0:
+          video: engr3_cam0.mp4
+          times: engr3_cam0_ts.txt
+        camera1:
+          video: engr3_cam1.mp4
+          times: engr3_cam1_ts.txt
+        camera2:
+          video: engr3_cam2.mp4
+          times: engr3_cam2_ts.txt
+
+    - path: 2022-09-07/mars_ihf/SPL
+      cameras:
+        camera0:
+          video: spl0_cam0.mp4
+          times: spl0_cam0_ts.txt
+        camera1:
+          video: spl0_cam1.mp4
+          times: spl0_cam1_ts.txt
+        camera2:
+          video: spl0_cam2.mp4
+          times: spl0_cam2_ts.txt
+
+    - path: 2022-09-15/mars_ihf/ENGR
+      cameras:
+        camera0:
+          video: engr0_cam0.mp4
+          times: engr0_cam0_ts.txt
+        camera1:
+          video: engr0_cam1.mp4
+          times: engr0_cam1_ts.txt
+        camera2:
+          video: engr0_cam2.mp4
+          times: engr0_cam2_ts.txt
+
+    - path: 2022-09-15/mars_ihf/SPL
+      cameras:
+        camera0:
+          video: spl0_cam0.mp4
+          times: spl0_cam0_ts.txt
+        camera1:
+          video: spl0_cam1.mp4
+          times: spl0_cam1_ts.txt
+        camera2:
+          video: spl0_cam2.mp4
+          times: spl0_cam2_ts.txt
+
+    - path: 2022-09-15/mars_ihf/ENGR
+      cameras:
+        camera0:
+          video: engr0_cam0.mp4
+          times: engr0_cam0_ts.txt
+        camera1:
+          video: engr0_cam1.mp4
+          times: engr0_cam1_ts.txt
+        camera2:
+          video: engr0_cam2.mp4
+          times: engr0_cam2_ts.txt

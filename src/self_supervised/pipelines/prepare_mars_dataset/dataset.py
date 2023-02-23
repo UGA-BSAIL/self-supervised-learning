@@ -3,18 +3,17 @@ Classes for interacting with the MARS dataset.
 """
 
 
-from pathlib import Path
-from functools import cached_property
-import enum
-from typing import Dict, Any, List, Iterable, Tuple
 import abc
+import enum
+from functools import cached_property
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import cv2
-from methodtools import lru_cache
-
-import pandas as pd
 import numpy as np
+import pandas as pd
 from loguru import logger
+from methodtools import lru_cache
 
 
 class _YamlRep(abc.ABC):
@@ -73,13 +72,14 @@ class Camera(_YamlRep):
         *,
         parent_folder: Path,
         video_name: str,
-        timestamp_name: str,
+        timestamp_name: Optional[str] = None,
     ):
         """
         Args:
             parent_folder: The path to the folder containing the camera files.
             video_name: The name of the video file for this camera.
             timestamp_name: The name of the timestamp file for this camera.
+                If not provided, timestamps from the video will be used.
 
         """
         self.__root = parent_folder
@@ -98,7 +98,7 @@ class Camera(_YamlRep):
         return cls(
             parent_folder=parent_folder,
             video_name=spec["video"],
-            timestamp_name=spec["times"],
+            timestamp_name=spec.get("times"),
         )
 
     @cached_property
@@ -111,17 +111,22 @@ class Camera(_YamlRep):
         return self.__root / self.__video_name
 
     @cached_property
-    def timestamp_path(self) -> Path:
+    def timestamp_path(self) -> Optional[Path]:
         """
         Returns:
-            The path to the timestamp file.
+            The path to the timestamp file, or None if there is no timestamp
+            file.
 
         """
+        if self.__timestamp_name is None:
+            return None
+
         return self.__root / self.__timestamp_name
 
-    @cached_property
-    def __timestamps(self) -> pd.DataFrame:
+    def __timestamps_from_file(self) -> pd.DataFrame:
         """
+        Loads timestamp data from a separate file.
+
         Returns:
             The loaded timestamps for this camera.
 
@@ -131,8 +136,9 @@ class Camera(_YamlRep):
             sep=" ",
             names=[c.value for c in self.TimestampCol],
         )
-        # Remove timestamps with a value of zero, which we occasionally end up with. (This must be a quirk of the
-        # software I used to convert the Rosbags.)
+        # Remove timestamps with a value of zero, which we occasionally end up
+        # with. (This must be a quirk of the software I used to convert the
+        # Rosbags.)
         timestamps = timestamps[
             timestamps[self.TimestampCol.TIMESTAMP.value] > 0.0
         ]
@@ -148,13 +154,66 @@ class Camera(_YamlRep):
             <= timestamps[self.TimestampCol.FRAME_NUM.value].max()
         ):
             logger.warning(
-                "{} has fewer frames ({}) that we have timestamps for. Truncating timestamps.",
+                "{} has fewer frames ({}) that we have timestamps for. "
+                "Truncating timestamps.",
                 self.video_path,
                 num_actual_frames,
             )
-            timestamps = timestamps[timestamps[self.TimestampCol.FRAME_NUM.value] < num_actual_frames]
+            timestamps = timestamps[
+                timestamps[self.TimestampCol.FRAME_NUM.value]
+                < num_actual_frames
+            ]
 
         return timestamps
+
+    def __timestamps_from_video(self) -> pd.DataFrame:
+        """
+        Generates timestamp data from the video file.
+
+        Returns:
+            The generated timestamps.
+
+        """
+        # Generate evenly-spaced timestamps based on the video.
+        num_video_frames = int(
+            self.__video_capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        )
+        video_fps = self.__video_capture.get(cv2.CAP_PROP_FPS)
+        logger.debug(
+            "Video {} has {} frames at {} FPS.",
+            self.__video_name,
+            num_video_frames,
+            video_fps,
+        )
+        timestamps = np.linspace(
+            0, num_video_frames / video_fps, num_video_frames
+        )
+
+        timestamps_frame = pd.DataFrame(
+            data={
+                self.TimestampCol.FRAME_NUM.value: np.arange(num_video_frames),
+                self.TimestampCol.TIMESTAMP.value: timestamps,
+            }
+        )
+        # Use the timestamps as an index for easy querying.
+        timestamps_frame.set_index(
+            self.TimestampCol.TIMESTAMP.value, inplace=True
+        )
+        return timestamps_frame
+
+    @cached_property
+    def __timestamps(self) -> pd.DataFrame:
+        """
+        Returns:
+            The timestamps for the video.
+
+        """
+        if self.__timestamp_name is not None:
+            # Read from the file.
+            return self.__timestamps_from_file()
+        else:
+            # Generate from the video.
+            return self.__timestamps_from_video()
 
     @cached_property
     def __video_capture(self) -> cv2.VideoCapture:
@@ -380,14 +439,12 @@ class Dataset(_YamlRep):
     Represents a complete dataset of video files.
     """
 
-    def __init__(self, *, dataset_folder: Path, sessions: List[Session]):
+    def __init__(self, *, sessions: List[Session]):
         """
         Args:
-            dataset_folder: The path to the main dataset folder.
             sessions: The data for each session in the dataset.
 
         """
-        self.__dataset_folder = dataset_folder
         self.__sessions = sessions
 
     @classmethod
@@ -404,7 +461,7 @@ class Dataset(_YamlRep):
                 Session.from_yaml(session_spec, parent_folder=dataset_folder)
             )
 
-        return cls(dataset_folder=dataset_folder, sessions=sessions)
+        return cls(sessions=sessions)
 
     @cached_property
     def sessions(self) -> List[Session]:
@@ -414,3 +471,21 @@ class Dataset(_YamlRep):
 
         """
         return self.__sessions[:]
+
+
+def merge_datasets(*datasets: Dataset) -> Dataset:
+    """
+    Merges multiple datasets into a single one.
+
+    Args:
+        *datasets: The datasets to merge.
+
+    Returns:
+        The merged dataset, with the combined data.
+
+    """
+    all_sessions = []
+    for dataset in datasets:
+        all_sessions.extend(dataset.sessions)
+
+    return Dataset(sessions=all_sessions)

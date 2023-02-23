@@ -5,16 +5,35 @@ Pipeline for generating a dataset of MARS images.
 
 from kedro.pipeline import Pipeline, node, pipeline
 
-from .nodes import build_dataset
+from .dataset import merge_datasets
+from .nodes import build_dataset, load_from_spec
 
 
 def create_pipeline(**_) -> Pipeline:
     return pipeline(
         [
+            # Read dataset specifications.
+            node(
+                load_from_spec,
+                "mars_flower_dataset_spec",
+                "mars_flower_dataset",
+            ),
+            node(
+                load_from_spec,
+                "mars_flower_dataset_rs_spec",
+                "mars_flower_dataset_rs",
+            ),
+            # Combine into one.
+            node(
+                merge_datasets,
+                ["mars_flower_dataset_rs", "mars_flower_dataset"],
+                "mars_combined_dataset",
+            ),
+            # Build the dataset.
             node(
                 build_dataset,
                 dict(
-                    dataset_spec="mars_dataset_spec",
+                    dataset="mars_combined_dataset",
                     image_dataset_path="params:image_dataset_path",
                     sync_tolerance="params:sync_tolerance",
                     max_timestamp_gap="params:max_timestamp_gap",
@@ -22,6 +41,6 @@ def create_pipeline(**_) -> Pipeline:
                     green_threshold="params:green_threshold",
                 ),
                 "mars_dataset_meta",
-            )
+            ),
         ]
     )
