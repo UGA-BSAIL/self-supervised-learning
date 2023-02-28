@@ -263,13 +263,15 @@ class FrameSelector:
         id_key = MarsMetadata.FILE_ID.value
         return anchor_row[id_key], positive_row[id_key], negative_row[id_key]
 
-    def get_all_views(self, frame_index: int) -> List[str]:
+    def get_all_views(self, frame_index: int, jitter_by: int = 0) -> List[str]:
         """
         Selects the corresponding frames from all cameras at a particular
         time.
 
         Args:
             frame_index: The index of the frames.
+            jitter_by: Maximum amount to jitter frame indices by. This adds
+                some more variation to the data.
 
         Returns:
             The file IDs of the two frames it selected.
@@ -279,8 +281,25 @@ class FrameSelector:
         camera_metadata = [
             self.__by_camera.get_group(c) for c in self.__by_camera.groups
         ]
+
+        # Jitter the indices, if specified.
+        main_row = camera_metadata[0].iloc[frame_index]
+        clip, frame_num = main_row.name
+        clip_metadata = [m.loc[clip] for m in camera_metadata]
+
+        min_frame_num = clip_metadata[0].iloc[0].name
+        max_frame_num = clip_metadata[0].iloc[-1].name
+        min_frame_num = max(min_frame_num, frame_num - jitter_by)
+        max_frame_num = min(max_frame_num, frame_num + jitter_by)
+        frame_nums = [
+            random.randint(min_frame_num, max_frame_num) for _ in clip_metadata
+        ]
+
         # Select the frames.
-        rows = [m.iloc[frame_index] for m in camera_metadata]
+        rows_indices = clip_metadata[0].index.get_indexer(
+            frame_nums, method="nearest"
+        )
+        rows = [m.iloc[i] for i, m in zip(rows_indices, clip_metadata)]
 
         id_key = MarsMetadata.FILE_ID.value
         return [r[id_key] for r in rows]

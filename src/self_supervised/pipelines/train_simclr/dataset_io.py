@@ -123,6 +123,7 @@ class MultiViewDataset(Dataset):
         frames: FrameSelector,
         image_folder: Path,
         augmentation: Callable[[Tensor], Tensor] = lambda x: x,
+        max_jitter: int = 0,
         decode_device: str = "cpu",
     ):
         """
@@ -130,6 +131,9 @@ class MultiViewDataset(Dataset):
             frames: The frame selector to use for extracting frames.
             image_folder: The folder that contains all the dataset images.
             augmentation: The data augmentation to apply to the frames.
+            max_jitter: Maximum number of frames to jitter the camera views
+                by, in either direction. This can add some more variation to
+                the data.
             decode_device: The device to use for decoding images.
 
         """
@@ -138,6 +142,7 @@ class MultiViewDataset(Dataset):
         self.__image_folder = image_folder
         self.__augmentation = augmentation
         self.__decode_device = decode_device
+        self.__max_jitter = max_jitter
 
     def __len__(self) -> int:
         return self.__frames.num_frames
@@ -170,7 +175,9 @@ class MultiViewDataset(Dataset):
             dimension.
 
         """
-        frame_ids = self.__frames.get_all_views(index)
+        frame_ids = self.__frames.get_all_views(
+            index, jitter_by=self.__max_jitter
+        )
 
         # Read the images.
         return [self.__read_single_image(f) for f in frame_ids]

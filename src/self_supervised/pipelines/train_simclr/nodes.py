@@ -234,7 +234,10 @@ def build_model(yolo_description: Dict[str, Any]) -> nn.Module:
 
 
 def load_dataset(
-    *, image_folder: Union[Path, str], metadata: pd.DataFrame
+    *,
+    image_folder: Union[Path, str],
+    metadata: pd.DataFrame,
+    max_frame_jitter: int = 0,
 ) -> data.Dataset:
     """
     Loads the training dataset.
@@ -242,6 +245,8 @@ def load_dataset(
     Args:
         image_folder: The path to the training images.
         metadata: The metadata associated with this dataset.
+        max_frame_jitter: Maximum amount of temporal jitter to apply when
+            selecting frames.
 
     Returns:
         The dataset that it loaded.
@@ -258,6 +263,7 @@ def load_dataset(
     paired_frames = MultiViewDataset(
         frames=frame_selector,
         image_folder=image_folder,
+        max_jitter=max_frame_jitter,
     )
 
     return paired_frames
@@ -307,12 +313,12 @@ def train_model(
     augmentation = Compose(
         [
             RandomResizedCrop(
-                410, scale=(0.5, 1.0), interpolation=InterpolationMode.NEAREST
+                410, scale=(0.4, 1.0), interpolation=InterpolationMode.NEAREST
             ),
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=9, interpolation=InterpolationMode.NEAREST),
+            RandAugment(magnitude=10, interpolation=InterpolationMode.NEAREST),
         ]
     )
     training_loop = TrainingLoop(

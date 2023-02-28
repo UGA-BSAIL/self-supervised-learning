@@ -19,6 +19,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                     batch_size="params:batch_size",
                     learning_rate="params:learning_rate",
                     temperature="params:temperature",
+                    max_frame_jitter="params:max_frame_jitter",
                 ),
                 None,
             ),
@@ -28,6 +29,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                 dict(
                     image_folder="params:mars_image_folder",
                     metadata="mars_dataset_meta",
+                    max_frame_jitter="params:max_frame_jitter",
                 ),
                 "training_data",
             ),

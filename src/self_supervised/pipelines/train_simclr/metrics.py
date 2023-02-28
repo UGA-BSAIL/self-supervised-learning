@@ -62,4 +62,4 @@ class ProxyClassAccuracy(BinaryAccuracy):
         for i, (left, right) in enumerate(all_pairs):
             total_acc += self.__pair_accuracy(left, right)
 
-        return total_acc / i
+        return total_acc / (i + 1)

@@ -31,7 +31,7 @@ initial_model:
 # Trained model
 trained_model:
   versioned: True
-  type: self_supervised.data_sets.PytorchModelDataSet
+  type: self_supervised.extras.datasets.PytorchModelDataSet
   filepath: ${output_data_dir}/06_models/last.pt
 
 # Training dataset
