@@ -25,8 +25,11 @@ yolov5_l_description:
 
 # Initial, untrained model
 initial_model:
-  type: MemoryDataSet
-  copy_mode: assign
+  #type: MemoryDataSet
+  #copy_mode: assign
+  versioned: True
+  type: self_supervised.extras.datasets.PytorchModelDataSet
+  filepath: data/06_models/initial.pt
 
 # Trained model
 trained_model:
