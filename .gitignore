@@ -13,7 +13,7 @@ conf/**/*credentials*
 data/*
 !data/01_raw/
 data/01_raw/*
-!data/01_raw/mars_dataset*.yml
+!data/01_raw/*dataset*.yml
 !data/01_raw/yolov5*.yml
 
 logs/**

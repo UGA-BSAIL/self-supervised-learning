@@ -23,10 +23,19 @@ def create_pipeline(**_) -> Pipeline:
                 "mars_flower_dataset_rs_spec",
                 "mars_flower_dataset_rs",
             ),
+            node(
+                load_from_spec,
+                "gpheno_2020_dataset_spec",
+                "gpheno_flower_dataset",
+            ),
             # Combine into one.
             node(
                 merge_datasets,
-                ["mars_flower_dataset_rs", "mars_flower_dataset"],
+                [
+                    "mars_flower_dataset_rs",
+                    "gpheno_flower_dataset",
+                    "mars_flower_dataset",
+                ],
                 "mars_combined_dataset",
             ),
             # Build the dataset.

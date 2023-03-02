@@ -1,0 +1,36 @@
+# Contains specifications for the files in the GPhenoVision 2020 dataset.
+dataset:
+  # All paths will be relative to this.
+  root: "/home/daniel/lab_share/raw_data/2020/images/ground"
+  # All the sessions that make up the dataset.
+  sessions:
+    - path: 2020-08-11/Images  # Path to the session videos.
+      cameras:
+        camera0:
+          # Video file for the camera.
+          video: VC/P1040540.MP4
+        camera1:
+          video: VL/P1060047.MP4
+        camera2:
+          video: VR/P1040661.MP4
+
+    - path: 2020-08-13/Images
+      cameras:
+        camera0:
+          video: VC/P1040582.MP4
+        camera1:
+          video: VL/P1060096.MP4
+        camera2:
+          video: VR/P1040705.MP4
+
+    # Deliberately skipped 2020-08-19 because it overlaps with the validation
+    # dataset.
+
+    - path: 2020-08-24/Images
+      cameras:
+        camera0:
+          video: VC/P1050430.MP4
+        camera1:
+          video: VL/P1060259.MP4
+        camera2:
+          video: VR/P1050009.MP4

@@ -7,6 +7,10 @@ mars_flower_dataset_rs_spec:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/mars_dataset_flower_realsense.yml
 
+gpheno_2020_dataset_spec:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/gpheno_dataset_flower.yml
+
 # Metadata associated with the MARS dataset.
 mars_dataset_meta:
   type: pandas.FeatherDataSet

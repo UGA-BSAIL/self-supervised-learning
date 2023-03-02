@@ -333,6 +333,22 @@ class Camera(_YamlRep):
 
             yield timestamp, frame
 
+    def release(self) -> None:
+        """
+        Releases the video capture instances associated with this camera,
+        freeing some memory. There will be a time penalty the next time this
+        camera is used as the capture instances have to be recreated.
+
+        """
+        self.__frame_at_index.cache_clear()
+
+        try:
+            del self.__video_capture
+            logger.debug("Releasing capture for {}.", self.video_path)
+        except AttributeError:
+            # It wasn't initialized. Ignore.
+            pass
+
 
 class Session(_YamlRep):
     """
@@ -432,6 +448,10 @@ class Session(_YamlRep):
                     break
 
             yield timestamp, frames
+
+        # Release camera memory.
+        for camera in self.__cameras:
+            camera.release()
 
 
 class Dataset(_YamlRep):
