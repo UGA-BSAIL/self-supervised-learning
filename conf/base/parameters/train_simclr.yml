@@ -1,4 +1,4 @@
 # Temperature parameter to use for the loss.
 temperature: 0.1
 # Amount of temporal jitter to apply to frame selections.
-max_frame_jitter: 5
+max_frame_jitter: 0
