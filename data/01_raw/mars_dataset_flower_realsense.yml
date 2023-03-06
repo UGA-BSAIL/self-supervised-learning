@@ -214,22 +214,6 @@ dataset:
       path: 2022-08-23/realsense
     - cameras:
         camera0:
-          video: color_img1_20220823151148664337.avi
-        camera1:
-          video: color_img2_20220823151148664337.avi
-        camera2:
-          video: color_img3_20220823151148664337.avi
-      path: 2022-08-23/realsense
-    - cameras:
-        camera0:
-          video: color_img1_20220823151316071374.avi
-        camera1:
-          video: color_img2_20220823151316071374.avi
-        camera2:
-          video: color_img3_20220823151316071374.avi
-      path: 2022-08-23/realsense
-    - cameras:
-        camera0:
           video: color_img1_20220830162825891834.avi
         camera1:
           video: color_img2_20220830162825891834.avi
