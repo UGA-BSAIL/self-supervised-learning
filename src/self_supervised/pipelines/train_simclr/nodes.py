@@ -27,7 +27,7 @@ from torchvision.transforms import (
 
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
-from .dataset_io import MultiViewDataset
+from .dataset_io import TemporalMultiViewDataset
 from .losses import FullGraphLoss, NtXentLoss
 from .metrics import ProxyClassAccuracy
 
@@ -260,7 +260,7 @@ def load_dataset(
         positive_time_range=(0.0, 0.0),
         negative_time_range=(0.0, 0.0),
     )
-    paired_frames = MultiViewDataset(
+    paired_frames = TemporalMultiViewDataset(
         frames=frame_selector,
         image_folder=image_folder,
         max_jitter=max_frame_jitter,

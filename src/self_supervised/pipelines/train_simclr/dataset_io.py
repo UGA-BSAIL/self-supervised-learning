@@ -3,8 +3,9 @@ Utilities for loading the image data.
 """
 
 
+import random
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional, Tuple
 
 import pandas as pd
 import torch
@@ -181,3 +182,42 @@ class MultiViewDataset(Dataset):
 
         # Read the images.
         return [self.__read_single_image(f) for f in frame_ids]
+
+
+class TemporalMultiViewDataset(MultiViewDataset):
+    """
+    A variation of the `MultiViewDataset` that also includes nearby
+    frames as additional views.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        frame_step_range: Tuple[int, int] = (1, 3),
+        **kwargs: Any,
+    ):
+        """
+
+        Args:
+            *args: Will be forwarded to the superclass.
+            frame_step_range: Minimum and maximum number of frames to step
+                forward and backward in time to generate alternate views.
+            **kwargs: Will be forwarded to the superclass.
+
+        """
+        super().__init__(*args, **kwargs)
+
+        self.__frame_step_range = frame_step_range
+
+    def __getitem__(self, index: int) -> List[Tensor]:
+        # Step forwards and backwards to get additional views.
+        forward_step = random.randint(*self.__frame_step_range)
+        backward_step = random.randint(*self.__frame_step_range)
+        forward_index = min(index + forward_step, len(self) - 1)
+        backward_index = max(0, index - backward_step)
+
+        backward_views = super().__getitem__(backward_index)
+        standard_views = super().__getitem__(index)
+        forward_views = super().__getitem__(forward_index)
+
+        return backward_views + standard_views + forward_views
