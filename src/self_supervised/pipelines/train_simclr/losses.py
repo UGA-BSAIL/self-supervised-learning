@@ -37,7 +37,9 @@ def compute_all_similarities(
     return torch.reshape(similarities, (batch_size, batch_size))
 
 
-def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
+def compute_loss_all_similarities(
+    similarities: Tensor, num_views: int = 2
+) -> Tensor:
     """
     Computes the cross-entropy loss across all similarities.
     In on-diagonal cases, it assumes that the similarity should be high.
@@ -45,8 +47,12 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
 
     Args:
         similarities: The matrix of similarities for this batch. Should
-            have shape `(2N, 2N)`. If we are using a temperature parameter, they
-            should have already been scaled by that.
+            have shape `(2N, 2N)` (if `num_views` == 2). If we are using a
+            temperature parameter, they should have already been scaled by that.
+        num_views: The total number of views present in this similarity
+            matrix. Setting this >2 allows us to generalize to more than two
+            views. In this case, the input should have a shape that is a
+            multiple of `num_views`.
 
     Returns:
         The reduced loss for all the similarities.
@@ -65,16 +71,33 @@ def compute_loss_all_similarities(similarities: Tensor) -> Tensor:
         denominators = torch.sum(denom_terms, dim=1)
 
         # Compute the numerators. These will not be on the main diagonal,
-        # (which is all ones), but instead the diagonal of either the
-        # top right or bottom left quadrant, which represents the similarities
-        # between corresponding left and right features.
-        numerators = torch.diagonal(exp_similarities_, num_examples // 2)
-        # Since the matrix is symmetric, we can just read one of these
-        # diagonals and then tile it.
-        numerators = numerators.tile(2)
+        # (which is all ones). The diagonals that we use for these depend on
+        # the number of views, and indicate positions with corresponding
+        # elements from two different views.
+        numerators = torch.tensor(
+            [], device=exp_similarities_.device, dtype=exp_similarities_.dtype
+        )
+        ordered_denominators = torch.tensor(numerators)
+        diagonal_step = num_examples // num_views
+        for diagonal_index in range(
+            diagonal_step, num_examples, diagonal_step
+        ):
+            diagonal = torch.diagonal(exp_similarities_, diagonal_index)
+            diagonal_length = diagonal.shape[0]
+            # The matrix is symmetric, so add the numerator twice to account
+            # for both sides.
+            numerators = torch.cat((numerators, diagonal, diagonal))
+            # Set the corresponding denominators as well, for both sides.
+            ordered_denominators = torch.cat(
+                (
+                    ordered_denominators,
+                    denominators[0:diagonal_length],
+                    denominators[(num_examples - diagonal_length) :],
+                )
+            )
 
         # Compute per-example losses.
-        return -torch.log(numerators / denominators)
+        return -torch.log(numerators / ordered_denominators)
 
     exp_similarities = torch.exp(similarities)
     return torch.mean(_per_example_losses(exp_similarities))
@@ -84,6 +107,9 @@ class NtXentLoss(nn.Module):
     """
     Implements the NT-Xent loss from
     http://proceedings.mlr.press/v119/chen20j/chen20j.pdf
+
+    Note that I have extended this to support arbitrary numbers of
+    corresponding features.
     """
 
     def __init__(self, temperature: float = 1.0):
@@ -98,46 +124,7 @@ class NtXentLoss(nn.Module):
 
         self.temperature = temperature
 
-    def forward(self, left_features: Tensor, right_features: Tensor) -> Tensor:
-        """
-        Computes the loss.
-
-        Args:
-            left_features: The first set of features, with one set of
-                augmentations.
-            right_features: The features from the same images with different
-                augmentations.
-
-        Returns:
-            The computed loss.
-
-        """
-        # Compute both similarities between right and left features, and
-        # similarities between negative pairs on the same side.
-        combined = torch.cat((left_features, right_features))
-        similarities = compute_all_similarities(combined, combined)
-        similarities /= self.temperature
-
-        return compute_loss_all_similarities(similarities)
-
-
-class FullGraphLoss(nn.Module):
-    """
-    Generalizes a pair-wise loss to a set by computing the loss over
-    all possible pairs in the set.
-    """
-
-    def __init__(self, pair_loss: nn.Module):
-        """
-        Args:
-            pair_loss: The pair-wise loss to wrap.
-
-        """
-        super().__init__()
-
-        self.pair_loss = pair_loss
-
-    def forward(self, feature_set: List[Tensor]) -> Tensor:
+    def forward(self, *feature_set: Tensor) -> Tensor:
         """
         Computes the loss.
 
@@ -148,11 +135,12 @@ class FullGraphLoss(nn.Module):
             The computed loss.
 
         """
-        total_loss = torch.scalar_tensor(0, device=feature_set[0].device)
+        # Compute both similarities between right and left features, and
+        # similarities between negative pairs on the same side.
+        combined = torch.cat(feature_set)
+        similarities = compute_all_similarities(combined, combined)
+        similarities /= self.temperature
 
-        # Compute similarities between every pair.
-        all_pairs = itertools.combinations(feature_set, 2)
-        for left, right in all_pairs:
-            total_loss += self.pair_loss(left, right)
-
-        return total_loss
+        return compute_loss_all_similarities(
+            similarities, num_views=len(feature_set)
+        )

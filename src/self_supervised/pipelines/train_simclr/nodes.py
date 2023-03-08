@@ -28,7 +28,7 @@ from torchvision.transforms import (
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
 from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
-from .losses import FullGraphLoss, NtXentLoss
+from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -184,7 +184,7 @@ class TrainingLoop:
             # Compute loss.
             with torch.autocast(device_type=DEVICE, dtype=torch.float16):
                 view_preds = self.__model(*view_inputs)
-                loss = self.__loss_fn(view_preds)
+                loss = self.__loss_fn(*view_preds)
 
             if batch_i == 0:
                 self.__log_first_batch(view_inputs=view_inputs)
@@ -290,8 +290,7 @@ def train_model(
         The trained model.
 
     """
-    pair_loss = NtXentLoss(temperature=temperature)
-    loss_fn = FullGraphLoss(pair_loss).to(DEVICE)
+    loss_fn = NtXentLoss(temperature=temperature)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
     scaler = GradScaler()
