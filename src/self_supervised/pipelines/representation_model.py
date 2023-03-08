@@ -15,10 +15,11 @@ class ProjectionHead(nn.Module):
     The projection head `g()` that gets applied to the representations.
     """
 
-    def __init__(self, *, num_inputs: int):
+    def __init__(self, *, num_inputs: int, num_outputs: int = 256):
         """
         Args:
             num_inputs: The number of input features to the projection.
+            num_outputs: The number of output features from the projection.
 
         """
         super().__init__()
@@ -26,12 +27,16 @@ class ProjectionHead(nn.Module):
         # Global average pooling.
         self.average_pool = nn.AdaptiveAvgPool2d(1)
 
+        self.hidden = nn.Linear(num_inputs, num_outputs)
+        self.bn = nn.BatchNorm1d(num_inputs)
+        self.act = nn.ReLU()
+
     def forward(self, inputs: Tensor) -> Tensor:
         # Perform global average pooling.
         pooled = self.average_pool(inputs)
         pooled = pooled.squeeze(2).squeeze(2)
 
-        return pooled
+        return self.hidden(self.act(self.bn(pooled)))
 
 
 class ConvNeXtSmallEncoder(nn.Module):
