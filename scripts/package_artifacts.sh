@@ -32,7 +32,7 @@ function package_artifacts() {
   zip artifacts/output.zip *_model_train."${JOB_ID}".*
 
   # Grab the models and reports
-  zip -r artifacts/models.zip "${job_dir}/output_data/06_models/"
+  zip -r artifacts/models.zip "${job_dir}/output_data/06_models/" "${job_dir}/checkpoints/"
 
   # Grab the logs.
   zip -r artifacts/logs.zip "${job_dir}/logs/"
