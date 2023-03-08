@@ -94,7 +94,7 @@ class PairedAugmentedDataset(Dataset):
         # Same as the underlying image dataset.
         return len(self.__dataset)
 
-    def __getitem__(self, item: int) -> Tensor:
+    def __getitem__(self, item: int) -> Tuple[Tensor, Tensor]:
         """
         Args:
             item: The index of the image in the dataset.
@@ -110,7 +110,7 @@ class PairedAugmentedDataset(Dataset):
         augmentation_1 = self.__augmentation(image)
         augmentation_2 = self.__augmentation(image)
 
-        return torch.stack((augmentation_1, augmentation_2))
+        return augmentation_1, augmentation_2
 
 
 class MultiViewDataset(Dataset):
