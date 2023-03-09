@@ -1,5 +1,4 @@
-import itertools
-from typing import List
+import math
 
 import torch
 import torch.nn.functional as F
@@ -96,6 +95,9 @@ def compute_loss_all_similarities(
                 )
             )
 
+        # Multiply the numerators to balance out the fact that each pair of
+        # views will provide an additional positive example.
+        numerators *= math.comb(num_views, 2)
         # Compute per-example losses.
         return -torch.log(numerators / ordered_denominators)
 
