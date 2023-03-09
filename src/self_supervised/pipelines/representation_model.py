@@ -15,7 +15,7 @@ class ProjectionHead(nn.Module):
     The projection head `g()` that gets applied to the representations.
     """
 
-    def __init__(self, *, num_inputs: int, num_outputs: int = 256):
+    def __init__(self, *, num_inputs: int, num_outputs: int = 2048):
         """
         Args:
             num_inputs: The number of input features to the projection.
@@ -95,7 +95,7 @@ class YoloEncoder(nn.Module):
     """
 
     def __init__(
-        self, model_description: Dict[str, Any], num_features: int = 256
+        self, model_description: Dict[str, Any], num_features: int = 2048
     ):
         """
         Args:
@@ -127,7 +127,8 @@ class RepresentationModel(nn.Module):
         self,
         *,
         encoder: nn.Module,
-        num_features: int = 256,
+        num_features: int = 2048,
+        num_outputs: int = 256
     ):
         """
         Args:
@@ -135,12 +136,15 @@ class RepresentationModel(nn.Module):
                 input images and used to generate representations.
             num_features: The number of features that we expect to be produced
                 by the encoder.
+            num_outputs: The number of outputs we want for the loss.
 
         """
         super().__init__()
 
         self.encoder = encoder
-        self.projection = ProjectionHead(num_inputs=num_features)
+        self.projection = ProjectionHead(
+            num_inputs=num_features, num_outputs=num_outputs
+        )
 
     def forward(self, *images: Iterable[Tensor]) -> Tuple[Tensor, ...]:
         """
