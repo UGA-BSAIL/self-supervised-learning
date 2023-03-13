@@ -27,7 +27,7 @@ from torchvision.transforms import (
 
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
-from .dataset_io import PairedAugmentedDataset, SingleFrameDataset
+from .dataset_io import MultiViewDataset
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
 
@@ -254,13 +254,17 @@ def load_dataset(
     """
     image_folder = Path(image_folder)
 
-    single_frames = SingleFrameDataset(
-        mars_metadata=metadata, image_folder=image_folder
+    # Specify 0 for the time ranges to use even short clips.
+    frame_selector = FrameSelector(
+        metadata,
+        positive_time_range=(0.0, 0.0),
+        negative_time_range=(0.0, 0.0),
     )
-    paired_frames = PairedAugmentedDataset(
-        image_dataset=single_frames,
-        # Augmentation will be applied later, on the GPU.
-        augmentation=lambda x: x,
+    paired_frames = MultiViewDataset(
+        frames=frame_selector,
+        image_folder=image_folder,
+        max_jitter=max_frame_jitter,
+        all_views=False,
     )
 
     return paired_frames
