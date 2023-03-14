@@ -264,7 +264,6 @@ def load_dataset(
         frames=frame_selector,
         image_folder=image_folder,
         max_jitter=max_frame_jitter,
-        all_views=False,
     )
 
     return paired_frames
