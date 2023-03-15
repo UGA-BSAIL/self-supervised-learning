@@ -58,14 +58,16 @@ def compute_loss_all_similarities(
 
     """
     num_examples, _ = similarities.shape
+    diagonal_step = num_examples // num_views
 
     def _per_example_losses(exp_similarities_: Tensor) -> Tensor:
-        # Computes losses for each positive pair.
-        denom_mask = 1.0 - torch.eye(
-            num_examples, device=exp_similarities_.device
+        # Compute the denominators. We exclude self-similarities, and also
+        # corresponding images from pairs of views other than the one in the
+        # numerator.
+        denom_sub_matrix_mask = 1.0 - torch.eye(
+            diagonal_step, device=exp_similarities_.device
         )
-
-        # Compute the denominators.
+        denom_mask = torch.tile(denom_sub_matrix_mask, (num_views, num_views))
         denom_terms = denom_mask * exp_similarities_
         denominators = torch.sum(denom_terms, dim=1)
 
@@ -77,7 +79,6 @@ def compute_loss_all_similarities(
             [], device=exp_similarities_.device, dtype=exp_similarities_.dtype
         )
         ordered_denominators = torch.tensor(numerators)
-        diagonal_step = num_examples // num_views
         for diagonal_index in range(
             diagonal_step, num_examples, diagonal_step
         ):
@@ -95,11 +96,9 @@ def compute_loss_all_similarities(
                 )
             )
 
-        # Multiply the numerators to balance out the fact that each pair of
-        # views will provide an additional positive example.
-        numerators *= math.comb(num_views, 2)
-        # Compute per-example losses.
-        return -torch.log(numerators / ordered_denominators)
+        # Compute per-example losses. The denominators should have one term
+        # that is the same as the numerators, but don't, so we add them.
+        return -torch.log(numerators / (ordered_denominators + numerators))
 
     exp_similarities = torch.exp(similarities)
     return torch.mean(_per_example_losses(exp_similarities))
