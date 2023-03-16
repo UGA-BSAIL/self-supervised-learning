@@ -31,6 +31,8 @@ function package_artifacts() {
   # Grab the job output.
   zip artifacts/output.zip *_model_train."${JOB_ID}".*
 
+  # Remove some checkpoints to save space.
+  rm "${job_dir}/checkpoints/checkpoint_2*" "${job_dir}/checkpoints/checkpoint_4*"
   # Grab the models and reports
   zip -r artifacts/models.zip "${job_dir}/output_data/06_models/" "${job_dir}/checkpoints/"
 

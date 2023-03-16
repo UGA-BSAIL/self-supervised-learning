@@ -3,6 +3,7 @@ Utilities for loading the image data.
 """
 
 
+import itertools
 import random
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
@@ -199,7 +200,8 @@ class TemporalMultiViewDataset(MultiViewDataset):
     def __init__(
         self,
         *args: Any,
-        frame_step_range: Tuple[int, int] = (1, 3),
+        frame_step_range: Tuple[int, int] = (-3, 3),
+        num_extra_views: int,
         **kwargs: Any,
     ):
         """
@@ -207,23 +209,51 @@ class TemporalMultiViewDataset(MultiViewDataset):
         Args:
             *args: Will be forwarded to the superclass.
             frame_step_range: Minimum and maximum number of frames to step
-                forward and backward in time to generate alternate views.
+                forward in time to generate additional views.
+            num_extra_views: The number of extra views to generate.
             **kwargs: Will be forwarded to the superclass.
 
         """
         super().__init__(*args, **kwargs)
 
         self.__frame_step_range = frame_step_range
+        self.__num_extra_views = num_extra_views
+
+    def __get_nearby_index(self, base_index: int) -> int:
+        """
+        Gets a nearby index to use for additional views.
+
+        Args:
+            base_index: The base index we are sampling from.
+
+        Returns:
+            The new index to use.
+
+        """
+        index = base_index + random.randint(*self.__frame_step_range)
+        index = min(index, len(self) - 1)
+        index = max(0, index)
+
+        return index
 
     def __getitem__(self, index: int) -> List[Tensor]:
-        # Step forwards and backwards to get additional views.
-        forward_step = random.randint(*self.__frame_step_range)
-        backward_step = random.randint(*self.__frame_step_range)
-        forward_index = min(index + forward_step, len(self) - 1)
-        backward_index = max(0, index - backward_step)
+        views = super().__getitem__(index)
 
-        backward_views = super().__getitem__(backward_index)
-        standard_views = super().__getitem__(index)
-        forward_views = super().__getitem__(forward_index)
+        other_view_indices = [
+            self.__get_nearby_index(index)
+            for _ in range(self.__num_extra_views)
+        ]
 
-        return backward_views + standard_views + forward_views
+        # This sampling strategy is to ensure we pull evenly from all the
+        # cameras.
+        camera_indices = list(range(len(views)))
+        random.shuffle(camera_indices)
+        camera_indices = itertools.cycle(camera_indices)
+
+        for camera_index, frame_index in zip(
+            camera_indices, other_view_indices
+        ):
+            other_views = super().__getitem__(frame_index)
+            views.append(other_views[camera_index])
+
+        return views
