@@ -4,7 +4,7 @@ Nodes for the `train_simclr` pipeline.
 
 
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Union
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ from torchvision.transforms import (
 
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
-from .dataset_io import TemporalMultiViewDataset
+from .dataset_io import MultiViewDataset
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
 
@@ -260,11 +260,11 @@ def load_dataset(
         positive_time_range=(0.0, 0.0),
         negative_time_range=(0.0, 0.0),
     )
-    paired_frames = TemporalMultiViewDataset(
+    paired_frames = MultiViewDataset(
         frames=frame_selector,
         image_folder=image_folder,
         max_jitter=max_frame_jitter,
-        num_extra_views=2,
+        all_views=False,
     )
 
     return paired_frames
