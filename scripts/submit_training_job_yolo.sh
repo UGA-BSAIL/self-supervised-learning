@@ -57,5 +57,5 @@ source scripts/load_common.sh
 poetry run python -m yolov5.train --cfg data/01_raw/yolov5_l.yml --epochs 100 \
   --batch-size 128 --imgsz 640 --cache ram --workers 8 \
   --project self_supervised --name yolo_val --entity djpetti \
-  --weights simclr_yolov5l.pt --freeze 10 \
+  --weights "" --freeze 10 \
   --data data/05_model_input/flower_dataset/dataset_aerial.yaml
