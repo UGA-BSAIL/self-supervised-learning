@@ -42,3 +42,5 @@ trained_model:
 training_data:
   type: MemoryDataSet
   copy_mode: assign
+
+# Learned representations for the dataset images.
