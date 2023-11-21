@@ -2,7 +2,13 @@ from typing import Dict
 
 from kedro.pipeline import Pipeline
 
-from .pipelines import eda, prepare_mars_dataset, train_simclr, train_temporal
+from .pipelines import (
+    active_learning,
+    eda,
+    prepare_mars_dataset,
+    train_simclr,
+    train_temporal,
+)
 
 
 def register_pipelines() -> Dict[str, Pipeline]:
@@ -16,6 +22,7 @@ def register_pipelines() -> Dict[str, Pipeline]:
     mars_pipeline = prepare_mars_dataset.create_pipeline()
     simclr_pipeline = train_simclr.create_pipeline()
     temporal_pipeline = train_temporal.create_pipeline()
+    active_learning_pipeline = active_learning.create_pipeline()
 
     return {
         "__default__": simclr_pipeline,
@@ -23,4 +30,5 @@ def register_pipelines() -> Dict[str, Pipeline]:
         "prepare_mars_dataset": mars_pipeline,
         "train_simclr": simclr_pipeline,
         "train_temporal": temporal_pipeline,
+        "active_learning": active_learning_pipeline,
     }

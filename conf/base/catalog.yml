@@ -38,9 +38,20 @@ trained_model:
   type: self_supervised.extras.datasets.PytorchModelDataSet
   filepath: ${output_data_dir}/06_models/last.pt
 
+trained_model_input:
+  versioned: True
+  type: self_supervised.extras.datasets.PytorchModelDataSet
+  filepath: data/06_models/last.pt
+
 # Training dataset
 training_data:
   type: MemoryDataSet
   copy_mode: assign
 
 # Learned representations for the dataset images.
+mars_image_reps:
+  type: PartitionedDataSet
+  path: data/03_primary/mars_image_reps
+  dataset:
+    type: pandas.FeatherDataSet
+  filename_suffix: ".feather"

@@ -1,12 +1,13 @@
+from functools import partial
 from pathlib import Path
 from typing import Callable, Dict
-from functools import partial
 
+import pandas as pd
 import torch
+from loguru import logger
 from torch import nn
 from torchvision.io import read_image
 from torchvision.transforms.functional import resize
-import pandas as pd
 
 from ..frame_selector import FrameSelector
 
@@ -24,7 +25,7 @@ def _get_image_rep(image_path: Path, *, model: nn.Module) -> torch.Tensor:
         The image representation.
 
     """
-    image = read_image(image_path.as_posix())
+    image = read_image(image_path.as_posix()).cuda()
     image.requires_grad = False
     image = resize(image, (512, 512))
     image = image.to(torch.float) / 255
@@ -34,7 +35,7 @@ def _get_image_rep(image_path: Path, *, model: nn.Module) -> torch.Tensor:
 
 
 def save_image_reps(
-    *, metadata: pd.DataFrame, root_path: Path, model: nn.Module
+    *, metadata: pd.DataFrame, root_path: Path | str, model: nn.Module
 ) -> Dict[str, Callable[[], pd.DataFrame]]:
     """
     Computes the image representations for all the images in a dataset.
@@ -48,14 +49,24 @@ def save_image_reps(
         The dataset containing the image representations.
 
     """
+    root_path = Path(root_path)
     frame_selector = FrameSelector(mars_metadata=metadata)
 
+    model = model.eval()
+
     def _get_reps(index: int) -> pd.DataFrame:
+        logger.info("Saving reps for frame {}...", index)
+
         view_ids = frame_selector.get_all_views(index)
         # Get the image reps for all views.
         view_reps = [
-            _get_image_rep(root_path / v, model=model) for v in view_ids
+            _get_image_rep(root_path / f"{v}.jpg", model=model)
+            for v in view_ids
         ]
+        view_reps = {
+            f"view{j}": v.cpu().numpy().squeeze()
+            for j, v in enumerate(view_reps)
+        }
 
         return pd.DataFrame(data=view_reps)
 
