@@ -55,3 +55,9 @@ mars_image_reps:
   dataset:
     type: pandas.FeatherDataSet
   filename_suffix: ".feather"
+
+# Optimal image selection ordering to use for active learning.
+image_order:
+  type: yaml.YAMLDataSet
+  filepath: data/08_reporting/image_order.yml
+  versioned: True

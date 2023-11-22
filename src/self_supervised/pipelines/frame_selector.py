@@ -274,7 +274,7 @@ class FrameSelector:
                 some more variation to the data.
 
         Returns:
-            The file IDs of the two frames it selected.
+            The file IDs of the views that it selected.
 
         """
         # Get per-camera metadata.

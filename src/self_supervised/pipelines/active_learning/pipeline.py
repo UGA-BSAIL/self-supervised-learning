@@ -6,7 +6,7 @@ order for labelling.
 
 from kedro.pipeline import Pipeline, node, pipeline
 
-from .nodes import save_image_reps
+from .nodes import find_optimal_order, save_image_reps
 
 
 def create_pipeline(**_) -> Pipeline:
@@ -20,6 +20,14 @@ def create_pipeline(**_) -> Pipeline:
                     model="trained_model_input",
                 ),
                 "mars_image_reps",
-            )
+            ),
+            node(
+                find_optimal_order,
+                dict(
+                    reps="mars_image_reps",
+                    metadata="mars_dataset_meta",
+                ),
+                "image_order",
+            ),
         ]
     )
