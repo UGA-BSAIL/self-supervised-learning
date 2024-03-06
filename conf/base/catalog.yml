@@ -27,6 +27,11 @@ yolov5_l_description:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/yolov5_l.yml
 
+# Description of the YOLOv8-L model.
+yolov8_l_description:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/yolov8_l.yml
+
 # Initial, untrained model
 initial_model:
   type: MemoryDataSet
