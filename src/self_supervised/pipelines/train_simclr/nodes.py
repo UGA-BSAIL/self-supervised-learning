@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, Iterable, List, Union
 import numpy as np
 import pandas as pd
 import torch
-import wandb
 from loguru import logger
 from torch import Tensor, nn
 from torch.cuda.amp import GradScaler
@@ -25,9 +24,16 @@ from torchvision.transforms import (
     RandomResizedCrop,
 )
 
+import wandb
+
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
-from .dataset_io import MultiViewDataset
+from .dataset_io import (
+    MultiViewDataset,
+    PairedAugmentedDataset,
+    SingleFrameDataset,
+    TemporalMultiViewDataset,
+)
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
 
@@ -238,6 +244,8 @@ def load_dataset(
     image_folder: Union[Path, str],
     metadata: pd.DataFrame,
     max_frame_jitter: int = 0,
+    enable_multi_view: bool = False,
+    num_views: int = 3,
 ) -> data.Dataset:
     """
     Loads the training dataset.
@@ -247,6 +255,11 @@ def load_dataset(
         metadata: The metadata associated with this dataset.
         max_frame_jitter: Maximum amount of temporal jitter to apply when
             selecting frames.
+        enable_multi_view: Whether to enable training with views from
+            different cameras as positive pairs. Otherwise, it will use
+            vanilla SimCLR.
+        num_views: If multi-view training is enabled, how many views to use.
+            If >3, it will use temporal augmentation.
 
     Returns:
         The dataset that it loaded.
@@ -260,12 +273,33 @@ def load_dataset(
         positive_time_range=(0.0, 0.0),
         negative_time_range=(0.0, 0.0),
     )
-    paired_frames = MultiViewDataset(
-        frames=frame_selector,
-        image_folder=image_folder,
-        max_jitter=max_frame_jitter,
-        all_views=False,
-    )
+    if not enable_multi_view:
+        # Use vanilla SimCLR.
+        frame_dataset = SingleFrameDataset(
+            mars_metadata=metadata, image_folder=image_folder
+        )
+        paired_frames = PairedAugmentedDataset(
+            image_dataset=frame_dataset,
+            # We augment in the training loop.
+            augmentation=lambda x: x,
+        )
+    elif num_views <= 3:
+        # We don't need to add temporal augmentation.
+        paired_frames = MultiViewDataset(
+            frames=frame_selector,
+            image_folder=image_folder,
+            max_jitter=max_frame_jitter,
+            all_views=(num_views > 2),
+        )
+    else:
+        # We do need temporal augmentation.
+        paired_frames = TemporalMultiViewDataset(
+            frames=frame_selector,
+            image_folder=image_folder,
+            max_jitter=max_frame_jitter,
+            all_views=True,
+            num_extra_views=num_views - 3,
+        )
 
     return paired_frames
 

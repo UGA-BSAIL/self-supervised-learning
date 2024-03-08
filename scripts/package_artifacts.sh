@@ -12,6 +12,8 @@
 #SBATCH --mail-user=daniel.petti@uga.edu
 #SBATCH --output=ssl_model_package_artifacts.out    # Standard output log
 #SBATCH --error=ssl_model_package_artifacts.err     # Standard error log
+#SBATCH --account=lift-phenomics
+#SBATCH --qos=lift-phenomics
 
 set -e
 
@@ -23,7 +25,7 @@ fi
 # The job ID to collect artifacts from.
 JOB_ID=$1
 # Split the job ID on the dot.
-job_dir="/blue/cli2/$(whoami)/job_scratch/job_${JOB_ID}"
+job_dir="/blue/lift-phenomics/$(whoami)/job_scratch/job_${JOB_ID}"
 
 function package_artifacts() {
   mkdir artifacts
