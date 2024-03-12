@@ -31,10 +31,6 @@ LARGE_FILES_DIR="/blue/lift-phenomics/$(whoami)/ssl/"
 LOCAL_DATA_DIR="${SLURM_TMPDIR}/data/"
 
 function prepare_environment() {
-  # Copy the entire dataset to local scratch.
-  echo "Copying dataset..."
-  rsync -a "${LARGE_FILES_DIR}/data/"* "${LOCAL_DATA_DIR}"
-
   # Create the working directory for this job.
   job_dir="${OUTPUT_BASE_DIR}/job_${SLURM_JOB_ID}"
   mkdir "${job_dir}"
@@ -42,6 +38,10 @@ function prepare_environment() {
 
   # Copy the code.
   cp -Rd "${SLURM_SUBMIT_DIR}/"* "${job_dir}/"
+
+  # Copy the entire dataset to local scratch.
+  echo "Copying dataset..."
+  rsync -a "${LARGE_FILES_DIR}/data/"* "${LOCAL_DATA_DIR}"
 
   # Link to the input data directory and venv.
   rm -rf "${job_dir}/data"
