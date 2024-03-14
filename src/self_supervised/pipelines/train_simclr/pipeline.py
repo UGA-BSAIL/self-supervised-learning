@@ -35,7 +35,18 @@ def create_pipeline(**kwargs) -> Pipeline:
                 ),
                 "training_data",
             ),
-            node(build_model, "yolov8_l_description", "initial_model"),
+            node(
+                build_model,
+                dict(
+                    yolo_description="yolov8_l_description",
+                    moco="params:use_moco",
+                    rep_dims="params:rep_dims",
+                    queue_size="params:queue_size",
+                    momentum_weight="params:momentum_weight",
+                    temperature="params:temperature",
+                ),
+                "initial_model",
+            ),
             node(
                 train_model,
                 dict(

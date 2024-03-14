@@ -22,10 +22,14 @@ def compute_all_similarities(
         The pairwise similarities. Will be a matrix of shape `(batch, batch)`.
 
     """
-    assert left_features.shape == right_features.shape
-    assert (
-        left_features.device == right_features.device
-    ), "Features must be on same device."
+    assert left_features.shape == right_features.shape, (
+        f"Features must be the same shape, got {left_features.shape} and "
+        f"{right_features.shape}"
+    )
+    assert left_features.device == right_features.device, (
+        f"Features must be on same device, got "
+        f"{left_features.device} and {right_features.device}"
+    )
     batch_size, _ = left_features.shape
 
     left_repeated = torch.repeat_interleave(left_features, batch_size, dim=0)

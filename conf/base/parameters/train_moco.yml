@@ -1,0 +1,8 @@
+# Parameters specific to MoCo.
+
+# Dimension to use for the representation.
+rep_dims: 128
+# The size of the queue to use.
+queue_size: 65440
+# The momentum parameter.
+momentum_weight: 0.999

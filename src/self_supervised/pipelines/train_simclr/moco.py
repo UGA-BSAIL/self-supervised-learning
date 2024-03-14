@@ -38,8 +38,11 @@ class MoCo(nn.Module):
 
         # create the encoders
         # num_classes is the output fc dimension
-        self.encoder_q = base_encoder(num_outputs=dim)
-        self.encoder_k = base_encoder(num_outputs=dim)
+        encoder_q = base_encoder(num_outputs=dim)
+        with torch.no_grad():
+            encoder_k = base_encoder(num_outputs=dim)
+        self.add_module("encoder_q", encoder_q)
+        self.add_module("encoder_k", encoder_k)
 
         if mlp:  # hack: brute-force replacement
             dim_mlp = self.encoder_q.fc.weight.shape[1]
@@ -70,6 +73,7 @@ class MoCo(nn.Module):
         for param_q, param_k in zip(
             self.encoder_q.parameters(), self.encoder_k.parameters()
         ):
+            assert param_k.requires_grad is False
             param_k.data = param_k.data * self.m + param_q.data * (
                 1.0 - self.m
             )
@@ -77,7 +81,7 @@ class MoCo(nn.Module):
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys):
         # gather keys before updating queue
-        keys = concat_all_gather(keys)
+        # keys = concat_all_gather(keys)
 
         batch_size = keys.shape[0]
 
@@ -148,6 +152,8 @@ class MoCo(nn.Module):
 
         # compute query features
         q = self.encoder_q(im_q)  # queries: NxC
+        assert len(q) == 1
+        q = q[0]
         q = nn.functional.normalize(q, dim=1)
 
         # compute key features
@@ -157,7 +163,7 @@ class MoCo(nn.Module):
             # shuffle for making use of BN
             # im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)
 
-            k = self.encoder_k(im_k)  # keys: NxC
+            k = self.encoder_k(im_k)[0]  # keys: NxC
             k = nn.functional.normalize(k, dim=1)
 
             # undo shuffle
