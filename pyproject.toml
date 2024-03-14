@@ -26,6 +26,8 @@ wandb = "^0.13.9"
 torchmetrics = "^0.11.0"
 scikit-learn = "^1.2.1"
 segment-anything = {git = "https://github.com/facebookresearch/segment-anything.git"}
+ultralytics = "^8.1.24"
+pyyaml = "6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"

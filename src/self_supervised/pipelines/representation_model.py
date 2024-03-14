@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, Tuple
 
 from torch import Tensor, nn
 from torchvision.models import convnext_small, efficientnet_v2_s
-from yolov5.models.yolo import DetectionModel
+from ultralytics.models.yolo.detect.train import DetectionModel
 
 
 class ProjectionHead(nn.Module):

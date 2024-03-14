@@ -15,6 +15,7 @@ data/*
 data/01_raw/*
 !data/01_raw/*dataset*.yml
 !data/01_raw/yolov5*.yml
+!data/01_raw/yolov8*.yml
 
 logs/**
 

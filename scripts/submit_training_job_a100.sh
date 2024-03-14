@@ -14,6 +14,8 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --time=48:00:00
 #SBATCH --mem=40gb
+#SBATCH --account=lift-phenomics
+#SBATCH --qos=lift-phenomics
 #SBATCH --mail-user=djpetti@gmail.com
 #SBATCH --mail-type=END,FAIL
 #SBATCH --output=self_supervised_model_train.%j.out    # Standard output log
@@ -22,17 +24,13 @@
 set -e
 
 # Base directory we use for job output.
-OUTPUT_BASE_DIR="/blue/cli2/$(whoami)/job_scratch/"
+OUTPUT_BASE_DIR="/blue/lift-phenomics/$(whoami)/job_scratch/"
 # Directory where our data and venv are located.
-LARGE_FILES_DIR="/blue/cli2/$(whoami)/ssl/"
+LARGE_FILES_DIR="/blue/lift-phenomics/$(whoami)/ssl/"
 # Local copy of the dataset.
 LOCAL_DATA_DIR="${SLURM_TMPDIR}/data/"
 
 function prepare_environment() {
-  # Copy the entire dataset to local scratch.
-  echo "Copying dataset..."
-  rsync -a "${LARGE_FILES_DIR}/data/"* "${LOCAL_DATA_DIR}"
-
   # Create the working directory for this job.
   job_dir="${OUTPUT_BASE_DIR}/job_${SLURM_JOB_ID}"
   mkdir "${job_dir}"
@@ -40,6 +38,10 @@ function prepare_environment() {
 
   # Copy the code.
   cp -Rd "${SLURM_SUBMIT_DIR}/"* "${job_dir}/"
+
+  # Copy the entire dataset to local scratch.
+  echo "Copying dataset..."
+  rsync -a "${LARGE_FILES_DIR}/data/"* "${LOCAL_DATA_DIR}"
 
   # Link to the input data directory and venv.
   rm -rf "${job_dir}/data"

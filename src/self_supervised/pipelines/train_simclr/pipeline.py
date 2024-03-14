@@ -30,10 +30,12 @@ def create_pipeline(**kwargs) -> Pipeline:
                     image_folder="params:mars_image_folder",
                     metadata="mars_dataset_meta",
                     max_frame_jitter="params:max_frame_jitter",
+                    enable_multi_view="params:enable_multi_view",
+                    num_views="params:num_views",
                 ),
                 "training_data",
             ),
-            node(build_model, "yolov5_l_description", "initial_model"),
+            node(build_model, "yolov8_l_description", "initial_model"),
             node(
                 train_model,
                 dict(

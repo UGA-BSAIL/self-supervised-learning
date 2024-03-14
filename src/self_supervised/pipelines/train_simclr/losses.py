@@ -78,7 +78,7 @@ def compute_loss_all_similarities(
         numerators = torch.tensor(
             [], device=exp_similarities_.device, dtype=exp_similarities_.dtype
         )
-        ordered_denominators = torch.tensor(numerators)
+        ordered_denominators = numerators.clone()
         for diagonal_index in range(
             diagonal_step, num_examples, diagonal_step
         ):
