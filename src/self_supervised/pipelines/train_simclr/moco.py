@@ -17,7 +17,7 @@ class MoCo(nn.Module):
 
     def __init__(
         self,
-        base_encoder: Callable[[], torch.nn.Module],
+        base_encoder: Callable[[int], torch.nn.Module],
         dim: int = 128,
         queue_size: int = 65536,
         m: float = 0.999,
@@ -32,17 +32,16 @@ class MoCo(nn.Module):
         """
         super(MoCo, self).__init__()
 
+        self.__is_first_pass = True
+
         self.K = queue_size
         self.m = m
         self.T = temperature
 
         # create the encoders
         # num_classes is the output fc dimension
-        encoder_q = base_encoder(num_outputs=dim)
-        with torch.no_grad():
-            encoder_k = base_encoder(num_outputs=dim)
-        self.add_module("encoder_q", encoder_q)
-        self.add_module("encoder_k", encoder_k)
+        self.encoder_q = base_encoder(num_outputs=dim)
+        self.encoder_k = base_encoder(num_outputs=dim)
 
         if mlp:  # hack: brute-force replacement
             dim_mlp = self.encoder_q.fc.weight.shape[1]
@@ -158,7 +157,13 @@ class MoCo(nn.Module):
 
         # compute key features
         with torch.no_grad():  # no gradient to keys
-            self._momentum_update_key_encoder()  # update the key encoder
+            if not self.__is_first_pass:
+                # Skip the momentum update the first time to ensure that all
+                # lazily-initialized parameters of the key encoder are fully
+                # initialized.
+                self._momentum_update_key_encoder()  # update the key encoder
+            else:
+                self.__is_first_pass = False
 
             # shuffle for making use of BN
             # im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)

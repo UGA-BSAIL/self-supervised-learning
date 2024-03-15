@@ -10,7 +10,6 @@ from typing import Any, Callable, Dict, Iterable, List, Union
 import numpy as np
 import pandas as pd
 import torch
-import wandb
 from loguru import logger
 from torch import Tensor, nn
 from torch.cuda.amp import GradScaler
@@ -18,11 +17,24 @@ from torch.optim import AdamW, Optimizer
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
 from torchmetrics import Metric
-from torchvision.transforms import Compose, InterpolationMode, Lambda, RandAugment, RandomResizedCrop
+from torchvision.transforms import (
+    Compose,
+    InterpolationMode,
+    Lambda,
+    RandAugment,
+    RandomResizedCrop,
+)
+
+import wandb
 
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
-from .dataset_io import MultiViewDataset, PairedAugmentedDataset, SingleFrameDataset, TemporalMultiViewDataset
+from .dataset_io import (
+    MultiViewDataset,
+    PairedAugmentedDataset,
+    SingleFrameDataset,
+    TemporalMultiViewDataset,
+)
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
 from .moco import MoCo
@@ -246,20 +258,21 @@ def build_model(
         The model that it built.
 
     """
-    encoder = YoloEncoder(yolo_description)
+
+    def _make_rep_model(num_outputs: int) -> RepresentationModel:
+        encoder = YoloEncoder(yolo_description)
+        return RepresentationModel(encoder=encoder, num_outputs=num_outputs)
+
     if moco:
         model = MoCo(
-            partial(
-                RepresentationModel,
-                encoder=encoder,
-            ),
+            _make_rep_model,
             dim=rep_dims,
             queue_size=queue_size,
             m=momentum_weight,
             temperature=temperature,
         )
     else:
-        model = RepresentationModel(encoder=encoder, num_outputs=rep_dims)
+        model = _make_rep_model(rep_dims)
     return model.to(DEVICE)
 
 
@@ -382,7 +395,7 @@ def train_model(
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=10, interpolation=InterpolationMode.NEAREST),
+            RandAugment(magnitude=2, interpolation=InterpolationMode.NEAREST),
         ]
     )
     training_loop = TrainingLoop(
