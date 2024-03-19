@@ -84,9 +84,7 @@ class BaseTrainer:
         self.validator = None
         self.metrics = None
         self.plots = {}
-        init_seeds(
-            self.args.seed + 1 + RANK, deterministic=self.args.deterministic
-        )
+        init_seeds(self.args.seed + 1 + RANK, deterministic=self.args.deterministic)
 
         # Dirs
         self.save_dir = get_save_dir(self.args)
@@ -95,9 +93,7 @@ class BaseTrainer:
         if RANK in (-1, 0):
             self.wdir.mkdir(parents=True, exist_ok=True)  # make dir
             self.args.save_dir = str(self.save_dir)
-            yaml_save(
-                self.save_dir / "args.yaml", vars(self.args)
-            )  # save run args
+            yaml_save(self.save_dir / "args.yaml", vars(self.args))  # save run args
         self.last, self.best = (
             self.wdir / "last.pt",
             self.wdir / "best.pt",
@@ -112,7 +108,9 @@ class BaseTrainer:
 
         # Device
         if self.device.type in ("cpu", "mps"):
-            self.args.workers = 0  # faster CPU training as time dominated by inference, not dataloading
+            self.args.workers = (
+                0  # faster CPU training as time dominated by inference, not dataloading
+            )
 
         # Model and Dataset
         self.model = check_model_file_from_stem(
@@ -209,9 +207,7 @@ class BaseTrainer:
             # Command
             cmd, file = generate_ddp_command(world_size, self)
             try:
-                LOGGER.info(
-                    f'{colorstr("DDP:")} debug command {" ".join(cmd)}'
-                )
+                LOGGER.info(f'{colorstr("DDP:")} debug command {" ".join(cmd)}')
                 subprocess.run(cmd, check=True)
             except Exception as e:
                 raise e
@@ -224,17 +220,13 @@ class BaseTrainer:
     def _setup_scheduler(self):
         """Initialize training learning rate scheduler."""
         if self.args.cos_lr:
-            self.lf = one_cycle(
-                1, self.args.lrf, self.epochs
-            )  # cosine 1->hyp['lrf']
+            self.lf = one_cycle(1, self.args.lrf, self.epochs)  # cosine 1->hyp['lrf']
         else:
             self.lf = (
                 lambda x: max(1 - x / self.epochs, 0) * (1.0 - self.args.lrf)
                 + self.args.lrf
             )  # linear
-        self.scheduler = optim.lr_scheduler.LambdaLR(
-            self.optimizer, lr_lambda=self.lf
-        )
+        self.scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=self.lf)
 
     def _setup_ddp(self, world_size):
         """Initializes and sets the DistributedDataParallel parameters for training."""
@@ -267,9 +259,11 @@ class BaseTrainer:
             else []
         )
         always_freeze_names = [".dfl"]  # always freeze these layers
-        freeze_layer_names = [
-            f"model.{x}." for x in freeze_list
-        ] + always_freeze_names
+        freeze_layer_names = (
+            [f"model.{x}." for x in freeze_list]
+            + [f"model.wrapped.{x}." for x in freeze_list]
+            + always_freeze_names
+        )
         for k, v in self.model.named_parameters():
             # v.register_hook(lambda x: torch.nan_to_num(x))  # NaN to 0 (commented for erratic training results)
             if any(x in k for x in freeze_layer_names):
@@ -305,16 +299,10 @@ class BaseTrainer:
 
         # Check imgsz
         gs = max(
-            int(
-                self.model.stride.max()
-                if hasattr(self.model, "stride")
-                else 32
-            ),
+            int(self.model.stride.max() if hasattr(self.model, "stride") else 32),
             32,
         )  # grid size (max stride)
-        self.args.imgsz = check_imgsz(
-            self.args.imgsz, stride=gs, floor=gs, max_dim=1
-        )
+        self.args.imgsz = check_imgsz(self.args.imgsz, stride=gs, floor=gs, max_dim=1)
         self.stride = gs  # for multiscale training
 
         # Batch size
@@ -334,9 +322,7 @@ class BaseTrainer:
             # Note: When training DOTA dataset, double batch size could get OOM on images with >2000 objects.
             self.test_loader = self.get_dataloader(
                 self.testset,
-                batch_size=batch_size
-                if self.args.task == "obb"
-                else batch_size * 2,
+                batch_size=batch_size if self.args.task == "obb" else batch_size * 2,
                 rank=-1,
                 mode="val",
             )
@@ -354,15 +340,11 @@ class BaseTrainer:
             round(self.args.nbs / self.batch_size), 1
         )  # accumulate loss before optimizing
         weight_decay = (
-            self.args.weight_decay
-            * self.batch_size
-            * self.accumulate
-            / self.args.nbs
+            self.args.weight_decay * self.batch_size * self.accumulate / self.args.nbs
         )  # scale weight_decay
         iterations = (
             math.ceil(
-                len(self.train_loader.dataset)
-                / max(self.batch_size, self.args.nbs)
+                len(self.train_loader.dataset) / max(self.batch_size, self.args.nbs)
             )
             * self.epochs
         )
@@ -504,11 +486,7 @@ class BaseTrainer:
                 # Log
                 mem = f"{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G"  # (GB)
                 loss_len = self.tloss.shape[0] if len(self.tloss.shape) else 1
-                losses = (
-                    self.tloss
-                    if loss_len > 1
-                    else torch.unsqueeze(self.tloss, 0)
-                )
+                losses = self.tloss if loss_len > 1 else torch.unsqueeze(self.tloss, 0)
                 if RANK in (-1, 0):
                     pbar.set_description(
                         ("%11s" * 2 + "%11.4g" * (2 + loss_len))
@@ -560,9 +538,7 @@ class BaseTrainer:
                         **self.lr,
                     }
                 )
-                self.stop |= (
-                    self.stopper(epoch + 1, self.fitness) or final_epoch
-                )
+                self.stop |= self.stopper(epoch + 1, self.fitness) or final_epoch
                 if self.args.time:
                     self.stop |= (time.time() - self.train_time_start) > (
                         self.args.time * 3600
@@ -590,9 +566,7 @@ class BaseTrainer:
                     )
                     self._setup_scheduler()
                     self.scheduler.last_epoch = self.epoch  # do not move
-                    self.stop |= (
-                        epoch >= self.epochs
-                    )  # stop if exceeded epochs
+                    self.stop |= epoch >= self.epochs  # stop if exceeded epochs
                 self.scheduler.step()
             self.run_callbacks("on_fit_epoch_end")
             torch.cuda.empty_cache()  # clear GPU memory at end of epoch, may help reduce CUDA out of memory errors
@@ -717,29 +691,19 @@ class BaseTrainer:
 
     def get_model(self, cfg=None, weights=None, verbose=True):
         """Get model and raise NotImplementedError for loading cfg files."""
-        raise NotImplementedError(
-            "This task trainer doesn't support loading cfg files"
-        )
+        raise NotImplementedError("This task trainer doesn't support loading cfg files")
 
     def get_validator(self):
         """Returns a NotImplementedError when the get_validator function is called."""
-        raise NotImplementedError(
-            "get_validator function not implemented in trainer"
-        )
+        raise NotImplementedError("get_validator function not implemented in trainer")
 
-    def get_dataloader(
-        self, dataset_path, batch_size=16, rank=0, mode="train"
-    ):
+    def get_dataloader(self, dataset_path, batch_size=16, rank=0, mode="train"):
         """Returns dataloader derived from torch.data.Dataloader."""
-        raise NotImplementedError(
-            "get_dataloader function not implemented in trainer"
-        )
+        raise NotImplementedError("get_dataloader function not implemented in trainer")
 
     def build_dataset(self, img_path, mode="train", batch=None):
         """Build dataset."""
-        raise NotImplementedError(
-            "build_dataset function not implemented in trainer"
-        )
+        raise NotImplementedError("build_dataset function not implemented in trainer")
 
     def label_loss_items(self, loss_items=None, prefix="train"):
         """
@@ -782,9 +746,7 @@ class BaseTrainer:
         )  # header
         with open(self.csv, "a") as f:
             f.write(
-                s
-                + ("%23.5g," * n % tuple([self.epoch + 1] + vals)).rstrip(",")
-                + "\n"
+                s + ("%23.5g," * n % tuple([self.epoch + 1] + vals)).rstrip(",") + "\n"
             )
 
     def plot_metrics(self):
@@ -813,9 +775,7 @@ class BaseTrainer:
         resume = self.args.resume
         if resume:
             try:
-                exists = (
-                    isinstance(resume, (str, Path)) and Path(resume).exists()
-                )
+                exists = isinstance(resume, (str, Path)) and Path(resume).exists()
                 last = Path(check_file(resume) if exists else get_latest_run())
 
                 # Check that resume data YAML exists, otherwise strip to force re-download of dataset
@@ -850,9 +810,7 @@ class BaseTrainer:
             self.optimizer.load_state_dict(ckpt["optimizer"])  # optimizer
             best_fitness = ckpt["best_fitness"]
         if self.ema and ckpt.get("ema"):
-            self.ema.ema.load_state_dict(
-                ckpt["ema"].float().state_dict()
-            )  # EMA
+            self.ema.ema.load_state_dict(ckpt["ema"].float().state_dict())  # EMA
             self.ema.updates = ckpt["updates"]
         if self.resume:
             assert start_epoch > 0, (
@@ -922,19 +880,13 @@ class BaseTrainer:
                 0.002 * 5 / (4 + nc), 6
             )  # lr0 fit equation to 6 decimal places
             name, lr, momentum = (
-                ("SGD", 0.01, 0.9)
-                if iterations > 10000
-                else ("AdamW", lr_fit, 0.9)
+                ("SGD", 0.01, 0.9) if iterations > 10000 else ("AdamW", lr_fit, 0.9)
             )
             self.args.warmup_bias_lr = 0.0  # no higher than 0.01 for Adam
 
         for module_name, module in model.named_modules():
             for param_name, param in module.named_parameters(recurse=False):
-                fullname = (
-                    f"{module_name}.{param_name}"
-                    if module_name
-                    else param_name
-                )
+                fullname = f"{module_name}.{param_name}" if module_name else param_name
                 if "bias" in fullname:  # bias (no decay)
                     g[2].append(param)
                 elif isinstance(module, bn):  # weight (no decay)
@@ -949,9 +901,7 @@ class BaseTrainer:
         elif name == "RMSProp":
             optimizer = optim.RMSprop(g[2], lr=lr, momentum=momentum)
         elif name == "SGD":
-            optimizer = optim.SGD(
-                g[2], lr=lr, momentum=momentum, nesterov=True
-            )
+            optimizer = optim.SGD(g[2], lr=lr, momentum=momentum, nesterov=True)
         else:
             raise NotImplementedError(
                 f"Optimizer '{name}' not found in list of available optimizers "

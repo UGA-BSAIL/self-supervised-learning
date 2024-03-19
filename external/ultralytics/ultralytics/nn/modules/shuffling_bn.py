@@ -54,16 +54,15 @@ class ShuffledModule(torch.nn.Module):
         """
         super().__init__()
 
-        self._module = module
         self.add_module("wrapped", module)
 
     def forward(self, batch: Tensor) -> Tensor:
         shuffled, indices = shuffle_batch(batch)
-        module_out = self._module(shuffled)
+        module_out = self.wrapped(shuffled)
         return unshuffle_batch(module_out, indices=indices)
 
     def __getitem__(self, item):
-        return self._module[item]
+        return self.wrapped[item]
 
 
 class ShufflingBatchNorm2d(torch.nn.Module):
@@ -72,9 +71,7 @@ class ShufflingBatchNorm2d(torch.nn.Module):
     multiple samples and calculates the normalization parameters separately.
     """
 
-    def __init__(
-        self, num_features: int, *, num_slices: int = 4, **kwargs: Any
-    ):
+    def __init__(self, num_features: int, *, num_slices: int = 4, **kwargs: Any):
         """
         Args:
             num_features: The size of the channel dimension we are normalizing.
@@ -107,8 +104,7 @@ class ShufflingBatchNorm2d(torch.nn.Module):
 
         # Normalize each slice.
         norm_slices = [
-            slice_norm(s)
-            for slice_norm, s in zip(self._slice_norm_layers, slices)
+            slice_norm(s) for slice_norm, s in zip(self._slice_norm_layers, slices)
         ]
 
         # Restore the original batch order.

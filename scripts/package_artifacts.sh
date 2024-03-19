@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --time=0:05:00
+#SBATCH --time=0:10:00
 #SBATCH --mem=2gb
 #SBATCH --mail-user=daniel.petti@uga.edu
 #SBATCH --output=ssl_model_package_artifacts.out    # Standard output log

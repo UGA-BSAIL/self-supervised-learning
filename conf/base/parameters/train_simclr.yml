@@ -2,7 +2,7 @@
 max_frame_jitter: 0
 # Whether to enable multi-camera training. Otherwise, it will use
 # vanilla SimCLR.
-enable_multi_view: true
+enable_multi_view: false
 # If multi-view training is enabled, how many views to use. If >3,
 # it will use temporal augmentation.
 num_views: 2
