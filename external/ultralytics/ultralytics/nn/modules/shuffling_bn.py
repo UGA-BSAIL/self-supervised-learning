@@ -6,6 +6,7 @@ the dependence on multiple GPUs.
 
 from typing import Any, Tuple
 
+import numpy as np
 import torch
 from torch import Tensor
 
@@ -109,3 +110,53 @@ class ShufflingBatchNorm2d(torch.nn.Module):
 
         # Restore the original batch order.
         return torch.concatenate(norm_slices, dim=0)
+
+    @property
+    def weight(self) -> Tensor:
+        """
+        Returns:
+            The weight tensor of the batch norm layer.
+
+        """
+        weights = [n.weight for n in self._slice_norm_layers]
+        return torch.mean(torch.stack(weights), dim=0)
+
+    @property
+    def eps(self) -> float:
+        """
+        Returns:
+            The epsilon value of the batch norm layer.
+
+        """
+        eps = [n.eps for n in self._slice_norm_layers]
+        return np.mean(eps)
+
+    @property
+    def running_var(self) -> Tensor:
+        """
+        Returns:
+            The running variance of the batch norm layer.
+
+        """
+        running_vars = [n.running_var for n in self._slice_norm_layers]
+        return torch.mean(torch.stack(running_vars), dim=0)
+
+    @property
+    def running_mean(self) -> Tensor:
+        """
+        Returns:
+            The running mean of the batch norm layer.
+
+        """
+        running_means = [n.running_mean for n in self._slice_norm_layers]
+        return torch.mean(torch.stack(running_means), dim=0)
+
+    @property
+    def bias(self) -> Tensor:
+        """
+        Returns:
+            The bia s tensor of the batch norm layer.
+
+        """
+        biases = [n.bias for n in self._slice_norm_layers]
+        return torch.mean(torch.stack(biases), dim=0)
