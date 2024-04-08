@@ -3,6 +3,7 @@ Nodes for the `train_simclr` pipeline.
 """
 
 
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Union
 
@@ -36,6 +37,7 @@ from .dataset_io import (
 )
 from .losses import NtXentLoss
 from .metrics import ProxyClassAccuracy
+from .moco import MoCo
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 logger.info("Using {} device.", DEVICE)
@@ -68,7 +70,7 @@ class TrainingLoop:
         loss_fn: nn.Module,
         optimizer: Optimizer,
         scaler: GradScaler,
-        accuracy: Metric,
+        accuracy: Metric | None = None,
         checkpoint_dir: Path = Path("checkpoints"),
         augmentation: Callable[[Tensor], Tensor] = lambda x: x,
     ):
@@ -151,15 +153,18 @@ class TrainingLoop:
         Performs logging for the end of the epoch.
 
         """
+        acc_epoch = {}
+        if self.__accuracy is not None:
+            acc_epoch = {"train/acc_epoch": self.__accuracy.compute()}
+            # Reset this metric for next epoch.
+            self.__accuracy.reset()
+
         wandb.log(
             {
                 "global_step": self.__global_step,
-                "train/acc_epoch": self.__accuracy.compute(),
+                **acc_epoch,
             }
         )
-
-        # Reset this metric for next epoch.
-        self.__accuracy.reset()
 
     def __save_checkpoint(self) -> None:
         """
@@ -202,16 +207,21 @@ class TrainingLoop:
             self.__scaler.update()
 
             # Compute accuracy.
-            batch_acc = self.__accuracy(view_preds)
+            batch_acc = None
+            if self.__accuracy is not None:
+                batch_acc = self.__accuracy(view_preds)
 
             logger.debug("batch {}: loss={}", batch_i, loss.item())
             if self.__global_step % 100 == 0:
+                acc_log = {}
+                if batch_acc is not None:
+                    acc_log = {"train/acc_batch": batch_acc.item()}
                 wandb.log(
                     {
                         "global_step": self.__global_step,
                         "train/loss": loss.item(),
-                        "train/acc_batch": batch_acc.item(),
                         "lr": self.__optimizer.param_groups[0]["lr"],
+                        **acc_log,
                     }
                 )
 
@@ -223,20 +233,47 @@ class TrainingLoop:
         return np.mean(losses)
 
 
-def build_model(yolo_description: Dict[str, Any]) -> nn.Module:
+def build_model(
+    yolo_description: Dict[str, Any],
+    *,
+    moco: bool,
+    rep_dims: int,
+    queue_size: int,
+    momentum_weight: float,
+    temperature: float,
+) -> nn.Module:
     """
     Builds the complete SimCLR model.
 
     Args:
         yolo_description: The description of the YOLO model to use for the
             backbone.
+        moco: Whether to use MoCo.
+        rep_dims: The size of the representation to use.
+        queue_size: The size of the queue to use.
+        momentum_weight: The weight to use for the momentum update.
+        temperature: The temperature to use for the NT-Xent loss.
 
     Returns:
         The model that it built.
 
     """
-    encoder = YoloEncoder(yolo_description)
-    return RepresentationModel(encoder=encoder).to(DEVICE)
+
+    def _make_rep_model(num_outputs: int) -> RepresentationModel:
+        encoder = YoloEncoder(yolo_description)
+        return RepresentationModel(encoder=encoder, num_outputs=num_outputs)
+
+    if moco:
+        model = MoCo(
+            _make_rep_model,
+            dim=rep_dims,
+            queue_size=queue_size,
+            m=momentum_weight,
+            temperature=temperature,
+        )
+    else:
+        model = _make_rep_model(rep_dims)
+    return model.to(DEVICE)
 
 
 def load_dataset(
@@ -328,11 +365,17 @@ def train_model(
         The trained model.
 
     """
-    loss_fn = NtXentLoss(temperature=temperature)
+    is_moco = isinstance(model, MoCo)
+    if is_moco:
+        # MoCo expects us to apply normal loss here.
+        loss_fn = torch.nn.CrossEntropyLoss()
+    else:
+        loss_fn = NtXentLoss(temperature=temperature)
+    loss_fn = loss_fn.to(DEVICE)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
     scaler = GradScaler()
-    accuracy = ProxyClassAccuracy().to(DEVICE)
+    accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
 
     data_loader = data.DataLoader(
         training_data,
@@ -352,7 +395,7 @@ def train_model(
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=10, interpolation=InterpolationMode.NEAREST),
+            RandAugment(magnitude=2, interpolation=InterpolationMode.NEAREST),
         ]
     )
     training_loop = TrainingLoop(

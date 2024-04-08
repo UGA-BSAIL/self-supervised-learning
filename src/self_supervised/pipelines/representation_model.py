@@ -106,6 +106,7 @@ class YoloEncoder(nn.Module):
         super().__init__()
 
         # The last layer is going to be the head, so get rid of that.
+        model_description = model_description.copy()
         model_description["head"] = model_description["head"][:-1]
         self.yolo = DetectionModel(model_description)
 
