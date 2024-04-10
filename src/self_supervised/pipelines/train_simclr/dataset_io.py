@@ -6,7 +6,7 @@ Utilities for loading the image data.
 import itertools
 import random
 from pathlib import Path
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import pandas as pd
 from loguru import logger
@@ -28,6 +28,7 @@ class SingleFrameDataset(Dataset):
         *,
         mars_metadata: pd.DataFrame,
         image_folder: Path,
+        samples_per_clip: Optional[int] = None,
         augmentation: Callable[[Tensor], Tensor] | None = None,
     ):
         """
@@ -35,6 +36,8 @@ class SingleFrameDataset(Dataset):
             mars_metadata: The metadata, which describes where to find the
                 dataset files.
             image_folder: The folder that contains all the dataset images.
+            samples_per_clip: If specified, will downsample the dataset to
+                have at most this number of frames from each clip.
             augmentation: Augmentation to apply to output images. Defaults to
                 nothing.
 
@@ -42,7 +45,37 @@ class SingleFrameDataset(Dataset):
         self.__metadata = mars_metadata
         logger.info("Loading dataset images from {}.", image_folder)
         self.__image_folder = image_folder
-        self.__augmentation = augmentation
+        self.augmentation = augmentation
+
+        if samples_per_clip is not None:
+            self.__metadata = self.__sample_data_set(samples_per_clip)
+
+    def __sample_data_set(self, samples_per_clip: int) -> pd.DataFrame:
+        """
+        Performs a stratified sampling on the metadata over the clips,
+        such that each clip has at most some number of samples in the dataset.
+
+        Args:
+            samples_per_clip: Maximum number of samples we want for each clip.
+
+        Returns:
+            The metadata for the sampled dataset.
+
+        """
+        by_clip = self.__metadata.groupby("clip")
+        clips = self.__metadata["clip"].unique()
+
+        sampled_data = []
+        for clip in clips:
+            clip_frames = by_clip.get_group(clip)
+            sample_size = min(len(clip_frames), samples_per_clip)
+            sampled_data.append(
+                clip_frames.sample(n=sample_size, random_state=0)
+            )
+        sampled_data = pd.concat(sampled_data, ignore_index=True)
+
+        logger.debug("Downsampled dataset to {} examples.", len(sampled_data))
+        return sampled_data
 
     def __len__(self) -> int:
         return len(self.__metadata)
@@ -62,67 +95,9 @@ class SingleFrameDataset(Dataset):
         file_path = self.__image_folder / f"{file_id}.jpg"
         image = read_image(file_path.as_posix())
 
-        if self.__augmentation is not None:
+        if self.augmentation is not None:
             # Apply the augmentation.
-            image = self.__augmentation(image)
-        return image
-
-
-class SingleClipDataset(Dataset):
-    """
-    Dataset that reads entire clips.
-    """
-
-    def __init__(
-        self,
-        *,
-        mars_metadata: pd.DataFrame,
-        image_folder: Path,
-        augmentation: Callable[[Tensor], Tensor] | None,
-    ):
-        """
-        Args:
-            mars_metadata: The metadata, which describes where to find the
-                dataset files.
-            image_folder: The folder that contains all the dataset images.
-            augmentation: Augmentation to apply to output clips. Defaults to
-                nothing.
-
-        """
-        self.__metadata = mars_metadata.set_index(MarsMetadata.CLIP.value)
-        logger.info("Loading dataset images from {}.", image_folder)
-        self.__image_folder = image_folder
-        self.__augmentation = augmentation
-
-        # Find the clips from the metadata.
-        self.__clip_ids = self.__metadata.index.unique()
-
-    def __len__(self) -> int:
-        return len(self.__clip_ids)
-
-    def __getitem__(self, item: int) -> Tuple[Tensor, int, int, int]:
-        """
-        Args:
-            item: The index for the item to get.
-
-        Returns:
-            frames (tensor): the frames of sampled from the video. The dimension
-                is `channel` x `num frames` x `height` x `width`.
-            label (int): the label of the current video.
-            index (int): the index of the video.
-            time index (zero): The time index is currently not supported.
-            {} extra data, currently not supported
-
-        """
-        # Figure out which file we should read.
-        clip_id = self.__clip_ids[item]
-        clip_files = self.__metadata.loc[clip_id, MarsMetadata.FILE_ID.value]
-        clip_paths = [self.__image_folder / f"{p}.jpg" for p in clip_files]
-        clip_images = [read_image(p.as_posix()) for p in clip_paths]
-
-        if self.__augmentation is not None:
-            # Apply the augmentation.
-            image = self.__augmentation(image)
+            image = self.augmentation(image)
         return image
 
 
@@ -145,12 +120,12 @@ class PairedAugmentedDataset(Dataset):
             augmentation: The random augmentation module to apply to the images.
 
         """
-        self.__dataset = image_dataset
-        self.__augmentation = augmentation
+        self.single_frame_dataset = image_dataset
+        self.augmentation = augmentation
 
     def __len__(self) -> int:
         # Same as the underlying image dataset.
-        return len(self.__dataset)
+        return len(self.single_frame_dataset)
 
     def __getitem__(self, item: int) -> Tuple[Tensor, Tensor]:
         """
@@ -162,11 +137,11 @@ class PairedAugmentedDataset(Dataset):
             dimension of size 2.
 
         """
-        image = self.__dataset[item]
+        image = self.single_frame_dataset[item]
 
         # Perform two different augmentations.
-        augmentation_1 = self.__augmentation(image)
-        augmentation_2 = self.__augmentation(image)
+        augmentation_1 = self.augmentation(image, data_index=item)
+        augmentation_2 = self.augmentation(image, data_index=item)
 
         return augmentation_1, augmentation_2
 
@@ -202,7 +177,7 @@ class MultiViewDataset(Dataset):
         self.__frames = frames
         logger.info("Loading dataset images from {}.", image_folder)
         self.__image_folder = image_folder
-        self.__augmentation = augmentation
+        self.augmentation = augmentation
         self.__decode_device = decode_device
         self.__max_jitter = max_jitter
         self.__all_views = all_views
@@ -226,7 +201,7 @@ class MultiViewDataset(Dataset):
         image = decode_jpeg(image_compressed, device=self.__decode_device)
 
         # Apply augmentations.
-        return self.__augmentation(image)
+        return self.augmentation(image)
 
     def __getitem__(self, index: int) -> List[Tensor]:
         """

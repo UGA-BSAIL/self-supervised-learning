@@ -32,6 +32,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                     max_frame_jitter="params:max_frame_jitter",
                     enable_multi_view="params:enable_multi_view",
                     num_views="params:num_views",
+                    samples_per_clip="params:samples_per_clip",
                 ),
                 "training_data",
             ),

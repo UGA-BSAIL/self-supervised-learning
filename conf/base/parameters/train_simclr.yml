@@ -6,3 +6,5 @@ enable_multi_view: false
 # If multi-view training is enabled, how many views to use. If >3,
 # it will use temporal augmentation.
 num_views: 2
+# Number of samples to use from each clip in the dataset.
+samples_per_clip: 260

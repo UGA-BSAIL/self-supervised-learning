@@ -5,7 +5,7 @@ Nodes for the `train_simclr` pipeline.
 
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -18,17 +18,17 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils import data
 from torchmetrics import Metric
 from torchvision.transforms import (
-    Compose,
     InterpolationMode,
     Lambda,
     RandAugment,
-    RandomResizedCrop,
+    functional,
 )
 
 import wandb
 
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
+from .augmentation import ContrastiveCrop, MultiArgCompose
 from .dataset_io import (
     MultiViewDataset,
     PairedAugmentedDataset,
@@ -58,6 +58,34 @@ def _collate_views(views: List[List[Tensor]]) -> List[List[Tensor]]:
     return [list(b) for b in zip(*views)]
 
 
+def _collate_different_sizes(
+    batch: List[Tensor], *, output_size: Union[List[int], int]
+) -> Tensor:
+    """
+    Collates a list of images from a source that can produce different image
+    sizes.
+
+    Args:
+        batch: The batch of images.
+        output_size: The output size to use for the images (h, w).
+
+    Returns:
+        The collated batch.
+
+    """
+    resized = []
+    for image in batch:
+        resized.append(
+            functional.resize(
+                image,
+                output_size,
+                interpolation=InterpolationMode.NEAREST,
+            )
+        )
+
+    return torch.stack(resized, dim=0)
+
+
 class TrainingLoop:
     """
     Manages running a training loop.
@@ -72,6 +100,7 @@ class TrainingLoop:
         scaler: GradScaler,
         accuracy: Metric | None = None,
         checkpoint_dir: Path = Path("checkpoints"),
+        checkpoint_period: int = 1,
         augmentation: Callable[[Tensor], Tensor] = lambda x: x,
     ):
         """
@@ -83,6 +112,7 @@ class TrainingLoop:
             accuracy: Metric to use for computing accuracy.
             checkpoint_dir: The directory to use for saving intermediate
                 model checkpoints.
+            checkpoint_period: How often to save a checkpoint, in epochs.
             augmentation: The data augmentation to apply.
 
         """
@@ -93,10 +123,13 @@ class TrainingLoop:
         self.__accuracy = accuracy
         self.__checkpoint_dir = checkpoint_dir
         self.__checkpoint_dir.mkdir(exist_ok=True)
+        self.__checkpoint_period = checkpoint_period
         self.__augmentation = augmentation
 
         # Keeps track of the current global training step.
         self.__global_step = 0
+        # Keeps track of the current epoch.
+        self.__epoch = 0
         # Whether we have already started gradient logging.
         self.__is_watching = False
 
@@ -229,7 +262,10 @@ class TrainingLoop:
             losses.append(loss.item())
 
         self.__log_epoch_end()
-        self.__save_checkpoint()
+        self.__epoch += 1
+        if self.__epoch % self.__checkpoint_period == 0:
+            self.__save_checkpoint()
+
         return np.mean(losses)
 
 
@@ -283,6 +319,7 @@ def load_dataset(
     max_frame_jitter: int = 0,
     enable_multi_view: bool = False,
     num_views: int = 3,
+    samples_per_clip: Optional[int] = None,
 ) -> data.Dataset:
     """
     Loads the training dataset.
@@ -297,6 +334,8 @@ def load_dataset(
             vanilla SimCLR.
         num_views: If multi-view training is enabled, how many views to use.
             If >3, it will use temporal augmentation.
+        samples_per_clip: If specified, it will be the maximum number of
+            examples to include in the dataset from each clip.
 
     Returns:
         The dataset that it loaded.
@@ -313,7 +352,9 @@ def load_dataset(
     if not enable_multi_view:
         # Use vanilla SimCLR.
         frame_dataset = SingleFrameDataset(
-            mars_metadata=metadata, image_folder=image_folder
+            mars_metadata=metadata,
+            image_folder=image_folder,
+            samples_per_clip=samples_per_clip,
         )
         paired_frames = PairedAugmentedDataset(
             image_dataset=frame_dataset,
@@ -369,13 +410,35 @@ def train_model(
     if is_moco:
         # MoCo expects us to apply normal loss here.
         loss_fn = torch.nn.CrossEntropyLoss()
+        representation_model = model.encoder_q
     else:
         loss_fn = NtXentLoss(temperature=temperature)
+        representation_model = model
     loss_fn = loss_fn.to(DEVICE)
     optimizer = AdamW(model.parameters(), lr=learning_rate)
-    scheduler = ReduceLROnPlateau(optimizer, "min", patience=2)
+    scheduler = ReduceLROnPlateau(optimizer, "min", patience=2, min_lr=1e-5)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
+
+    contrastive_crop = ContrastiveCrop(
+        410,
+        scale=(0.08, 1.0),
+        interpolation=InterpolationMode.NEAREST,
+        heatmap_threshold=0.1,
+        alpha=0.6,
+        device=DEVICE,
+    )
+    augmentation = MultiArgCompose(
+        [
+            contrastive_crop,
+            # Apparently, crops sometimes produce non-contiguous views,
+            # and RandAugment doesn't like that.
+            Lambda(lambda t: t.contiguous()),
+            RandAugment(magnitude=2, interpolation=InterpolationMode.NEAREST),
+        ]
+    )
+    # Update the dataset augmentation.
+    training_data.augmentation = augmentation
 
     data_loader = data.DataLoader(
         training_data,
@@ -386,17 +449,16 @@ def train_model(
         shuffle=True,
         drop_last=True,
     )
-
-    augmentation = Compose(
-        [
-            RandomResizedCrop(
-                410, scale=(0.4, 1.0), interpolation=InterpolationMode.NEAREST
-            ),
-            # Apparently, crops sometimes produce non-contiguous views,
-            # and RandAugment doesn't like that.
-            Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=2, interpolation=InterpolationMode.NEAREST),
-        ]
+    # Create a secondary data loader for contrastive cropping.
+    collate_resize = partial(_collate_different_sizes, output_size=(410, 410))
+    single_frame_loader = data.DataLoader(
+        training_data.single_frame_dataset,
+        batch_size=batch_size,
+        pin_memory=True,
+        num_workers=8,
+        shuffle=False,
+        drop_last=False,
+        collate_fn=collate_resize,
     )
     training_loop = TrainingLoop(
         model=model,
@@ -404,10 +466,25 @@ def train_model(
         loss_fn=loss_fn,
         scaler=scaler,
         accuracy=accuracy,
-        augmentation=augmentation,
+        checkpoint_period=5,
     )
+
+    # Update contrastive crop 4 times during training.
+    region_update_epochs = np.linspace(
+        0, num_epochs, 5, endpoint=False
+    ).astype(int)
+    # Don't update on the first one.
+    region_update_epochs = set(region_update_epochs[1:])
+    logger.debug("Updating regions on epochs {}", region_update_epochs)
+
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)
+        if i in region_update_epochs:
+            # Update contrastive crop regions.
+            contrastive_crop.update_regions(
+                representation_model, single_frame_loader
+            )
+
         average_loss = training_loop.train_epoch(data_loader)
 
         logger.info("Epoch {} loss: {}", i, average_loss)

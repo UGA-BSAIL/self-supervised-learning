@@ -24,9 +24,9 @@
 set -e
 
 # Base directory we use for job output.
-OUTPUT_BASE_DIR="/blue/lift-phenomics/$(whoami)/job_scratch/"
+OUTPUT_BASE_DIR="/blue/cli2/$(whoami)/job_scratch/"
 # Directory where our data and venv are located.
-LARGE_FILES_DIR="/blue/lift-phenomics/$(whoami)/ssl/"
+LARGE_FILES_DIR="/blue/cli2/$(whoami)/ssl/"
 
 function prepare_environment() {
   # Create the working directory for this job.
