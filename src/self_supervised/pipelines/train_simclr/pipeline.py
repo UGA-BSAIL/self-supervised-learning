@@ -57,6 +57,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                     batch_size="params:batch_size",
                     learning_rate="params:learning_rate",
                     temperature="params:temperature",
+                    contrastive_crop="params:contrastive_crop",
                 ),
                 "trained_model",
             ),

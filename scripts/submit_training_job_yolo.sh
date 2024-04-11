@@ -18,15 +18,15 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --output=self_supervised_yolo_train.%j.out    # Standard output log
 #SBATCH --error=self_supervised_yolo_train.%j.err     # Standard error log
-#SBATCH --account=lift-phenomics
-#SBATCH --qos=lift-phenomics
+#SBATCH --account=cli2
+#SBATCH --qos=cli2
 
 set -e
 
 # Base directory we use for job output.
-OUTPUT_BASE_DIR="/blue/lift-phenomics/$(whoami)/job_scratch/"
+OUTPUT_BASE_DIR="/blue/cli2/$(whoami)/job_scratch/"
 # Directory where our data and venv are located.
-LARGE_FILES_DIR="/blue/lift-phenomics/$(whoami)/ssl/"
+LARGE_FILES_DIR="/blue/cli2/$(whoami)/ssl/"
 
 function prepare_environment() {
   # Create the working directory for this job.
@@ -59,7 +59,7 @@ source scripts/load_common.sh
 export PYTHONPATH=${PYTHONPATH}:src/
 poetry run yolo detect train model=data/01_raw/yolov8l.yml \
   epochs=100 \
-  pretrained=yolov8l_ssl_3_view.pt \
+  pretrained=yolov8l_ssl_moco_cc.pt \
   batch=128 imgsz=640 cache=ram workers=8 \
   project=self_supervised name=yolo_val freeze=10 \
-  data=data/05_model_input/flower_dataset/ssl_active_learning_dataset_small.yaml
+  data=data/05_model_input/flower_dataset/aerial_dataset_small.yaml

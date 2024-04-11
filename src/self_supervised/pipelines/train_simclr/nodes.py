@@ -21,6 +21,7 @@ from torchvision.transforms import (
     InterpolationMode,
     Lambda,
     RandAugment,
+    RandomResizedCrop,
     functional,
 )
 
@@ -390,6 +391,7 @@ def train_model(
     batch_size: int,
     learning_rate: float = 0.001,
     temperature: float = 0.1,
+    contrastive_crop: bool = True,
 ) -> nn.Module:
     """
     Trains the model.
@@ -401,6 +403,7 @@ def train_model(
         batch_size: The batch size to use for training.
         learning_rate: The learning rate to use.
         temperature: The temperature parameter to use for the loss.
+        contrastive_crop: Whether to use ContrastiveCrop.
 
     Returns:
         The trained model.
@@ -420,17 +423,20 @@ def train_model(
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
 
-    contrastive_crop = ContrastiveCrop(
-        410,
+    crop_args = dict(
+        size=410,
         scale=(0.08, 1.0),
         interpolation=InterpolationMode.NEAREST,
-        heatmap_threshold=0.1,
-        alpha=0.6,
-        device=DEVICE,
     )
+    if contrastive_crop:
+        crop = ContrastiveCrop(
+            heatmap_threshold=0.1, alpha=0.6, device=DEVICE, **crop_args
+        )
+    else:
+        crop = RandomResizedCrop(**crop_args)
     augmentation = MultiArgCompose(
         [
-            contrastive_crop,
+            crop,
             # Apparently, crops sometimes produce non-contiguous views,
             # and RandAugment doesn't like that.
             Lambda(lambda t: t.contiguous()),
@@ -475,15 +481,14 @@ def train_model(
     ).astype(int)
     # Don't update on the first one.
     region_update_epochs = set(region_update_epochs[1:])
-    logger.debug("Updating regions on epochs {}", region_update_epochs)
+    if contrastive_crop:
+        logger.debug("Updating regions on epochs {}", region_update_epochs)
 
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)
-        if i in region_update_epochs:
+        if contrastive_crop and i in region_update_epochs:
             # Update contrastive crop regions.
-            contrastive_crop.update_regions(
-                representation_model, single_frame_loader
-            )
+            crop.update_regions(representation_model, single_frame_loader)
 
         average_loss = training_loop.train_epoch(data_loader)
 
