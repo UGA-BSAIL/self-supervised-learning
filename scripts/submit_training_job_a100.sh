@@ -14,8 +14,8 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --time=48:00:00
 #SBATCH --mem=40gb
-#SBATCH --account=lift-phenomics
-#SBATCH --qos=lift-phenomics
+#SBATCH --account=cli2
+#SBATCH --qos=cli2
 #SBATCH --mail-user=djpetti@gmail.com
 #SBATCH --mail-type=END,FAIL
 #SBATCH --output=self_supervised_model_train.%j.out    # Standard output log
