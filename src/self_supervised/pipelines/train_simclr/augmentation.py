@@ -150,7 +150,13 @@ class ContrastiveCrop(MultiArgTransform):
                 boxes.append(torch.tensor([h_min, w_min, h_max, w_max]))
 
         self.__regions = torch.stack(boxes, dim=0)  # (num_iters, 4)
-        logger.debug("Region sample:\n{}", self.__regions[:10].cpu().numpy())
+        regions_min = self.__regions.min(0)[0]
+        regions_max = self.__regions.max(0)[0]
+        logger.debug(
+            "Region min: {} max: {}",
+            regions_min.cpu().numpy(),
+            regions_max.cpu().numpy(),
+        )
         logger.info("Update boxes finished.")
 
     def __get_params(

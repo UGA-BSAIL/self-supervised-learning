@@ -430,7 +430,7 @@ def train_model(
     )
     if contrastive_crop:
         crop = ContrastiveCrop(
-            heatmap_threshold=0.1, alpha=0.6, device=DEVICE, **crop_args
+            heatmap_threshold=0.85, alpha=0.6, device=DEVICE, **crop_args
         )
     else:
         crop = RandomResizedCrop(**crop_args)
