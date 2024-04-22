@@ -106,9 +106,11 @@ class YoloEncoder(nn.Module):
         super().__init__()
 
         # The last layer is going to be the head, so get rid of that.
-        model_description = model_description.copy()
-        model_description["head"] = model_description["head"][:-1]
-        self.yolo = DetectionModel(model_description)
+        self.__model_description = model_description.copy()
+        self.__model_description["head"] = self.__model_description["head"][
+            :-1
+        ]
+        self.yolo = DetectionModel(self.__model_description)
 
         # Internal projection head used to get the right number of output
         # features for the representation.
@@ -117,6 +119,29 @@ class YoloEncoder(nn.Module):
     def forward(self, inputs: Tensor) -> Tensor:
         features = self.yolo(inputs)
         return self.projection(features)
+
+    def clone_some_layers(self, prune_head_layers: int) -> nn.Module:
+        """
+        Creates a clone of the YOLO model with the top layers missing.
+
+        Args:
+            prune_head_layers: The number of layers to prune from the head.
+
+        Returns:
+            The cloned model.
+
+        """
+        pruned_description = self.__model_description.copy()
+        pruned_description["head"] = pruned_description["head"][
+            :-prune_head_layers
+        ]
+        cloned_model = DetectionModel(pruned_description)
+
+        # Copy the weights.
+        state_dict = self.yolo.float().state_dict()
+        cloned_model.load_state_dict(state_dict, strict=False)
+
+        return cloned_model
 
 
 class RepresentationModel(nn.Module):

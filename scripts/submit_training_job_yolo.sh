@@ -59,7 +59,7 @@ source scripts/load_common.sh
 export PYTHONPATH=${PYTHONPATH}:src/
 poetry run yolo detect train model=data/01_raw/yolov8l.yml \
   epochs=100 \
-  pretrained=yolov8l_ssl_moco_cc.pt \
+  pretrained=yolov8l_ssl_simclr_cc.pt \
   batch=128 imgsz=640 cache=ram workers=8 \
   project=self_supervised name=yolo_val freeze=10 \
-  data=data/05_model_input/flower_dataset/aerial_dataset_small.yaml
+  data=data/05_model_input/flower_dataset/ssl_active_learning_dataset_small.yaml

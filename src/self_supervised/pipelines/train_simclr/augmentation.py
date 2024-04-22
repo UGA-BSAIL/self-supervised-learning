@@ -59,6 +59,7 @@ class ContrastiveCrop(MultiArgTransform):
         *args: Any,
         heatmap_threshold: float = 0.05,
         alpha: float = 1.0,
+        layers_to_prune: int = 0,
         device: str = "cuda",
         **kwargs: Any,
     ):
@@ -69,6 +70,9 @@ class ContrastiveCrop(MultiArgTransform):
             alpha: The parameter to use for the beta distribution. Setting it
                 1 is a uniform distribution, and setting it less than that puts
                 more probability away from the center.
+            layers_to_prune: The number of layers to prune from the
+                representation model when generating activation maps.
+                Increasing this will generate activations from lower layers.
             device: The device to process on.
             **kwargs: Will be forwarded to `RandomResizedCrop`.
 
@@ -77,6 +81,7 @@ class ContrastiveCrop(MultiArgTransform):
 
         self.__heatmap_thresh = heatmap_threshold
         self.__device = device
+        self.__layers_to_prune = layers_to_prune
         self.cropper = RandomResizedCrop(*args, **kwargs)
         self.beta = Beta(alpha, alpha)
 
@@ -101,6 +106,13 @@ class ContrastiveCrop(MultiArgTransform):
 
         # Get just the encoder portion to produce feature maps.
         encoder = model.encoder.eval()
+        if self.__layers_to_prune > 0:
+            # Prune layers from the encoder.
+            encoder = (
+                model.encoder.clone_some_layers(self.__layers_to_prune)
+                .to(self.__device)
+                .eval()
+            )
 
         boxes = []
         for cur_iter, images in enumerate(data_loader):  # drop_last=False
