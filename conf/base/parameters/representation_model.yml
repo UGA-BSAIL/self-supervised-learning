@@ -11,7 +11,9 @@ learning_rate: 0.001
 temperature: 0.07
 
 # Whether to use MoCo. Otherwise, will use normal SimCLR.
-use_moco: false
+use_moco: true
 # Whether to use contrastive crop. Otherwise, it will use normal random
 # cropping.
 contrastive_crop: true
+# Whether to fine-tune the backbone instead of fully re-training it.
+finetune_backbone: true

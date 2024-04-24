@@ -5,7 +5,7 @@ Nodes for the `train_simclr` pipeline.
 
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -278,6 +278,7 @@ def build_model(
     queue_size: int,
     momentum_weight: float,
     temperature: float,
+    pretrained_weights: Dict[str, Any] | None = None,
 ) -> nn.Module:
     """
     Builds the complete SimCLR model.
@@ -290,6 +291,8 @@ def build_model(
         queue_size: The size of the queue to use.
         momentum_weight: The weight to use for the momentum update.
         temperature: The temperature to use for the NT-Xent loss.
+        pretrained_weights: The pretrained weights to use for the backbone,
+            if any.
 
     Returns:
         The model that it built.
@@ -297,7 +300,7 @@ def build_model(
     """
 
     def _make_rep_model(num_outputs: int) -> RepresentationModel:
-        encoder = YoloEncoder(yolo_description)
+        encoder = YoloEncoder(yolo_description, weights=pretrained_weights)
         return RepresentationModel(encoder=encoder, num_outputs=num_outputs)
 
     if moco:
@@ -383,6 +386,73 @@ def load_dataset(
     return paired_frames
 
 
+def _is_bn(layer_name: str) -> bool:
+    """
+    Checks if a layer is a batch normalization layer based on the name.
+
+    Args:
+        layer_name: The name of the layer.
+
+    Returns:
+        True if it is a batchnorm layer.
+
+    """
+    names_parts = layer_name.split(".")
+    for part in names_parts:
+        if part.startswith("bn"):
+            return True
+    return False
+
+
+def _is_backbone(layer_name: str) -> bool:
+    """
+    Checks if a layer is part of the backbone based on the name.
+
+    Args:
+        layer_name: The name of the layer.
+
+    Returns:
+        True if it is part of the backbone.
+
+    """
+    name_parts = layer_name.split(".")
+    try:
+        wrapped_index = name_parts.index("wrapped")
+    except ValueError:
+        # This would be the outer projection layer.
+        return False
+    layer_number = int(name_parts[wrapped_index + 1])
+    return layer_number > 4
+
+
+def _get_finetuning_params(
+    model: nn.Module,
+) -> Tuple[List[torch.nn.Parameter], List[torch.nn.Parameter]]:
+    """
+    Gets the list of parameter dictionaries to use when fine-tuning the
+    backbone of a model.
+
+    Args:
+        model: The model to get parameters for.
+
+    Returns:
+        The parameters that should be fine-tuned, and the ones that should be
+        normally trained.
+
+    """
+    # Separate the parameters associated with the backbone.
+    backbone_params = []
+    other_params = []
+    for name, param in model.named_parameters():
+        if _is_backbone(name) and not _is_bn(name):
+            backbone_params.append(param)
+        else:
+            other_params.append(param)
+    logger.debug("Fine-tuning {} backbone parameters.", len(backbone_params))
+
+    return backbone_params, other_params
+
+
 def train_model(
     model: nn.Module,
     *,
@@ -392,6 +462,7 @@ def train_model(
     learning_rate: float = 0.001,
     temperature: float = 0.1,
     contrastive_crop: bool = True,
+    finetune_backbone: bool = False,
 ) -> nn.Module:
     """
     Trains the model.
@@ -404,6 +475,8 @@ def train_model(
         learning_rate: The learning rate to use.
         temperature: The temperature parameter to use for the loss.
         contrastive_crop: Whether to use ContrastiveCrop.
+        finetune_backbone: Fine-tunes the conv layers in the backbone at a
+            fraction of the learning rate.
 
     Returns:
         The trained model.
@@ -418,7 +491,17 @@ def train_model(
         loss_fn = NtXentLoss(temperature=temperature)
         representation_model = model
     loss_fn = loss_fn.to(DEVICE)
-    optimizer = AdamW(model.parameters(), lr=learning_rate)
+
+    parameters = model.parameters()
+    if finetune_backbone:
+        # Finetune the backbone parameters.
+        backbone_params, other_params = _get_finetuning_params(model)
+        parameters = [
+            {"params": backbone_params, "lr": learning_rate / 10},
+            {"params": other_params},
+        ]
+
+    optimizer = AdamW(parameters, lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=2, min_lr=1e-5)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
