@@ -168,8 +168,12 @@ class ContrastiveCrop(MultiArgTransform):
                 hmap = hmap.squeeze(0)  # (Hi, Wi)
 
                 # Incorporate excess green as well.
-                h_filter = torch.ones(Wi, dtype=torch.bool)
-                w_filter = torch.ones(Hi, dtype=torch.bool)
+                h_filter = torch.ones(
+                    Wi, dtype=torch.bool, device=self.__device
+                )
+                w_filter = torch.ones(
+                    Hi, dtype=torch.bool, device=self.__device
+                )
                 if use_excess_green:
                     h_filter = torch.logical_and(
                         h_filter, excess_green.max(1)[0] > 0
