@@ -89,8 +89,30 @@ class ContrastiveCrop(MultiArgTransform):
         # from the entire image.
         self.__regions = None
 
+    @staticmethod
+    def __excess_green(image: torch.Tensor) -> torch.Tensor:
+        """
+        Computes per-pixel excess green values for an image.
+
+        Args:
+            image: The image to compute excess green for. Should be normalized
+                between zero and 1.
+
+        Returns:
+            The per-pixel excess green values.
+
+        """
+        red = image[0]
+        green = image[1]
+        blue = image[2]
+        return 2 * green - red - blue
+
     def update_regions(
-        self, model: RepresentationModel, data_loader: data.DataLoader
+        self,
+        model: RepresentationModel,
+        data_loader: data.DataLoader,
+        use_activations: bool = True,
+        use_excess_green: bool = True,
     ) -> None:
         """
         Updates the regions that it will crop from based on the learned
@@ -100,6 +122,10 @@ class ContrastiveCrop(MultiArgTransform):
             model: The partially-trained model.
             data_loader: The data loader that loads training data without
                 augmentation.
+            use_excess_green: If true, it will include excess green data
+                 when calculating the cropping regions.
+            use_activations: If true, it will include activation data when
+                calculating the cropping regions.
 
         """
         logger.info("==> Start updating boxes...")
@@ -121,6 +147,7 @@ class ContrastiveCrop(MultiArgTransform):
             images = images.to(torch.float) / 255
             with torch.no_grad():
                 feat_map = encoder(images)  # (N, C, H, W)
+                excess_green_batch = self.__excess_green(images)
 
             # Create the heatmap.
             N, Cf, Hf, Wf = feat_map.shape
@@ -137,11 +164,26 @@ class ContrastiveCrop(MultiArgTransform):
             )  # (N, 1, Hi, Wi)
             Hi, Wi = images.shape[-2:]
 
-            for hmap in eval_train_map:
+            for hmap, excess_green in zip(eval_train_map, excess_green_batch):
                 hmap = hmap.squeeze(0)  # (Hi, Wi)
 
-                h_filter = (hmap.max(1)[0] > self.__heatmap_thresh).int()
-                w_filter = (hmap.max(0)[0] > self.__heatmap_thresh).int()
+                # Incorporate excess green as well.
+                h_filter = torch.ones(Wi, dtype=torch.bool)
+                w_filter = torch.ones(Hi, dtype=torch.bool)
+                if use_excess_green:
+                    h_filter = torch.logical_and(
+                        h_filter, excess_green.max(1)[0] > 0
+                    )
+                    w_filter = torch.logical_and(
+                        w_filter, excess_green.max(0)[0] > 0
+                    )
+                if use_activations:
+                    h_filter_act = hmap.max(1)[0] > self.__heatmap_thresh
+                    w_filter_act = hmap.max(0)[0] > self.__heatmap_thresh
+                    h_filter = torch.logical_and(h_filter, h_filter_act)
+                    w_filter = torch.logical_and(w_filter, w_filter_act)
+                h_filter = h_filter.int()
+                w_filter = w_filter.int()
 
                 h_filter_nonzero = torch.nonzero(h_filter).view(-1)
                 w_filter_nonzero = torch.nonzero(w_filter).view(-1)
