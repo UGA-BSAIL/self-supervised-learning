@@ -300,6 +300,8 @@ def build_model(
     """
 
     def _make_rep_model(num_outputs: int) -> RepresentationModel:
+        # Select the large version.
+        yolo_description["scale"] = "l"
         encoder = YoloEncoder(yolo_description, weights=pretrained_weights)
         return RepresentationModel(encoder=encoder, num_outputs=num_outputs)
 
@@ -575,7 +577,11 @@ def train_model(
         logger.info("Starting epoch {}...", i)
         if contrastive_crop and i in region_update_epochs:
             # Update contrastive crop regions.
-            crop.update_regions(representation_model, single_frame_loader)
+            crop.update_regions(
+                representation_model,
+                single_frame_loader,
+                use_excess_green=False,
+            )
 
         average_loss = training_loop.train_epoch(data_loader)
 

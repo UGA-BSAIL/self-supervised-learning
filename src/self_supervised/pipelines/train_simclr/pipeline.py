@@ -39,7 +39,7 @@ def create_pipeline(**kwargs) -> Pipeline:
             node(
                 build_model,
                 dict(
-                    yolo_description="yolov8_l_description",
+                    yolo_description="yolov8_l_resnet50_description",
                     moco="params:use_moco",
                     rep_dims="params:rep_dims",
                     queue_size="params:queue_size",
