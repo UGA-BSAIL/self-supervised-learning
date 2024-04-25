@@ -580,7 +580,6 @@ def train_model(
             crop.update_regions(
                 representation_model,
                 single_frame_loader,
-                use_excess_green=False,
             )
 
         average_loss = training_loop.train_epoch(data_loader)
