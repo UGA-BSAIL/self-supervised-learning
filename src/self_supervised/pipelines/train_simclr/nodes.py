@@ -488,6 +488,10 @@ def train_model(
     if contrastive_crop:
         logger.debug("Updating regions on epochs {}", region_update_epochs)
 
+    # Do an initial region update with just excess green.
+    crop.update_regions(
+        representation_model, single_frame_loader, use_activations=False
+    )
     for i in range(num_epochs):
         logger.info("Starting epoch {}...", i)
         if contrastive_crop and i in region_update_epochs:
