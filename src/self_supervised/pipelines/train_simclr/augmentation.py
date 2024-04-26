@@ -105,14 +105,12 @@ class ContrastiveCrop(MultiArgTransform):
         logger.info("==> Start updating boxes...")
 
         # Get just the encoder portion to produce feature maps.
-        encoder = model.encoder.eval()
+        encoder = model.encoder
         if self.__layers_to_prune > 0:
             # Prune layers from the encoder.
-            encoder = (
-                model.encoder.clone_some_layers(self.__layers_to_prune)
-                .to(self.__device)
-                .eval()
-            )
+            encoder = model.encoder.clone_some_layers(
+                self.__layers_to_prune
+            ).to(self.__device)
 
         boxes = []
         for cur_iter, images in enumerate(data_loader):  # drop_last=False
