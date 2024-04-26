@@ -90,21 +90,21 @@ class ContrastiveCrop(MultiArgTransform):
         self.__regions = None
 
     @staticmethod
-    def __excess_green(image: torch.Tensor) -> torch.Tensor:
+    def __excess_green(images: torch.Tensor) -> torch.Tensor:
         """
         Computes per-pixel excess green values for an image.
 
         Args:
-            image: The image to compute excess green for. Should be normalized
-                between zero and 1.
+            images: The images to compute excess green for. Should be normalized
+                between zero and 1, and have shape `[N, C, H, W]`.
 
         Returns:
             The per-pixel excess green values.
 
         """
-        red = image[0]
-        green = image[1]
-        blue = image[2]
+        red = images[:, 0]
+        green = images[:, 1]
+        blue = images[:, 2]
         return 2 * green - red - blue
 
     def update_regions(
