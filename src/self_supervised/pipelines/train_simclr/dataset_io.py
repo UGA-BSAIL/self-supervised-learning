@@ -61,7 +61,19 @@ class SingleFrameDataset(Dataset):
             The metadata for the sampled dataset.
 
         """
-        sampled_data = self.__metadata.sample(n=dataset_size, random_state=0)
+        # Start with all the images containing flowers.
+        flower_data = self.__metadata[
+            self.__metadata[MarsMetadata.NUM_FLOWERS.value] > 0
+        ]
+        logger.debug("Selecting {} images with flowers.", len(flower_data))
+
+        # Sample the rest at random.
+        num_to_sample = max(dataset_size - len(flower_data), 0)
+        sampled_data = self.__metadata.sample(n=num_to_sample, random_state=0)
+
+        sampled_data = pd.concat(
+            [flower_data, sampled_data], ignore_index=True
+        )
         logger.debug("Downsampled dataset to {} examples.", len(sampled_data))
         return sampled_data
 
