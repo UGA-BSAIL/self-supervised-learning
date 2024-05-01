@@ -14,4 +14,4 @@ temperature: 0.07
 use_moco: true
 # Whether to use contrastive crop. Otherwise, it will use normal random
 # cropping.
-contrastive_crop: true
+contrastive_crop: false
