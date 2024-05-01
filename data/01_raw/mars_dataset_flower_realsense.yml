@@ -1,7 +1,7 @@
 # Contains the specifications for the files in the MARS dataset.
 dataset:
   # All paths will be relative to this.
-  root: "/home/daniel/lab_share/raw_data/2022/images/ground"
+  root: "/home/daniel/lab_share/scratch/temp_mars_videos/"
   # All the sessions that make up the dataset.
   sessions:
     - cameras:

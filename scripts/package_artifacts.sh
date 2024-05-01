@@ -9,11 +9,11 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=0:10:00
 #SBATCH --mem=2gb
-#SBATCH --mail-user=daniel.petti@uga.edu
+#SBATCH --mail-user=djpetti@gmail.com
 #SBATCH --output=ssl_model_package_artifacts.out    # Standard output log
 #SBATCH --error=ssl_model_package_artifacts.err     # Standard error log
-#SBATCH --account=lift-phenomics
-#SBATCH --qos=lift-phenomics
+#SBATCH --account=cli2
+#SBATCH --qos=cli2
 
 set -e
 

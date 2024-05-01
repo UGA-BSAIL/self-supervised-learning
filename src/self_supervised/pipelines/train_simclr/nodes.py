@@ -320,7 +320,7 @@ def load_dataset(
     max_frame_jitter: int = 0,
     enable_multi_view: bool = False,
     num_views: int = 3,
-    samples_per_clip: Optional[int] = None,
+    downsample_size: Optional[int] = None,
 ) -> data.Dataset:
     """
     Loads the training dataset.
@@ -335,8 +335,8 @@ def load_dataset(
             vanilla SimCLR.
         num_views: If multi-view training is enabled, how many views to use.
             If >3, it will use temporal augmentation.
-        samples_per_clip: If specified, it will be the maximum number of
-            examples to include in the dataset from each clip.
+        downsample_size: If specified, it will be the maximum number of
+            examples to include in the dataset.
 
     Returns:
         The dataset that it loaded.
@@ -355,7 +355,7 @@ def load_dataset(
         frame_dataset = SingleFrameDataset(
             mars_metadata=metadata,
             image_folder=image_folder,
-            samples_per_clip=samples_per_clip,
+            downsample_size=downsample_size,
         )
         paired_frames = PairedAugmentedDataset(
             image_dataset=frame_dataset,

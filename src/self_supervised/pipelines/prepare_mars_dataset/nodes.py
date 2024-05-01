@@ -13,6 +13,7 @@ import pandas as pd
 from kedro.io import PartitionedDataSet
 from loguru import logger
 from PIL import Image
+from ultralytics import YOLO
 
 from ..schemas import MarsMetadata
 from .dataset import Dataset
@@ -32,6 +33,22 @@ def _file_id(*, clip: int, frame: int, camera: int) -> str:
 
     """
     return f"clip{clip}_cam{camera}_frame{frame}"
+
+
+def _num_flowers_in_image(frame: np.ndarray, *, detector: YOLO) -> int:
+    """
+    Applies a YOLO model to a frame and returns the number of flowers detected.
+
+    Args:
+        frame: The frame to apply the model to.
+        detector: The YOLO model to use.
+
+    Returns:
+        The number of flowers detected.
+
+    """
+    results = detector(frame, conf=0.1)
+    return len(results[0].boxes)
 
 
 def _quantify_motion(frame1: np.ndarray, frame2: np.ndarray) -> float:
@@ -148,6 +165,7 @@ def _write_until_clip_end(
     frame_iter: Iterable[Tuple[float, List[np.ndarray]]],
     *,
     frame_dataset: PartitionedDataSet,
+    detection_model: YOLO | None = None,
     clip_num: int,
     max_gap: float,
     motion_threshold: float,
@@ -160,6 +178,8 @@ def _write_until_clip_end(
     Args:
         frame_iter: The iterator that produces synchronized frames.
         frame_dataset: The dataset where the frames will be written.
+        detection_model: If specified, it will use this detection model to
+            count how many flowers there are in each image.
         clip_num: The clip number that we are writing.
         max_gap: The maximum gap in timestamps before we consider the clip
             to have ended.
@@ -219,6 +239,16 @@ def _write_until_clip_end(
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = _resize_shortest(frame, shortest_side=540)
 
+            num_flowers = -1
+            if detection_model is not None:
+                # Count the number of flowers in the frame.
+                num_flowers = _num_flowers_in_image(
+                    frame, detector=detection_model
+                )
+                logger.debug(
+                    "Found {} flowers in frame {}.", num_flowers, file_id
+                )
+
             frame_files[file_id] = Image.fromarray(frame)
 
             # Update the metadata.
@@ -227,6 +257,7 @@ def _write_until_clip_end(
                 frame_num,
                 camera,
                 timestamp,
+                num_flowers,
                 file_id,
             )
         frame_dataset.save(frame_files)
@@ -255,6 +286,7 @@ def build_dataset(
     dataset: Dataset,
     *,
     image_dataset_path: str,
+    detection_model: YOLO | None = None,
     sync_tolerance: float = 0.05,
     max_timestamp_gap: float = 0.5,
     motion_threshold: float = 5.0,
@@ -266,6 +298,8 @@ def build_dataset(
     Args:
         dataset: The dataset to build.
         image_dataset_path: Where to write the dataset of image files.
+        detection_model: If specified, it will use this detection model to
+            count how many flowers there are in each image.
         sync_tolerance: The maximum difference in timestamps allowed for
             synchronized frames.
         max_timestamp_gap: The maximum difference in timestamps allowed
@@ -302,6 +336,7 @@ def build_dataset(
                 have_more_frames, clip_metadata = _write_until_clip_end(
                     frame_iter,
                     frame_dataset=image_dataset,
+                    detection_model=detection_model,
                     clip_num=clip_num,
                     max_gap=max_timestamp_gap,
                     motion_threshold=motion_threshold,

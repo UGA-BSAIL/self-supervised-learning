@@ -32,6 +32,11 @@ yolov8_l_description:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/yolov8l.yml
 
+# Flower detection model.
+yolov8l_moco_round_1:
+  type: self_supervised.extras.datasets.YoloModelDataSet
+  filepath: data/06_models/semi_supervised/yolov8l_moco_round_1.pt
+
 # Initial, untrained model
 initial_model:
   type: MemoryDataSet

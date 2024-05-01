@@ -28,7 +28,7 @@ class SingleFrameDataset(Dataset):
         *,
         mars_metadata: pd.DataFrame,
         image_folder: Path,
-        samples_per_clip: Optional[int] = None,
+        downsample_size: Optional[int] = None,
         augmentation: Callable[[Tensor], Tensor] | None = None,
     ):
         """
@@ -36,8 +36,8 @@ class SingleFrameDataset(Dataset):
             mars_metadata: The metadata, which describes where to find the
                 dataset files.
             image_folder: The folder that contains all the dataset images.
-            samples_per_clip: If specified, will downsample the dataset to
-                have at most this number of frames from each clip.
+            downsample_size: If specified, will downsample the dataset to
+                have at most this number of frames.
             augmentation: Augmentation to apply to output images. Defaults to
                 nothing.
 
@@ -47,33 +47,21 @@ class SingleFrameDataset(Dataset):
         self.__image_folder = image_folder
         self.augmentation = augmentation
 
-        if samples_per_clip is not None:
-            self.__metadata = self.__sample_data_set(samples_per_clip)
+        if downsample_size is not None:
+            self.__metadata = self.__sample_data_set(downsample_size)
 
-    def __sample_data_set(self, samples_per_clip: int) -> pd.DataFrame:
+    def __sample_data_set(self, dataset_size: int) -> pd.DataFrame:
         """
-        Performs a stratified sampling on the metadata over the clips,
-        such that each clip has at most some number of samples in the dataset.
+        Randomly downsamples the dataset.
 
         Args:
-            samples_per_clip: Maximum number of samples we want for each clip.
+            dataset_size: The desired total size of the dataset.
 
         Returns:
             The metadata for the sampled dataset.
 
         """
-        by_clip = self.__metadata.groupby("clip")
-        clips = self.__metadata["clip"].unique()
-
-        sampled_data = []
-        for clip in clips:
-            clip_frames = by_clip.get_group(clip)
-            sample_size = min(len(clip_frames), samples_per_clip)
-            sampled_data.append(
-                clip_frames.sample(n=sample_size, random_state=0)
-            )
-        sampled_data = pd.concat(sampled_data, ignore_index=True)
-
+        sampled_data = self.__metadata.sample(n=dataset_size, random_state=0)
         logger.debug("Downsampled dataset to {} examples.", len(sampled_data))
         return sampled_data
 

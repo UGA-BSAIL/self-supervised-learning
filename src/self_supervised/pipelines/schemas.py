@@ -219,6 +219,10 @@ class MarsMetadata(enum.Enum):
     The timestamp from the original video file that is associated with this
     frame. All frames in a clip should have monotonically-increasing timestamps.
     """
+    NUM_FLOWERS = "num_flowers"
+    """
+    The number of flowers in this frame.
+    """
 
     FILE_ID = "file_id"
     """
@@ -244,8 +248,8 @@ class ModelInputs(enum.Enum):
     DETECTION_GEOMETRY = "detection_geometry"
     """
     Corresponding geometric features for the detection crops. Should have the
-    form `[center_x, center_y, width, height]`. These are only used during 
-    training. During inference, the model will automatically use the results 
+    form `[center_x, center_y, width, height]`. These are only used during
+    training. During inference, the model will automatically use the results
     from the detector.
     """
     TRACKLET_GEOMETRY = "tracklet_geometry"
