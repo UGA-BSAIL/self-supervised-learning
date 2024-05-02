@@ -61,6 +61,10 @@ class SingleFrameDataset(Dataset):
             The metadata for the sampled dataset.
 
         """
+        if dataset_size > len(self.__metadata):
+            # Don't sample.
+            return self.__metadata
+
         # Start with all the images containing flowers.
         flower_data = self.__metadata[
             self.__metadata[MarsMetadata.NUM_FLOWERS.value] > 0

@@ -7,4 +7,4 @@ enable_multi_view: false
 # it will use temporal augmentation.
 num_views: 2
 # Number of examples to use from the dataset.
-downsample_size: 192000
+downsample_size: 1000000
