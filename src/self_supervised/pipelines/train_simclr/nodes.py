@@ -425,7 +425,7 @@ def train_model(
 
     crop_args = dict(
         size=410,
-        scale=(0.08, 1.0),
+        scale=(0.4, 1.0),
         interpolation=InterpolationMode.NEAREST,
     )
     if contrastive_crop:
