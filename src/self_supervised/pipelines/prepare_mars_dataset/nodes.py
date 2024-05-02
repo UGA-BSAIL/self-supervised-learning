@@ -15,6 +15,7 @@ from loguru import logger
 from PIL import Image
 from ultralytics import YOLO
 
+from ..common_nodes import num_flowers_in_image
 from ..schemas import MarsMetadata
 from .dataset import Dataset
 
@@ -33,22 +34,6 @@ def _file_id(*, clip: int, frame: int, camera: int) -> str:
 
     """
     return f"clip{clip}_cam{camera}_frame{frame}"
-
-
-def _num_flowers_in_image(frame: np.ndarray, *, detector: YOLO) -> int:
-    """
-    Applies a YOLO model to a frame and returns the number of flowers detected.
-
-    Args:
-        frame: The frame to apply the model to.
-        detector: The YOLO model to use.
-
-    Returns:
-        The number of flowers detected.
-
-    """
-    results = detector(frame, conf=0.1)
-    return len(results[0].boxes)
 
 
 def _quantify_motion(frame1: np.ndarray, frame2: np.ndarray) -> float:
@@ -242,7 +227,7 @@ def _write_until_clip_end(
             num_flowers = -1
             if detection_model is not None:
                 # Count the number of flowers in the frame.
-                num_flowers = _num_flowers_in_image(
+                num_flowers = num_flowers_in_image(
                     frame, detector=detection_model
                 )
                 logger.debug(

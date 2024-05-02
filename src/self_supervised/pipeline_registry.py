@@ -6,6 +6,7 @@ from .pipelines import (
     active_learning,
     eda,
     prepare_mars_dataset,
+    recompute_flower_numbers,
     train_simclr,
     train_temporal,
 )
@@ -23,6 +24,9 @@ def register_pipelines() -> Dict[str, Pipeline]:
     simclr_pipeline = train_simclr.create_pipeline()
     temporal_pipeline = train_temporal.create_pipeline()
     active_learning_pipeline = active_learning.create_pipeline()
+    recompute_flower_numbers_pipeline = (
+        recompute_flower_numbers.create_pipeline()
+    )
 
     return {
         "__default__": simclr_pipeline,
@@ -31,4 +35,5 @@ def register_pipelines() -> Dict[str, Pipeline]:
         "train_simclr": simclr_pipeline,
         "train_temporal": temporal_pipeline,
         "active_learning": active_learning_pipeline,
+        "recompute_flower_numbers": recompute_flower_numbers_pipeline,
     }

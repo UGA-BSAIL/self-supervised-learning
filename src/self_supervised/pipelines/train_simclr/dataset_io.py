@@ -44,7 +44,7 @@ class SingleFrameDataset(Dataset):
         """
         self.__metadata = mars_metadata
         logger.info("Loading dataset images from {}.", image_folder)
-        self.__image_folder = image_folder
+        self.__image_folder = Path(image_folder)
         self.augmentation = augmentation
 
         if downsample_size is not None:
@@ -79,6 +79,10 @@ class SingleFrameDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.__metadata)
+
+    @property
+    def metadata(self) -> pd.DataFrame:
+        return self.__metadata.copy()
 
     def __getitem__(self, item: int) -> Tensor:
         """
