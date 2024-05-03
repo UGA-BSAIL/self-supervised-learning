@@ -432,7 +432,7 @@ def train_model(
         crop = ContrastiveCrop(
             heatmap_threshold=0.1,
             alpha=0.6,
-            layers_to_prune=8,
+            # layers_to_prune=8,
             device=DEVICE,
             **crop_args,
         )
