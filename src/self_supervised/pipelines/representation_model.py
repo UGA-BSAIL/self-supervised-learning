@@ -5,6 +5,7 @@ Common components of models for representation learning.
 
 from typing import Any, Dict, Iterable, Tuple
 
+import torch.nn
 from torch import Tensor, nn
 from torchvision.models import convnext_small, efficientnet_v2_s
 from ultralytics.models.yolo.detect.train import DetectionModel
@@ -91,26 +92,33 @@ class EfficientNetSmallEncoder(nn.Module):
 
 class YoloEncoder(nn.Module):
     """
-    Encoder module that uses the YOLOv5 backbone + pyramid.
+    Encoder module that uses the YOLOv8 backbone + pyramid.
     """
 
     def __init__(
-        self, model_description: Dict[str, Any], num_features: int = 2048
+        self,
+        model_description: Dict[str, Any],
+        num_features: int = 2048,
+        weights: Dict[str, Any] | torch.nn.Module = None,
     ):
         """
         Args:
             model_description: The description of the YOLO model we are basing
                 this on, as a dictionary.
             num_features: The number of output features that we want.
+            weights: Pre-trained weights to load.
         """
         super().__init__()
 
-        # The last layer is going to be the head, so get rid of that.
+        # The last layer is going to be the detection head, so get rid of that.
         self.__model_description = model_description.copy()
         self.__model_description["head"] = self.__model_description["head"][
             :-1
         ]
         self.yolo = DetectionModel(self.__model_description)
+
+        if weights is not None:
+            self.yolo.load(weights)
 
         # Internal projection head used to get the right number of output
         # features for the representation.

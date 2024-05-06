@@ -39,12 +39,13 @@ def create_pipeline(**kwargs) -> Pipeline:
             node(
                 build_model,
                 dict(
-                    yolo_description="yolov8_l_description",
+                    yolo_description="yolov8_l_resnet50_description",
                     moco="params:use_moco",
                     rep_dims="params:rep_dims",
                     queue_size="params:queue_size",
                     momentum_weight="params:momentum_weight",
                     temperature="params:temperature",
+                    pretrained_weights="moco_pretrained_model",
                 ),
                 "initial_model",
             ),
@@ -58,6 +59,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                     learning_rate="params:learning_rate",
                     temperature="params:temperature",
                     contrastive_crop="params:contrastive_crop",
+                    finetune_backbone="params:finetune_backbone",
                 ),
                 "trained_model",
             ),

@@ -15,3 +15,5 @@ use_moco: true
 # Whether to use contrastive crop. Otherwise, it will use normal random
 # cropping.
 contrastive_crop: true
+# Whether to fine-tune the backbone instead of fully re-training it.
+finetune_backbone: true

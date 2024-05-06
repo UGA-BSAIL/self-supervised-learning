@@ -37,10 +37,20 @@ yolov8l_moco_round_1:
   type: self_supervised.extras.datasets.YoloModelDataSet
   filepath: data/06_models/semi_supervised/yolov8l_moco_round_1.pt
 
+# Description of the YOLOv8-L model with a ResNet backbone.
+yolov8_l_resnet50_description:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/yolov8-resnet50.yml
+
 # Initial, untrained model
 initial_model:
   type: MemoryDataSet
   copy_mode: assign
+
+# Pre-trained MoCo model.
+moco_pretrained_model:
+  type: self_supervised.extras.datasets.PytorchModelDataSet
+  filepath: data/06_models/moco_pretrained/yolov8l_resnet50_moco_pretrained.pt
 
 # Trained model
 trained_model:
