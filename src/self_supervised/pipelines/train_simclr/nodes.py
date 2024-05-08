@@ -424,7 +424,7 @@ def _is_backbone(layer_name: str) -> bool:
         # This would be the outer projection layer.
         return False
     layer_number = int(name_parts[wrapped_index + 1])
-    return layer_number > 4
+    return layer_number < 5
 
 
 def _get_finetuning_params(

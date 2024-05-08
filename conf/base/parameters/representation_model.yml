@@ -16,4 +16,4 @@ use_moco: true
 # cropping.
 contrastive_crop: false
 # Whether to fine-tune the backbone instead of fully re-training it.
-finetune_backbone: false
+finetune_backbone: true
