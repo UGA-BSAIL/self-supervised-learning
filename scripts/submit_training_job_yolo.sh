@@ -57,9 +57,9 @@ source scripts/load_common.sh
 
 # Run the training.
 export PYTHONPATH=${PYTHONPATH}:src/
-poetry run yolo detect train model=data/01_raw/yolov8l-resnet50.yml \
+poetry run yolo detect train model=data/01_raw/yolov8l.yml \
   epochs=100 \
-  pretrained=yolov8l_ssl_resnet50_moco_cc.pt \
+  pretrained=yolov8l_ssl_moco_single.pt \
   batch=128 imgsz=640 cache=ram workers=8 \
-  project=self_supervised name=yolo_val freeze=5 \
-  data=data/05_model_input/flower_dataset/ssl_active_learning_dataset_small.yaml
+  project=self_supervised name=yolo_val \
+  data=data/05_model_input/flower_dataset/aerial_dataset_small.yaml

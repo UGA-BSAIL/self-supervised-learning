@@ -20,11 +20,5 @@ def create_pipeline(**_) -> Pipeline:
                 ),
                 "mars_dataset_meta_updated",
             ),
-            node(
-                lambda x: x,
-                "mars_dataset_meta_updated",
-                "mars_dataset_metadata",
-                name="dummy_save_metadata",
-            ),
         ]
     )
