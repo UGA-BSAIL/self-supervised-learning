@@ -3,6 +3,14 @@ mars_flower_dataset_spec:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/mars_dataset_flower.yml
 
+mars_boll_dataset_spec:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/mars_dataset_boll.yml
+
+mars_boll_2024_dataset_spec:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/mars_dataset_boll_2024.yml
+
 mars_flower_dataset_rs_spec:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/mars_dataset_flower_realsense.yml

@@ -1,209 +1,186 @@
 # Contains the specifications for the files in the MARS dataset.
 dataset:
   # All paths will be relative to this.
-  root: "/home/daniel/lab_share/raw_data/2022/images/ground"
+  ts_root: "/home/daniel/lab_share/raw_data/2022/images/ground"
+  video_root: "https://bsailn2.ad.ufl.edu:8083/api/v1/videos"
   # All the sessions that make up the dataset.
   sessions:
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr0_cam0.mp4
-          times: engr0_cam0_ts.txt
-        camera1:
-          video: engr0_cam1.mp4
-          times: engr0_cam1_ts.txt
-        camera2:
-          video: engr0_cam2.mp4
-          times: engr0_cam2_ts.txt
-
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
-      cameras:
-        camera0:
-          video: engr1_cam0.mp4
-          times: engr1_cam0_ts.txt
-        camera1:
-          video: engr1_cam1.mp4
-          times: engr1_cam1_ts.txt
-        camera2:
-          video: engr1_cam2.mp4
-          times: engr1_cam2_ts.txt
-
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
-      cameras:
-        camera0:
-          video: engr2_cam0.mp4
+          video: mallard-videos/2023-11-30-746f750a5ee844f0869e0cede2249490
           times: engr2_cam0_ts.txt
         camera1:
-          video: engr2_cam1.mp4
+          video: mallard-videos/2023-11-30-36100f846ec24c99b87f8d6424f0895e
           times: engr2_cam1_ts.txt
         camera2:
-          video: engr2_cam2.mp4
+          video: mallard-videos/2023-11-30-d8f56ca475204ff49c021664725aa1a2
           times: engr2_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr3_cam0.mp4
+          video: mallard-videos/2023-11-30-1c37dc224f184e2f97e0928b7daac62d
           times: engr3_cam0_ts.txt
         camera1:
-          video: engr3_cam1.mp4
+          video: mallard-videos/2023-11-30-9e692a647c4e459e9dac62d5d0afe876
           times: engr3_cam1_ts.txt
         camera2:
-          video: engr3_cam2.mp4
+          video: mallard-videos/2023-11-30-05bcd04205654d309bd574fb185edf78
           times: engr3_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr4_cam0.mp4
+          video: mallard-videos/2023-11-30-a5018c4e78fd4f1b91c88d28bad80607
           times: engr4_cam0_ts.txt
         camera1:
-          video: engr4_cam1.mp4
+          video: mallard-videos/2023-11-30-6a59a5babb80408980cbedd1fb4ce9e4
           times: engr4_cam1_ts.txt
         camera2:
-          video: engr4_cam2.mp4
+          video: mallard-videos/2023-11-30-07ec158174324333a7f68136b16877a0
           times: engr4_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr5_cam0.mp4
+          video: mallard-videos/2023-11-30-6f3c3bf7786d473a98c5fb05812e1a7a
           times: engr5_cam0_ts.txt
         camera1:
-          video: engr5_cam1.mp4
+          video: mallard-videos/2023-11-30-eb36e600c8df4822b5b54ac4897e3566
           times: engr5_cam1_ts.txt
         camera2:
-          video: engr5_cam2.mp4
+          video: mallard-videos/2023-11-30-9c1ca176cfe34b5ba1655af3ede71ae3
           times: engr5_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr6_cam0.mp4
+          video: mallard-videos/2023-11-30-6b8758a428764586974e7614ddbf4bb7
           times: engr6_cam0_ts.txt
         camera1:
-          video: engr6_cam1.mp4
+          video: mallard-videos/2023-11-30-a4d659a5f43645178be7ecc7520cd043
           times: engr6_cam1_ts.txt
         camera2:
-          video: engr6_cam2.mp4
+          video: mallard-videos/2023-11-30-4116975517f14a90943cb83c1d564739
           times: engr6_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr7_cam0.mp4
+          video: mallard-videos/2023-11-30-041079f79dc0443fb18c0d09955a0a0f
           times: engr7_cam0_ts.txt
         camera1:
-          video: engr7_cam1.mp4
+          video: mallard-videos/2023-11-30-c2146c4008b94187950eeb9af8bc5871
           times: engr7_cam1_ts.txt
         camera2:
-          video: engr7_cam2.mp4
+          video: mallard-videos/2023-11-30-472a1b252c8645ab976716e6b6b376f6
           times: engr7_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr8_cam0.mp4
+          video: mallard-videos/2023-11-30-625424e551b942a2b4ef5aad93d03fa5
           times: engr8_cam0_ts.txt
         camera1:
-          video: engr8_cam1.mp4
+          video: mallard-videos/2023-11-30-16f56906a45b46d78a60d0cff1d2043f
           times: engr8_cam1_ts.txt
         camera2:
-          video: engr8_cam2.mp4
+          video: mallard-videos/2023-11-30-ce3e910238fd40c6b70b38bbb7b36610
           times: engr8_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr9_cam0.mp4
+          video: mallard-videos/2023-11-30-c5f6492ff68a433f82356ab231d271e5
           times: engr9_cam0_ts.txt
         camera1:
-          video: engr9_cam1.mp4
+          video: mallard-videos/2023-11-30-5f733a6c39f3489a98220af8d96310be
           times: engr9_cam1_ts.txt
         camera2:
-          video: engr9_cam2.mp4
+          video: mallard-videos/2023-11-30-b314737103104df18d8b6884ebd4f255
           times: engr9_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/ENGR
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/ENGR
       cameras:
         camera0:
-          video: engr10_cam0.mp4
+          video: mallard-videos/2023-11-30-e6d510938b80437484ac3635b1dc3f5f
           times: engr10_cam0_ts.txt
         camera1:
-          video: engr10_cam1.mp4
+          video: mallard-videos/2023-11-30-bad136536c0c4ae9b852f779a8213e8d
           times: engr10_cam1_ts.txt
         camera2:
-          video: engr10_cam2.mp4
+          video: mallard-videos/2023-11-30-7293f7502acd4abdac67c0136866dc39
           times: engr10_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/SPL
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/SPL
       cameras:
         camera0:
-          video: spl0_cam0.mp4
+          video: mallard-videos/2023-11-30-91260b049880429ca636ba967c8f5e95
           times: spl0_cam0_ts.txt
         camera1:
-          video: spl0_cam1.mp4
+          video: mallard-videos/2023-11-30-578b764bb748491c9bec5c8235617978
           times: spl0_cam1_ts.txt
         camera2:
-          video: spl0_cam2.mp4
+          video: mallard-videos/2023-11-30-ba62b626cbe3408eb3eb83910d7a86aa
           times: spl0_cam2_ts.txt
 
-    - path: 2022-11-29/mars_ihf/pi_camera/SPL
+    - ts_path: 2022-11-29/mars_ihf/pi_camera/SPL
       cameras:
         camera0:
-          video: spl1_cam0.mp4
+          video: mallard-videos/2023-11-30-c06df8d7467446d08d23ab5e1697d584
           times: spl1_cam0_ts.txt
         camera1:
-          video: spl1_cam1.mp4
+          video: mallard-videos/2023-11-30-6ea448cfea7f4220ac2420dca4eac2be
           times: spl1_cam1_ts.txt
         camera2:
-          video: spl1_cam2.mp4
+          video: mallard-videos/2023-11-30-a0f976b594504312a5c411c539e578f0
           times: spl1_cam2_ts.txt
 
     - path: 2022-11-29/mars_ihf/pi_camera/SPL
       cameras:
         camera0:
-          video: spl2_cam0.mp4
+          video: mallard-videos/2023-11-30-d13ab54262684c0c81deadcda060107a
           times: spl2_cam0_ts.txt
         camera1:
-          video: spl2_cam1.mp4
+          video: mallard-videos/2023-11-30-f8fb156587b04ce5a4305d56445d6d3b
           times: spl2_cam1_ts.txt
         camera2:
-          video: spl2_cam2.mp4
+          video: mallard-videos/2023-11-30-b55bfebb3f414a549ffab2a243748cf4
           times: spl2_cam2_ts.txt
 
-    - path: 2022-12-02/mars_ihf/pi_camera/SPL
+    - ts_path: 2022-12-02/mars_ihf/pi_camera/SPL
       cameras:
         camera0:
-          video: spl0_cam0.mp4
+          video: mallard-videos/2023-12-01-6c86311b283440f781293ed3ee76013a
           times: spl0_cam0_ts.txt
         camera1:
-          video: spl0_cam1.mp4
+          video: mallard-videos/2023-12-01-33fb997083174505a9e1908e37cd5be5
           times: spl0_cam1_ts.txt
         camera2:
-          video: spl0_cam2.mp4
+          video: mallard-videos/2023-12-01-9c0b4bcde95d4dc0b40476eecbf7ee40
           times: spl0_cam2_ts.txt
 
-    - path: 2022-12-02/mars_ihf/pi_camera/SPL
+    - ts_path: 2022-12-02/mars_ihf/pi_camera/SPL
       cameras:
         camera0:
-          video: spl1_cam0.mp4
+          video: mallard-videos/2023-12-01-af4a6942e4f549ba97f04a16dafebed3
           times: spl1_cam0_ts.txt
         camera1:
-          video: spl1_cam1.mp4
+          video: mallard-videos/2023-12-01-f5440739ef9747b1a70cdc996c82d384
           times: spl1_cam1_ts.txt
         camera2:
-          video: spl1_cam2.mp4
+          video: mallard-videos/2023-12-01-08f992b83a5c4ff685026fa0315ad085
           times: spl1_cam2_ts.txt
 
-    - path: 2022-12-02/mars_ihf/pi_camera/SPL
+    - ts_path: 2022-12-02/mars_ihf/pi_camera/SPL
       cameras:
         camera0:
-          video: spl2_cam0.mp4
+          video: mallard-videos/2023-12-01-ddf8899be7a84176a6d11265a0a5db8e
           times: spl2_cam0_ts.txt
         camera1:
-          video: spl2_cam1.mp4
+          video: mallard-videos/2023-12-01-61fd4090c9a3411b8bff5415c37bfc08
           times: spl2_cam1_ts.txt
         camera2:
-          video: spl2_cam2.mp4
+          video: mallard-videos/2023-12-01-07c13becf9084a46b087b8aa0828d6de
           times: spl2_cam2_ts.txt

@@ -1,0 +1,26 @@
+# Contains the specifications for the files in the MARS dataset.
+dataset:
+  # All paths will be relative to this.
+  root: "/home/daniel/lab_share/scratch/mars_videos/"
+  # All the sessions that make up the dataset.
+  sessions:
+    - path: 2024-10-25/
+      cameras:
+        camera0:
+          video: mars_cam0_combined.mp4
+          times: camera_metadata.yaml
+        camera1:
+          video: mars_cam1_combined.mp4
+          times: camera_metadata.yaml
+        camera2:
+          video: mars_cam2_combined.mp4
+          times: camera_metadata.yaml
+        camera3:
+          video: mars_cam3_combined.mp4
+          times: camera_metadata.yaml
+        camera4:
+          video: mars_cam4_combined.mp4
+          times: camera_metadata.yaml
+        camera5:
+          video: mars_cam5_combined.mp4
+          times: camera_metadata.yaml

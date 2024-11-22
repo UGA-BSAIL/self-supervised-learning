@@ -10,9 +10,9 @@ python = "~3.10"
 kedro = {extras = ["matplotlib", "pandas"], version = "^0.18.1"}
 pandas = "1.5"
 loguru = "^0.5.3"
-seaborn = "^0.11.1"
+seaborn = "^0.13.2"
 matplotlib = "^3.3.4"
-pydantic = "^1.8.1"
+pydantic = "^2.9.2"
 scipy = "^1.6.2"
 numpy = "1.22"
 opencv-contrib-python = "^4.5"
@@ -28,6 +28,12 @@ scikit-learn = "^1.2.1"
 segment-anything = {git = "https://github.com/facebookresearch/segment-anything.git"}
 pyyaml = "^6"
 ultralytics = { path = "external/ultralytics", develop = false }
+mallard_client = { path = "external/mallard_client", develop = false }
+requests = "^2.32.3"
+universal-pathlib = "^0.2.5"
+fief-client = "^0.20.0"
+requests-toolbelt = "^1.0.0"
+yaspin = "^3.1.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"

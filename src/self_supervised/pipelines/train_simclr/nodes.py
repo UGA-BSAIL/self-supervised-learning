@@ -544,24 +544,28 @@ def train_model(
         shuffle=True,
         drop_last=True,
     )
-    # Create a secondary data loader for contrastive cropping.
-    collate_resize = partial(_collate_different_sizes, output_size=(410, 410))
-    single_frame_loader = data.DataLoader(
-        training_data.single_frame_dataset,
-        batch_size=batch_size,
-        pin_memory=True,
-        num_workers=8,
-        shuffle=False,
-        drop_last=False,
-        collate_fn=collate_resize,
-    )
+    single_frame_loader = None
+    if contrastive_crop:
+        # Create a secondary data loader for contrastive cropping.
+        collate_resize = partial(
+            _collate_different_sizes, output_size=(410, 410)
+        )
+        single_frame_loader = data.DataLoader(
+            training_data.single_frame_dataset,
+            batch_size=batch_size,
+            pin_memory=True,
+            num_workers=8,
+            shuffle=False,
+            drop_last=False,
+            collate_fn=collate_resize,
+        )
     training_loop = TrainingLoop(
         model=model,
         optimizer=optimizer,
         loss_fn=loss_fn,
         scaler=scaler,
         accuracy=accuracy,
-        checkpoint_period=5,
+        checkpoint_period=1,
     )
 
     # Update contrastive crop 4 times during training.

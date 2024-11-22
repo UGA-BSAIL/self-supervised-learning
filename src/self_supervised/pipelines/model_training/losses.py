@@ -41,7 +41,7 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
             # We're already flat.
             return tensor
 
-        if type(tensor) == tf.RaggedTensor:
+        if type(tensor) is tf.RaggedTensor:
             return tensor.merge_dims(1, num_dims - 1)
         else:
             batch_size = tf.shape(tensor)[0]
@@ -55,7 +55,7 @@ class WeightedBinaryCrossEntropy(tf.keras.losses.Loss):
 
         # Calculate the fraction of samples that are positive.
         num_positive = tf.reduce_sum(y_true, axis=1)
-        if type(y_true) == tf.RaggedTensor:
+        if type(y_true) is tf.RaggedTensor:
             num_total = y_true.row_lengths()
         else:
             num_total = tf.shape(y_true)[1]

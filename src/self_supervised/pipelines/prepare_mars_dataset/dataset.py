@@ -5,15 +5,26 @@ Classes for interacting with the MARS dataset.
 
 import abc
 import enum
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from tempfile import TemporaryDirectory
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import cv2
 import numpy as np
 import pandas as pd
+import yaml
 from loguru import logger
 from methodtools import lru_cache
+from tqdm import tqdm
+from upath import UPath
+
+from .mallard_utils import ensure_user_logged_in, streaming_video_download
+
+LazyFrame = Callable[[], np.array]
+"""
+Type alias for a function that returns a frame.
+"""
 
 
 class _YamlRep(abc.ABC):
@@ -24,15 +35,21 @@ class _YamlRep(abc.ABC):
     @classmethod
     @abc.abstractmethod
     def from_yaml(
-        cls, spec: Dict[str, Any], *, parent_folder: Path
+        cls,
+        spec: Dict[str, Any],
+        *,
+        video_parent_folder: UPath,
+        ts_parent_folder: UPath,
     ) -> "_YamlRep":
         """
         Creates a new instance of this class from a YAML specification.
 
         Args:
             spec: The YAML specification to use.
-            parent_folder: The parent folder that all paths in this section are
-                relative to.
+            video_parent_folder: The parent folder that all video paths in this
+                section are relative to.
+            ts_parent_folder: The parent folder that all timestamp data in
+                this session is relative to.
 
         Returns:
             The instance it created.
@@ -70,58 +87,81 @@ class Camera(_YamlRep):
     def __init__(
         self,
         *,
-        parent_folder: Path,
-        video_name: str,
-        timestamp_name: Optional[str] = None,
+        camera_id: str,
+        video_path: UPath,
+        timestamp_path: Optional[UPath] = None,
     ):
         """
         Args:
-            parent_folder: The path to the folder containing the camera files.
-            video_name: The name of the video file for this camera.
-            timestamp_name: The name of the timestamp file for this camera.
+            camera_id: The name of this camera.
+            video_path: The path to the video file for this camera.
+            timestamp_path: The path to the timestamp file for this camera.
                 If not provided, timestamps from the video will be used.
 
         """
-        self.__root = parent_folder
-        self.__video_name = video_name
-        self.__timestamp_name = timestamp_name
+        self.__camera_id = camera_id
+        self.__video_path = video_path
+        self.__timestamp_path = timestamp_path
 
         # Used to keep track internally of which frame the video capture is set
         # at.
         self.__capture_frame = 0
+        # Temporary directory to use for downloading videos.
+        self.__download_dir = TemporaryDirectory()
 
     @classmethod
     def from_yaml(
-        cls, spec: Dict[str, Any], *, parent_folder: Path
+        cls,
+        spec: Dict[str, Any],
+        *,
+        video_parent_folder: UPath,
+        ts_parent_folder: UPath,
     ) -> "Camera":
-        logger.debug("Loading camera from {}.", parent_folder)
+        logger.debug("Loading camera from {}.", video_parent_folder)
+        ts_path = None
+        if "times" in spec:
+            ts_path = ts_parent_folder / spec["times"]
         return cls(
-            parent_folder=parent_folder,
-            video_name=spec["video"],
-            timestamp_name=spec.get("times"),
+            camera_id=spec["camera_id"],
+            video_path=video_parent_folder / spec["video"],
+            timestamp_path=ts_path,
         )
 
-    @cached_property
-    def video_path(self) -> Path:
+    @property
+    def video_path(self) -> UPath:
         """
         Returns:
             The path to the video file.
 
         """
-        return self.__root / self.__video_name
+        if self.__video_path.parts[0].startswith("http"):
+            video_path = UPath(self.__download_dir.name) / "video.mp4"
+            if video_path.exists():
+                return video_path
+
+            # Re-create the temporary directory to be safe, as it can get
+            # cleaned up when copying.
+            self.__download_dir = TemporaryDirectory()
+            video_path = UPath(self.__download_dir.name) / "video.mp4"
+
+            # We need to download this file.
+            logger.debug("Downloading video from {}.", self.__video_path)
+            ensure_user_logged_in()
+            streaming_video_download(self.__video_path.as_posix(), video_path)
+
+            return video_path
+
+        return self.__video_path
 
     @cached_property
-    def timestamp_path(self) -> Optional[Path]:
+    def timestamp_path(self) -> Optional[UPath]:
         """
         Returns:
             The path to the timestamp file, or None if there is no timestamp
             file.
 
         """
-        if self.__timestamp_name is None:
-            return None
-
-        return self.__root / self.__timestamp_name
+        return self.__timestamp_path
 
     def __timestamps_from_file(self) -> pd.DataFrame:
         """
@@ -166,6 +206,42 @@ class Camera(_YamlRep):
 
         return timestamps
 
+    def __timestamps_from_metadata(self) -> pd.DataFrame:
+        """
+        Loads timestamp data from a camera metadata file.
+
+        Returns:
+            The loaded timestamps for this camera.
+
+        """
+        num_documents = self.timestamp_path.read_text().count("---")
+        metadata = yaml.load_all(
+            self.timestamp_path.open(), Loader=yaml.CLoader
+        )
+
+        data = []
+        for frame in tqdm(
+            metadata, desc="Loading metadata", total=num_documents
+        ):
+            if frame["frame_id"] != self.__camera_id:
+                # This is from another camera.
+                continue
+            data.append([frame["frame_num"], frame["stamp"]])
+
+        timestamps_frame = pd.DataFrame(
+            data=data,
+            columns=[
+                self.TimestampCol.FRAME_NUM.value,
+                self.TimestampCol.TIMESTAMP.value,
+            ],
+        )
+        # Use the timestamps as an index for easy querying.
+        timestamps_frame.set_index(
+            self.TimestampCol.TIMESTAMP.value, inplace=True
+        )
+        timestamps_frame.sort_index(inplace=True)
+        return timestamps_frame
+
     def __timestamps_from_video(self) -> pd.DataFrame:
         """
         Generates timestamp data from the video file.
@@ -181,7 +257,7 @@ class Camera(_YamlRep):
         video_fps = self.__video_capture.get(cv2.CAP_PROP_FPS)
         logger.debug(
             "Video {} has {} frames at {} FPS.",
-            self.__video_name,
+            self.__video_path.name,
             num_video_frames,
             video_fps,
         )
@@ -208,9 +284,12 @@ class Camera(_YamlRep):
             The timestamps for the video.
 
         """
-        if self.__timestamp_name is not None:
+        if self.__timestamp_path is not None:
             # Read from the file.
-            return self.__timestamps_from_file()
+            if self.__timestamp_path.name.endswith(".txt"):
+                return self.__timestamps_from_file()
+            else:
+                return self.__timestamps_from_metadata()
         else:
             # Generate from the video.
             return self.__timestamps_from_video()
@@ -295,12 +374,14 @@ class Camera(_YamlRep):
         status, frame = self.__video_capture.read()
         self.__capture_frame = frame_index + 1
 
-        assert status, "Failed to read frame from video."
+        if not status:
+            logger.error("Failed to read frame at index {}.", frame_index)
+            raise ValueError(f"Failed to read frame at index {frame_index}.")
         return frame
 
     def frame_at_timestamp(
         self, timestamp: float, tolerance: float = 0.05
-    ) -> np.ndarray:
+    ) -> LazyFrame:
         """
         Gets the frame from the video that's closest to a particular timestamp.
 
@@ -319,9 +400,9 @@ class Camera(_YamlRep):
         frame_index = self.__frame_num_at_timestamp(
             timestamp, tolerance=tolerance
         )
-        return self.__frame_at_index(frame_index)
+        return partial(self.__frame_at_index, frame_index)
 
-    def frames(self) -> Iterable[Tuple[float, np.ndarray]]:
+    def frames(self) -> Iterable[Tuple[float, LazyFrame]]:
         """
         Yields:
             The timestamp and corresponding frame for each frame of the video,
@@ -329,8 +410,7 @@ class Camera(_YamlRep):
 
         """
         for timestamp, frame_num in self.__timestamps.itertuples():
-            frame = self.__frame_at_index(frame_num)
-
+            frame = partial(self.__frame_at_index, frame_num)
             yield timestamp, frame
 
     def release(self) -> None:
@@ -372,19 +452,36 @@ class Session(_YamlRep):
 
     @classmethod
     def from_yaml(
-        cls, spec: Dict[str, Any], *, parent_folder: Path
+        cls,
+        spec: Dict[str, Any],
+        *,
+        video_parent_folder: UPath,
+        ts_parent_folder: UPath,
     ) -> "Session":
-        session_folder = parent_folder / Path(spec["path"])
-        logger.debug("Loading session from {}.", session_folder)
+        if "path" in spec:
+            video_parent_folder = video_parent_folder / spec["path"]
+            ts_parent_folder = ts_parent_folder / spec["path"]
+        else:
+            video_parent_folder = video_parent_folder / spec.get(
+                "video_path", ""
+            )
+            ts_parent_folder = ts_parent_folder / spec.get("ts_path", "")
+
+        logger.debug("Loading session from {}.", video_parent_folder)
 
         # Load the cameras in the session.
         cameras = []
-        for camera_spec in spec["cameras"].values():
+        for camera_id, camera_spec in spec["cameras"].items():
+            camera_spec["camera_id"] = camera_id
             cameras.append(
-                Camera.from_yaml(camera_spec, parent_folder=session_folder)
+                Camera.from_yaml(
+                    camera_spec,
+                    video_parent_folder=video_parent_folder,
+                    ts_parent_folder=ts_parent_folder,
+                )
             )
 
-        return cls(session_folder=session_folder, cameras=cameras)
+        return cls(session_folder=video_parent_folder, cameras=cameras)
 
     @cached_property
     def cameras(self) -> List[Camera]:
@@ -406,7 +503,7 @@ class Session(_YamlRep):
 
     def synchronized_frames(
         self, tolerance: float = 0.05
-    ) -> Iterable[Tuple[float, List[np.ndarray]]]:
+    ) -> Iterable[Tuple[float, List[LazyFrame]]]:
         """
         Iterates through all the frames in this session, ensuring that all
         frames produced correspond for every camera in the session. Frames
@@ -469,16 +566,33 @@ class Dataset(_YamlRep):
 
     @classmethod
     def from_yaml(
-        cls, spec: Dict[str, Any], *, parent_folder: Path = Path("/")
+        cls,
+        spec: Dict[str, Any],
+        *,
+        video_parent_folder: Optional[UPath] = None,
+        ts_parent_folder: Optional[UPath] = None,
     ) -> "Dataset":
-        dataset_folder = parent_folder / spec["root"]
-        logger.debug("Loading dataset from {}.", dataset_folder)
+        if "root" in spec:
+            video_dataset_folder = UPath(spec["root"])
+            ts_dataset_folder = UPath(spec["root"])
+        else:
+            video_dataset_folder = UPath(spec.get("video_root", ""))
+            ts_dataset_folder = UPath(spec.get("ts_root", ""))
+        if video_parent_folder is not None:
+            video_dataset_folder = video_parent_folder / video_dataset_folder
+        if ts_parent_folder is not None:
+            ts_dataset_folder = ts_parent_folder / ts_dataset_folder
+        logger.debug("Loading dataset from {}.", video_dataset_folder)
 
         # Load the sessions.
         sessions = []
         for session_spec in spec["sessions"]:
             sessions.append(
-                Session.from_yaml(session_spec, parent_folder=dataset_folder)
+                Session.from_yaml(
+                    session_spec,
+                    video_parent_folder=video_dataset_folder,
+                    ts_parent_folder=ts_dataset_folder,
+                )
             )
 
         return cls(sessions=sessions)

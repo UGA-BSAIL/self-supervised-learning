@@ -3,8 +3,9 @@ Nodes for the `prepare_mars_dataset` pipeline.
 """
 
 
+from functools import cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple, cast
 
 import cv2
 import kedro.io
@@ -17,7 +18,7 @@ from ultralytics import YOLO
 
 from ..common_nodes import num_flowers_in_image
 from ..schemas import MarsMetadata
-from .dataset import Dataset
+from .dataset import Dataset, LazyFrame
 
 
 def _file_id(*, clip: int, frame: int, camera: int) -> str:
@@ -146,8 +147,29 @@ def _resize_shortest(image: np.array, *, shortest_side: int) -> np.array:
     return cv2.resize(image, new_size.astype(int))
 
 
+@cache
+def _load_dataset_once(
+    dataset: PartitionedDataSet,
+) -> Dict[str, Callable[[], Any]]:
+    """
+    Loads the partitioned dataset exactly once.
+
+    Args:
+        dataset: The dataset to load.
+
+    Returns:
+        The loaded partitions.
+
+    """
+    logger.debug("Checking existing dataset...")
+    partitions = dataset.load()
+    logger.debug("Have {} images already in dataset.", len(partitions))
+
+    return partitions
+
+
 def _write_until_clip_end(
-    frame_iter: Iterable[Tuple[float, List[np.ndarray]]],
+    frame_iter: Iterable[Tuple[float, List[LazyFrame]]],
     *,
     frame_dataset: PartitionedDataSet,
     detection_model: YOLO | None = None,
@@ -186,6 +208,12 @@ def _write_until_clip_end(
     previous_frames = None
 
     for frame_num, (timestamp, frames) in enumerate(frame_iter):
+        try:
+            frames = [f() for f in frames]
+        except ValueError:
+            # Failed to read frames. Skip them.
+            continue
+
         if timestamp - last_frame_timestamp > max_gap:
             logger.info("Reached end of clip {}.", clip_num)
             break

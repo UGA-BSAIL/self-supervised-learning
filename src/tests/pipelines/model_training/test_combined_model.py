@@ -61,7 +61,7 @@ def test_build_combined_model_smoke(faker: Faker, is_training: bool) -> None:
     assert dense_geometry_shape[-1] == 4
 
     # Bounding boxes should be ragged.
-    assert type(bboxes) == tf.RaggedTensor
+    assert type(bboxes) is tf.RaggedTensor
 
     # Make sure the association matrices are the expected size.
     row_sizes = tracklet_geometry.row_lengths().numpy()

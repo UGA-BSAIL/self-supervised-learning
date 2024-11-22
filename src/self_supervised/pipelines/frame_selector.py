@@ -285,7 +285,15 @@ class FrameSelector:
         # Jitter the indices, if specified.
         main_row = camera_metadata[0].iloc[frame_index]
         clip, frame_num = main_row.name
-        clip_metadata = [m.loc[clip] for m in camera_metadata]
+        clip_metadata = []
+        for metadata in camera_metadata:
+            try:
+                clip_metadata.append(metadata.loc[clip])
+            except KeyError:
+                # There is no data for this clip in this camera. Skip it.
+                pass
+        if len(clip_metadata) == 0:
+            raise KeyError(f"No data for clip {clip}.")
 
         min_frame_num = clip_metadata[0].iloc[0].name
         max_frame_num = clip_metadata[0].iloc[-1].name
