@@ -565,7 +565,7 @@ def train_model(
         loss_fn=loss_fn,
         scaler=scaler,
         accuracy=accuracy,
-        checkpoint_period=1,
+        checkpoint_period=5,
     )
 
     # Update contrastive crop 4 times during training.
