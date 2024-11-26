@@ -59,6 +59,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                     temperature="params:temperature",
                     contrastive_crop="params:contrastive_crop",
                     finetune_backbone="params:finetune_backbone",
+                    augment_views="params:augment_views",
                 ),
                 "trained_model",
             ),

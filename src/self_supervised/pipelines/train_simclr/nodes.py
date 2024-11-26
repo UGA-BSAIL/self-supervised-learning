@@ -22,6 +22,7 @@ from torchvision.transforms import (
     Lambda,
     RandAugment,
     RandomResizedCrop,
+    Resize,
     functional,
 )
 
@@ -465,6 +466,7 @@ def train_model(
     temperature: float = 0.1,
     contrastive_crop: bool = True,
     finetune_backbone: bool = False,
+    augment_views: bool = True,
 ) -> nn.Module:
     """
     Trains the model.
@@ -479,6 +481,7 @@ def train_model(
         contrastive_crop: Whether to use ContrastiveCrop.
         finetune_backbone: Fine-tunes the conv layers in the backbone at a
             fraction of the learning rate.
+        augment_views: Whether to use data augmentation on the views.
 
     Returns:
         The trained model.
@@ -523,15 +526,22 @@ def train_model(
         )
     else:
         crop = RandomResizedCrop(**crop_args)
-    augmentation = MultiArgCompose(
-        [
-            crop,
-            # Apparently, crops sometimes produce non-contiguous views,
-            # and RandAugment doesn't like that.
-            Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=2, interpolation=InterpolationMode.NEAREST),
-        ]
-    )
+    if augment_views:
+        augmentation = MultiArgCompose(
+            [
+                crop,
+                # Apparently, crops sometimes produce non-contiguous views,
+                # and RandAugment doesn't like that.
+                Lambda(lambda t: t.contiguous()),
+                RandAugment(
+                    magnitude=2, interpolation=InterpolationMode.NEAREST
+                ),
+            ]
+        )
+    else:
+        augmentation = Resize(
+            (410, 410), interpolation=InterpolationMode.NEAREST
+        )
     # Update the dataset augmentation.
     training_data.augmentation = augmentation
 
