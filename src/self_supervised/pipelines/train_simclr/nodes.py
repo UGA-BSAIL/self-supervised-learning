@@ -2,10 +2,19 @@
 Nodes for the `train_simclr` pipeline.
 """
 
-
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 import pandas as pd
@@ -30,6 +39,7 @@ import wandb
 
 from ..frame_selector import FrameSelector
 from ..representation_model import RepresentationModel, YoloEncoder
+from ..schemas import MarsMetadata
 from .augmentation import ContrastiveCrop, MultiArgCompose
 from .dataset_io import (
     MultiViewDataset,
@@ -325,7 +335,7 @@ def load_dataset(
     metadata: pd.DataFrame,
     max_frame_jitter: int = 0,
     enable_multi_view: bool = False,
-    num_views: int = 3,
+    views: int | Sequence[int] = 3,
     downsample_size: Optional[int] = None,
 ) -> data.Dataset:
     """
@@ -339,8 +349,10 @@ def load_dataset(
         enable_multi_view: Whether to enable training with views from
             different cameras as positive pairs. Otherwise, it will use
             vanilla SimCLR.
-        num_views: If multi-view training is enabled, how many views to use.
-            If >3, it will use temporal augmentation.
+        views: If multi-view training is enabled, how many views to use.
+            If >3, it will use temporal augmentation. If a sequence is
+            provided, it will use these specific cameras instead of choosing
+            randomly.
         downsample_size: If specified, it will be the maximum number of
             examples to include in the dataset.
 
@@ -368,23 +380,25 @@ def load_dataset(
             # We augment in the training loop.
             augmentation=lambda x: x,
         )
-    elif num_views <= 3:
-        # We don't need to add temporal augmentation.
-        paired_frames = MultiViewDataset(
-            frames=frame_selector,
-            image_folder=image_folder,
-            max_jitter=max_frame_jitter,
-            all_views=(num_views > 2),
-        )
+
     else:
-        # We do need temporal augmentation.
-        paired_frames = TemporalMultiViewDataset(
+        # Multi-view training enabled.
+        common_args = dict(
             frames=frame_selector,
             image_folder=image_folder,
             max_jitter=max_frame_jitter,
-            all_views=True,
-            num_extra_views=num_views - 3,
+            views=views,
         )
+        if type(views) is int and views > 3:
+            # We need temporal augmentation.
+            paired_frames = TemporalMultiViewDataset(
+                **common_args,
+                num_extra_views=views - 3,
+            )
+        else:
+            paired_frames = MultiViewDataset(
+                **common_args,
+            )
 
     return paired_frames
 

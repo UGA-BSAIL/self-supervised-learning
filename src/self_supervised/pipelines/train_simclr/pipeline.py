@@ -31,7 +31,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                     metadata="mars_dataset_meta",
                     max_frame_jitter="params:max_frame_jitter",
                     enable_multi_view="params:enable_multi_view",
-                    num_views="params:num_views",
+                    views="params:views",
                     downsample_size="params:downsample_size",
                 ),
                 "training_data",

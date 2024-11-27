@@ -6,7 +6,7 @@ Utilities for loading the image data.
 import itertools
 import random
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 from loguru import logger
@@ -167,7 +167,7 @@ class MultiViewDataset(Dataset):
         augmentation: Callable[[Tensor], Tensor] = lambda x: x,
         max_jitter: int = 0,
         decode_device: str = "cpu",
-        all_views: bool = True,
+        views: int | Sequence[int] | None = None,
     ):
         """
         Args:
@@ -178,8 +178,10 @@ class MultiViewDataset(Dataset):
                 by, in either direction. This can add some more variation to
                 the data.
             decode_device: The device to use for decoding images.
-            all_views: If specified, it will include all the views.
-                Otherwise, it will randomly select 2.
+            views: If this is a sequence, it should specify the exact views
+                to use. If it is a single integer, it will select that many
+                views randomly. By default, it will produce all the views
+                available.
 
         """
         self.__frames = frames
@@ -188,7 +190,7 @@ class MultiViewDataset(Dataset):
         self.augmentation = augmentation
         self.__decode_device = decode_device
         self.__max_jitter = max_jitter
-        self.__all_views = all_views
+        self.__views = views
 
     def __len__(self) -> int:
         return self.__frames.num_frames
@@ -224,9 +226,17 @@ class MultiViewDataset(Dataset):
         frame_ids = self.__frames.get_all_views(
             index, jitter_by=self.__max_jitter
         )
-        if not self.__all_views:
-            # Select just two of them.
-            frame_ids = random.choices(frame_ids, k=2)
+        if type(self.__views) is int:
+            # Select views randomly.
+            frame_ids = random.choices(frame_ids, k=self.__views)
+        elif self.__views is not None:
+            # Select specific views.
+            try:
+                frame_ids = [frame_ids[i] for i in self.__views]
+            except IndexError:
+                # Fall back on choosing frames randomly if these cameras are
+                # not present in this example.
+                frame_ids = random.choices(frame_ids, k=len(self.__views))
 
         # Read the images.
         return [self.__read_single_image(f) for f in frame_ids]
