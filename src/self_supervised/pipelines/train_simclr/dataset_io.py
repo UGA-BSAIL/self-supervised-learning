@@ -165,6 +165,7 @@ class MultiViewDataset(Dataset):
         frames: FrameSelector,
         image_folder: Path,
         augmentation: Callable[[Tensor], Tensor] = lambda x: x,
+        duplicate_augmentation: Callable[[Tensor], Tensor] | None = None,
         max_jitter: int = 0,
         decode_device: str = "cpu",
         views: int | Sequence[int] | None = None,
@@ -174,6 +175,9 @@ class MultiViewDataset(Dataset):
             frames: The frame selector to use for extracting frames.
             image_folder: The folder that contains all the dataset images.
             augmentation: The data augmentation to apply to the frames.
+            duplicate_augmentation: Special augmentation to use for images
+                that are exact duplicates. By default, it just uses the
+                normal one.
             max_jitter: Maximum number of frames to jitter the camera views
                 by, in either direction. This can add some more variation to
                 the data.
@@ -188,6 +192,9 @@ class MultiViewDataset(Dataset):
         logger.info("Loading dataset images from {}.", image_folder)
         self.__image_folder = image_folder
         self.augmentation = augmentation
+        self.duplicate_augmentation = augmentation
+        if duplicate_augmentation is not None:
+            self.duplicate_augmentation = duplicate_augmentation
         self.__decode_device = decode_device
         self.__max_jitter = max_jitter
         self.__views = views
@@ -195,12 +202,16 @@ class MultiViewDataset(Dataset):
     def __len__(self) -> int:
         return self.__frames.num_frames
 
-    def __read_single_image(self, file_id: str) -> Tensor:
+    def __read_single_image(
+        self, file_id: str, is_duplicate: bool = False
+    ) -> Tensor:
         """
         Reads a single image from the dataset.
 
         Args:
             file_id: The file ID of the image to read.
+            is_duplicate: Whether this image is a duplicate and should be
+                augmented as such.
 
         Returns:
             The image that it read.
@@ -211,7 +222,10 @@ class MultiViewDataset(Dataset):
         image = decode_jpeg(image_compressed, device=self.__decode_device)
 
         # Apply augmentations.
-        return self.augmentation(image)
+        if is_duplicate:
+            return self.duplicate_augmentation(image)
+        else:
+            return self.augmentation(image)
 
     def __getitem__(self, index: int) -> List[Tensor]:
         """
@@ -238,8 +252,19 @@ class MultiViewDataset(Dataset):
                 # not present in this example.
                 frame_ids = random.choices(frame_ids, k=len(self.__views))
 
+        # Check for duplicate frame IDs.
+        is_duplicate = {}
+        for frame_id in frame_ids:
+            if frame_id in is_duplicate:
+                is_duplicate[frame_id] = True
+            else:
+                is_duplicate[frame_id] = False
+
         # Read the images.
-        return [self.__read_single_image(f) for f in frame_ids]
+        return [
+            self.__read_single_image(f, is_duplicate=is_duplicate[f])
+            for f in frame_ids
+        ]
 
 
 class TemporalMultiViewDataset(MultiViewDataset):

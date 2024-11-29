@@ -521,7 +521,7 @@ def train_model(
         ]
 
     optimizer = AdamW(parameters, lr=learning_rate)
-    scheduler = ReduceLROnPlateau(optimizer, "min", patience=5, min_lr=1e-5)
+    # scheduler = ReduceLROnPlateau(optimizer, "min", patience=5, min_lr=1e-5)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
 
@@ -540,24 +540,25 @@ def train_model(
         )
     else:
         crop = RandomResizedCrop(**crop_args)
-    if augment_views:
-        augmentation = MultiArgCompose(
-            [
-                crop,
-                # Apparently, crops sometimes produce non-contiguous views,
-                # and RandAugment doesn't like that.
-                Lambda(lambda t: t.contiguous()),
-                RandAugment(
-                    magnitude=2, interpolation=InterpolationMode.NEAREST
-                ),
-            ]
-        )
-    else:
-        augmentation = Resize(
-            (410, 410), interpolation=InterpolationMode.NEAREST
-        )
+    minimal_augmentation = Resize(
+        (410, 410), interpolation=InterpolationMode.NEAREST
+    )
+    full_augmentation = MultiArgCompose(
+        [
+            crop,
+            # Apparently, crops sometimes produce non-contiguous views,
+            # and RandAugment doesn't like that.
+            Lambda(lambda t: t.contiguous()),
+            RandAugment(magnitude=2, interpolation=InterpolationMode.NEAREST),
+        ]
+    )
+
     # Update the dataset augmentation.
-    training_data.augmentation = augmentation
+    training_data.augmentation = (
+        full_augmentation if augment_views else minimal_augmentation
+    )
+    # Allways apply augmentation to duplicate images.
+    training_data.duplicate_augmentation = full_augmentation
 
     data_loader = data.DataLoader(
         training_data,
@@ -612,8 +613,7 @@ def train_model(
             )
 
         average_loss = training_loop.train_epoch(data_loader)
-
         logger.info("Epoch {} loss: {}", i, average_loss)
-        scheduler.step(average_loss)
+        # scheduler.step(average_loss)
 
     return model
