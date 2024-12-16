@@ -335,7 +335,9 @@ def load_dataset(
     metadata: pd.DataFrame,
     max_frame_jitter: int = 0,
     enable_multi_view: bool = False,
-    views: int | Sequence[int] = 3,
+    filter_views: Sequence[int] | None = None,
+    num_views: int | None = None,
+    num_temporal_views: int = 0,
     downsample_size: Optional[int] = None,
 ) -> data.Dataset:
     """
@@ -349,10 +351,11 @@ def load_dataset(
         enable_multi_view: Whether to enable training with views from
             different cameras as positive pairs. Otherwise, it will use
             vanilla SimCLR.
-        views: If multi-view training is enabled, how many views to use.
-            If >3, it will use temporal augmentation. If a sequence is
-            provided, it will use these specific cameras instead of choosing
-            randomly.
+        filter_views: If multi-view training is enabled, will only use these
+            specific views. Defaults to using all views.
+        num_views: How many views to produce for each training example. By
+            default, it will produce all of them.
+        num_temporal_views: The number of additional temporal views to add.
         downsample_size: If specified, it will be the maximum number of
             examples to include in the dataset.
 
@@ -387,13 +390,14 @@ def load_dataset(
             frames=frame_selector,
             image_folder=image_folder,
             max_jitter=max_frame_jitter,
-            views=views,
+            filter_views=filter_views,
+            num_views=num_views,
         )
-        if type(views) is int and views > 3:
+        if num_temporal_views > 0:
             # We need temporal augmentation.
             paired_frames = TemporalMultiViewDataset(
                 **common_args,
-                num_extra_views=views - 3,
+                num_extra_views=num_temporal_views,
             )
         else:
             paired_frames = MultiViewDataset(
@@ -521,7 +525,7 @@ def train_model(
         ]
 
     optimizer = AdamW(parameters, lr=learning_rate)
-    # scheduler = ReduceLROnPlateau(optimizer, "min", patience=5, min_lr=1e-5)
+    scheduler = ReduceLROnPlateau(optimizer, "min", patience=5, min_lr=1e-5)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
 
@@ -540,25 +544,24 @@ def train_model(
         )
     else:
         crop = RandomResizedCrop(**crop_args)
-    minimal_augmentation = Resize(
-        (410, 410), interpolation=InterpolationMode.NEAREST
-    )
-    full_augmentation = MultiArgCompose(
-        [
-            crop,
-            # Apparently, crops sometimes produce non-contiguous views,
-            # and RandAugment doesn't like that.
-            Lambda(lambda t: t.contiguous()),
-            RandAugment(magnitude=2, interpolation=InterpolationMode.NEAREST),
-        ]
-    )
-
+    if augment_views:
+        augmentation = MultiArgCompose(
+            [
+                crop,
+                # Apparently, crops sometimes produce non-contiguous views,
+                # and RandAugment doesn't like that.
+                Lambda(lambda t: t.contiguous()),
+                RandAugment(
+                    magnitude=2, interpolation=InterpolationMode.NEAREST
+                ),
+            ]
+        )
+    else:
+        augmentation = Resize(
+            (410, 410), interpolation=InterpolationMode.NEAREST
+        )
     # Update the dataset augmentation.
-    training_data.augmentation = (
-        full_augmentation if augment_views else minimal_augmentation
-    )
-    # Allways apply augmentation to duplicate images.
-    training_data.duplicate_augmentation = full_augmentation
+    training_data.augmentation = augmentation
 
     data_loader = data.DataLoader(
         training_data,
@@ -613,7 +616,8 @@ def train_model(
             )
 
         average_loss = training_loop.train_epoch(data_loader)
+
         logger.info("Epoch {} loss: {}", i, average_loss)
-        # scheduler.step(average_loss)
+        scheduler.step(average_loss)
 
     return model

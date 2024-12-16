@@ -3,9 +3,11 @@ max_frame_jitter: 0
 # Whether to enable multi-camera training. Otherwise, it will use
 # vanilla SimCLR.
 enable_multi_view: true
-# If multi-view training is enabled, how many views to use. If >3,
-# it will use temporal augmentation. Specific cameras to use views from can
-# also be specified.
-views: [1, 3]
+# Limit training to these specific views.
+filter_views: [0, 2, 4]
+# Select this many views for each example.
+num_views: 2
+# Add this many extra temporal views for each example.
+num_temporal_views: 0
 # Number of examples to use from the dataset.
 downsample_size: 192000
