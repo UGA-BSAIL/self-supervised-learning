@@ -4,14 +4,14 @@
 mars_image_folder: data/05_model_input/mars_multi_camera_boll
 
 # Number of epochs to train for.
-num_epochs: 80
+num_epochs: 40
 # Learning rate to use for training.
 learning_rate: 0.001
 # Temperature parameter to use for the loss.
 temperature: 0.07
 
 # Whether to use MoCo. Otherwise, will use normal SimCLR.
-use_moco: true
+use_moco: false
 # Whether to use contrastive crop. Otherwise, it will use normal random
 # cropping.
 contrastive_crop: false
