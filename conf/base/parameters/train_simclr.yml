@@ -2,7 +2,7 @@
 max_frame_jitter: 0
 # Whether to enable multi-camera training. Otherwise, it will use
 # vanilla SimCLR.
-enable_multi_view: true
+enable_multi_view: false
 # Limit training to these specific views.
 filter_views: [0, 1, 2]
 # Select this many views for each example.

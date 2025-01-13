@@ -557,8 +557,8 @@ def train_model(
             ]
         )
     else:
-        augmentation = Resize(
-            (410, 410), interpolation=InterpolationMode.NEAREST
+        augmentation = MultiArgCompose(
+            [Resize((410, 410), interpolation=InterpolationMode.NEAREST)]
         )
     # Update the dataset augmentation.
     training_data.augmentation = augmentation
