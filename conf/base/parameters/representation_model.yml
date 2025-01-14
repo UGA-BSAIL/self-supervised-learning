@@ -18,4 +18,4 @@ contrastive_crop: false
 # Whether to fine-tune the backbone instead of fully re-training it.
 finetune_backbone: false
 # Whether to enable data augmentation on the individual views.
-augment_views: true
+augment_views: false
