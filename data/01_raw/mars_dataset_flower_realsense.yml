@@ -1,5 +1,5 @@
 # Contains the specifications for the files in the MARS dataset.
-dataset:
+video_dataset:
   # All paths will be relative to this.
   root: "/home/daniel/lab_share/scratch/temp_mars_videos/"
   # All the sessions that make up the dataset.

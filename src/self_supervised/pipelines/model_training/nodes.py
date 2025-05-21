@@ -7,17 +7,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
-from loguru import logger
 from keras import layers
 from keras.applications.efficientnet_v2 import EfficientNetV2S
+from loguru import logger
 
-from ..callbacks import LogHeatmaps, KeepBest
+from ..callbacks import KeepBest, LogHeatmaps
 from ..config import ModelConfig
 from ..schemas import ModelInputs, ModelTargets
-from ..training_utils import (
-    get_log_dir,
-    make_common_callbacks,
-)
+from ..training_utils import get_log_dir, make_common_callbacks
 from .combined_model import build_combined_model, build_separate_models
 from .losses import make_losses
 from .metrics import make_metrics
@@ -116,7 +113,7 @@ def create_model(
 def _make_callbacks(
     *,
     model: tf.keras.Model,
-    dataset: tf.data.Dataset,
+    dataset: tf.data.VideoDataset,
     tensorboard_output_dir: str,
     heatmap_size: Tuple[int, int],
     heatmap_period: int,
@@ -166,8 +163,8 @@ def _make_callbacks(
 def train_model(
     model: tf.keras.Model,
     *,
-    training_data: tf.data.Dataset,
-    testing_data: tf.data.Dataset,
+    training_data: tf.data.VideoDataset,
+    testing_data: tf.data.VideoDataset,
     learning_phases: List[Dict[str, Any]],
     validation_frequency: int = 1,
     loss_params: Dict[str, Any],

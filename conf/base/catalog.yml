@@ -19,6 +19,10 @@ gpheno_2020_dataset_spec:
   type: yaml.YAMLDataSet
   filepath: data/01_raw/gpheno_dataset_flower.yml
 
+synthetic_boll_dataset_spec:
+  type: yaml.YAMLDataSet
+  filepath: data/01_raw/synthetic_boll_dataset.yml
+
 # Metadata associated with the MARS dataset.
 mars_dataset_meta:
   type: pandas.FeatherDataSet

@@ -12,8 +12,9 @@ _DATASETS = [
     # "mars_flower_dataset",
     # "mars_flower_dataset_rs",
     # "gpheno_2020_dataset",
-    "mars_boll_dataset",
-    "mars_boll_2024_dataset",
+    # "mars_boll_dataset",
+    # "mars_boll_2024_dataset",
+    "synthetic_boll_dataset",
 ]
 
 

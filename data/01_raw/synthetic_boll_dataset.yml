@@ -1,0 +1,4 @@
+# Specification for a dataset of synthetic cotton boll images generated using
+# ISAAC Sim.
+isaac_dataset:
+  root: "/home/daniel/lab_share/scratch/omniverse_cotton_bolls"

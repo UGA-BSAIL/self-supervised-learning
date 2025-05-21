@@ -1,5 +1,5 @@
 # Contains the specifications for the files in the MARS dataset.
-dataset:
+video_dataset:
   # All paths will be relative to this.
   ts_root: "/home/daniel/lab_share/raw_data/2022/images/ground"
   video_root: "https://bsailn2.ad.ufl.edu:8083/api/v1/videos"

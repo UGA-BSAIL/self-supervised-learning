@@ -33,7 +33,7 @@ def create_model(config: ModelConfig) -> tf.keras.Model:
 def train_model(
     model: tf.keras.Model,
     *,
-    training_data: tf.data.Dataset,
+    training_data: tf.data.VideoDataset,
     learning_phases: List[Dict[str, Any]],
     **kwargs: Any,
 ) -> tf.keras.Model:

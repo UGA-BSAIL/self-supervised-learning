@@ -47,7 +47,7 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
         self,
         *args: Any,
         model: keras.Model,
-        dataset: tf.data.Dataset,
+        dataset: tf.data.VideoDataset,
         log_period: int = 1,
         num_images_per_batch: int = 3,
         max_num_batches: Optional[int] = None,

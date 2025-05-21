@@ -1,5 +1,5 @@
 # Contains specifications for the files in the GPhenoVision 2020 dataset.
-dataset:
+video_dataset:
   # All paths will be relative to this.
   root: "/home/daniel/lab_share/raw_data/2020/images/ground"
   # All the sessions that make up the dataset.

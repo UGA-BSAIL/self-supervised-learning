@@ -14,9 +14,9 @@ import tensorflow.keras as keras
 import tensorflow.keras.callbacks as callbacks
 from loguru import logger
 
+from .model_training.layers import CUSTOM_LAYERS
 from .schemas import ModelInputs, ModelTargets
 from .visualization import visualize_heat_maps
-from .model_training.layers import CUSTOM_LAYERS
 
 
 class _TensorboardLoggingCallback(callbacks.Callback):
@@ -49,7 +49,7 @@ class _ImageLoggingCallback(_TensorboardLoggingCallback, abc.ABC):
         self,
         *args: Any,
         model: keras.Model,
-        dataset: tf.data.Dataset,
+        dataset: tf.data.VideoDataset,
         log_period: int = 1,
         num_images_per_batch: int = 3,
         max_num_batches: Optional[int] = None,

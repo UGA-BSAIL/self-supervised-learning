@@ -19,6 +19,8 @@ from ultralytics import YOLO
 from ..common_nodes import num_flowers_in_image
 from ..schemas import MarsMetadata
 from .dataset import Dataset, LazyFrame
+from .isaac_dataset import IsaacDataset
+from .video_dataset import VideoDataset
 
 
 def _file_id(*, clip: int, frame: int, camera: int) -> str:
@@ -248,8 +250,7 @@ def _write_until_clip_end(
         for camera, frame in enumerate(frames):
             file_id = _file_id(clip=clip_num, camera=camera, frame=frame_num)
 
-            # Fix the color and resize before saving.
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Resize before saving.
             frame = _resize_shortest(frame, shortest_side=540)
 
             num_flowers = -1
@@ -292,7 +293,12 @@ def load_from_spec(dataset_spec: Dict[str, Any]) -> Dataset:
         The dataset that it loaded.
 
     """
-    return Dataset.from_yaml(dataset_spec["dataset"])
+    if "video_dataset" in dataset_spec:
+        return VideoDataset.from_yaml(dataset_spec["video_dataset"])
+    if "isaac_dataset" in dataset_spec:
+        return IsaacDataset.from_yaml(dataset_spec["isaac_dataset"])
+    else:
+        raise ValueError(f"Unknown dataset types: {dataset_spec.keys()}")
 
 
 def build_dataset(
