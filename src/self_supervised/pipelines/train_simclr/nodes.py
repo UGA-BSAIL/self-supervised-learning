@@ -525,7 +525,7 @@ def train_model(
         ]
 
     optimizer = AdamW(parameters, lr=learning_rate)
-    scheduler = ReduceLROnPlateau(optimizer, "min", patience=5, min_lr=1e-5)
+    scheduler = ReduceLROnPlateau(optimizer, "min", patience=10, min_lr=1e-5)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
 
