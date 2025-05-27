@@ -113,6 +113,7 @@ class TrainingLoop:
         accuracy: Metric | None = None,
         checkpoint_dir: Path = Path("checkpoints"),
         checkpoint_period: int = 1,
+        log_period: int = 100,
         augmentation: Callable[[Tensor], Tensor] = lambda x: x,
     ):
         """
@@ -125,6 +126,7 @@ class TrainingLoop:
             checkpoint_dir: The directory to use for saving intermediate
                 model checkpoints.
             checkpoint_period: How often to save a checkpoint, in epochs.
+            log_period: The WandB logging period, in steps.
             augmentation: The data augmentation to apply.
 
         """
@@ -137,6 +139,7 @@ class TrainingLoop:
         self.__checkpoint_dir.mkdir(exist_ok=True)
         self.__checkpoint_period = checkpoint_period
         self.__augmentation = augmentation
+        self.__log_period = log_period
 
         # Keeps track of the current global training step.
         self.__global_step = 0
@@ -257,7 +260,7 @@ class TrainingLoop:
                 batch_acc = self.__accuracy(view_preds)
 
             logger.debug("batch {}: loss={}", batch_i, loss.item())
-            if self.__global_step % 100 == 0:
+            if self.__global_step % self.__log_period == 0:
                 acc_log = {}
                 if batch_acc is not None:
                     acc_log = {"train/acc_batch": batch_acc.item()}
@@ -525,7 +528,7 @@ def train_model(
         ]
 
     optimizer = AdamW(parameters, lr=learning_rate)
-    scheduler = ReduceLROnPlateau(optimizer, "min", patience=10, min_lr=1e-5)
+    scheduler = ReduceLROnPlateau(optimizer, "min", patience=50, min_lr=1e-5)
     scaler = GradScaler()
     accuracy = ProxyClassAccuracy().to(DEVICE) if not is_moco else None
 
@@ -593,7 +596,8 @@ def train_model(
         loss_fn=loss_fn,
         scaler=scaler,
         accuracy=accuracy,
-        checkpoint_period=5,
+        checkpoint_period=10,
+        log_period=5,
     )
 
     # Update contrastive crop 4 times during training.
