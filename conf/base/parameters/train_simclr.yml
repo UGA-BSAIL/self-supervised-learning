@@ -4,7 +4,7 @@ max_frame_jitter: 0
 # vanilla SimCLR.
 enable_multi_view: true
 # Limit training to these specific views.
-filter_views: [2, 3]
+filter_views: [2, 4]
 # Select this many views for each example.
 num_views: 2
 # Add this many extra temporal views for each example.
