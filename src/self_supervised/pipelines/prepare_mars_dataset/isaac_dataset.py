@@ -81,7 +81,7 @@ class IsaacSession(Session):
         # Add all of the camera data.
         self.__cameras = [
             IsaacCamera(camera_dir=camera_dir)
-            for camera_dir in session_dir.iterdir()
+            for camera_dir in sorted(session_dir.iterdir())
             if camera_dir.is_dir()
         ]
 

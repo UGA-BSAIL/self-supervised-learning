@@ -70,7 +70,8 @@ class Session(abc.ABC):
     def cameras(self) -> List[Camera]:
         """
         Returns:
-            The camera data from this session.
+            The camera data from this session. Should always be returned in a
+            defined order.
 
         """
 
