@@ -34,6 +34,7 @@ def create_pipeline(**kwargs) -> Pipeline:
                     filter_views="params:filter_views",
                     num_views="params:num_views",
                     num_temporal_views="params:num_temporal_views",
+                    temporal_step_range="params:temporal_step_range",
                     downsample_size="params:downsample_size",
                 ),
                 "training_data",

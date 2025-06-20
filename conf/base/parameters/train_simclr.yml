@@ -4,10 +4,13 @@ max_frame_jitter: 0
 # vanilla SimCLR.
 enable_multi_view: true
 # Limit training to these specific views.
-filter_views: [4, 5]
+filter_views: null
 # Select this many views for each example.
-num_views: 2
+num_views: 1
 # Add this many extra temporal views for each example.
-num_temporal_views: 0
+num_temporal_views: 1
+# Minimum and maximum number of frames to step forward in time for generating
+# additional views.
+temporal_step_range: [3, 3]
 # Number of examples to use from the dataset.
 downsample_size: 192000

@@ -241,7 +241,8 @@ class TrainingLoop:
             view_inputs = [self.__preprocess(view) for view in view_inputs]
 
             # Compute loss.
-            with torch.autocast(device_type=DEVICE, dtype=torch.float16):
+            cast_type = torch.float32 if DEVICE == "cpu" else torch.bfloat16
+            with torch.autocast(device_type=DEVICE, dtype=cast_type):
                 view_preds = self.__model(*view_inputs)
                 loss = self.__loss_fn(*view_preds)
 
@@ -341,6 +342,7 @@ def load_dataset(
     filter_views: Sequence[int] | None = None,
     num_views: int | None = None,
     num_temporal_views: int = 0,
+    temporal_step_range: Tuple[int, int] = (-3, 3),
     downsample_size: Optional[int] = None,
 ) -> data.Dataset:
     """
@@ -359,6 +361,8 @@ def load_dataset(
         num_views: How many views to produce for each training example. By
             default, it will produce all of them.
         num_temporal_views: The number of additional temporal views to add.
+        temporal_step_range: Minimum and maximum number of frames to step
+            forward in time to generate additional views.
         downsample_size: If specified, it will be the maximum number of
             examples to include in the dataset.
 
@@ -400,6 +404,7 @@ def load_dataset(
             # We need temporal augmentation.
             paired_frames = TemporalMultiViewDataset(
                 **common_args,
+                frame_step_range=temporal_step_range,
                 num_extra_views=num_temporal_views,
             )
         else:

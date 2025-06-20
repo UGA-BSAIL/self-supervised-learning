@@ -197,7 +197,7 @@ class MultiViewDataset(Dataset):
     def __len__(self) -> int:
         return self.__frames.num_frames
 
-    def __read_single_image(self, file_id: str) -> Tensor:
+    def _read_single_image(self, file_id: str) -> Tensor:
         """
         Reads a single image from the dataset.
 
@@ -215,14 +215,15 @@ class MultiViewDataset(Dataset):
         # Apply augmentations.
         return self.augmentation(image)
 
-    def __getitem__(self, index: int) -> List[Tensor]:
+    def _select_frame_ids(self, index: int) -> List[str]:
         """
+        Selects the frame IDs to use for a specific index in the dataset.
+
         Args:
-            index: The index of the image in the dataset.
+            index: The dataset index.
 
         Returns:
-            The frames for this example, as a tensor with a batch
-            dimension.
+            The selected frame IDs.
 
         """
         frame_ids = self.__frames.get_all_views(
@@ -237,8 +238,21 @@ class MultiViewDataset(Dataset):
             # Randomly select the views.
             frame_ids = random.choices(frame_ids, k=self.__num_views)
 
+        return frame_ids
+
+    def __getitem__(self, index: int) -> List[Tensor]:
+        """
+        Args:
+            index: The index of the image in the dataset.
+
+        Returns:
+            The frames for this example, as a tensor with a batch
+            dimension.
+
+        """
+        frame_ids = self._select_frame_ids(index)
         # Read the images.
-        return [self.__read_single_image(f) for f in frame_ids]
+        return [self._read_single_image(f) for f in frame_ids]
 
 
 class TemporalMultiViewDataset(MultiViewDataset):
@@ -251,6 +265,7 @@ class TemporalMultiViewDataset(MultiViewDataset):
         self,
         *args: Any,
         frame_step_range: Tuple[int, int] = (-3, 3),
+        num_views: int | None = None,
         num_extra_views: int,
         **kwargs: Any,
     ):
@@ -260,13 +275,19 @@ class TemporalMultiViewDataset(MultiViewDataset):
             *args: Will be forwarded to the superclass.
             frame_step_range: Minimum and maximum number of frames to step
                 forward in time to generate additional views.
-            num_extra_views: The number of extra views to generate.
+            num_views: If specified, it will only select this many
+                spatial views to return. If there are more source views than
+                this, it will select randomly. Otherwise, it will return all
+                the views.
+            num_extra_views: The number of extra views to generate from
+                temporal jittering.
             **kwargs: Will be forwarded to the superclass.
 
         """
         super().__init__(*args, **kwargs)
 
         self.__frame_step_range = frame_step_range
+        self.__num_views = num_views
         self.__num_extra_views = num_extra_views
 
     def __get_nearby_index(self, base_index: int) -> int:
@@ -287,7 +308,12 @@ class TemporalMultiViewDataset(MultiViewDataset):
         return index
 
     def __getitem__(self, index: int) -> List[Tensor]:
-        views = super().__getitem__(index)
+        views = self._select_frame_ids(index)
+        view_indices = list(range(len(views)))
+        if self.__num_views is not None and self.__num_views < len(views):
+            # Randomly select the views.
+            view_indices = random.choices(view_indices, k=self.__num_views)
+            views = [views[i] for i in view_indices]
 
         other_view_indices = [
             self.__get_nearby_index(index)
@@ -296,14 +322,11 @@ class TemporalMultiViewDataset(MultiViewDataset):
 
         # This sampling strategy is to ensure we pull evenly from all the
         # cameras.
-        camera_indices = list(range(len(views)))
-        random.shuffle(camera_indices)
-        camera_indices = itertools.cycle(camera_indices)
+        random.shuffle(view_indices)
+        view_indices = itertools.cycle(view_indices)
 
-        for camera_index, frame_index in zip(
-            camera_indices, other_view_indices
-        ):
-            other_views = super().__getitem__(frame_index)
-            views.append(other_views[camera_index])
+        for view_index, frame_index in zip(view_indices, other_view_indices):
+            other_views = self._select_frame_ids(frame_index)
+            views.append(other_views[view_index])
 
-        return views
+        return [self._read_single_image(v) for v in views]
