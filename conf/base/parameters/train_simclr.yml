@@ -11,6 +11,6 @@ num_views: 1
 num_temporal_views: 1
 # Minimum and maximum number of frames to step forward in time for generating
 # additional views.
-temporal_step_range: [15, 15]
+temporal_step_range: [30, 30]
 # Number of examples to use from the dataset.
 downsample_size: 192000
