@@ -27,7 +27,7 @@
 # limitations under the License.
 
 """Project settings."""
-from kedro.config import TemplatedConfigLoader
+from kedro.config import OmegaConfigLoader
 
 # Instantiate and list your project hooks here
 # HOOKS = (ProjectHooks(),)
@@ -50,5 +50,4 @@ from kedro.config import TemplatedConfigLoader
 # Define the configuration folder. Defaults to `conf`
 # CONF_ROOT = "conf"
 
-CONFIG_LOADER_CLASS = TemplatedConfigLoader
-CONFIG_LOADER_ARGS = dict(globals_pattern="*globals.yml")
+CONFIG_LOADER_CLASS = OmegaConfigLoader

@@ -6,12 +6,11 @@
 # It expects that a valid virtualenv has already been created with
 # `poetry install`.
 
-#SBATCH --partition=gpu
 #SBATCH -J self_supervised_yolo_train
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:1
 #SBATCH --time=1:00:00
 #SBATCH --mem=40gb
 #SBATCH --mail-user=djpetti@gmail.com
@@ -23,43 +22,16 @@
 
 set -e
 
-# Base directory we use for job output.
-OUTPUT_BASE_DIR="/blue/cli2/$(whoami)/job_scratch/"
-# Directory where our data and venv are located.
-LARGE_FILES_DIR="/blue/cli2/$(whoami)/ssl/"
-
-function prepare_environment() {
-  # Create the working directory for this job.
-  job_dir="${OUTPUT_BASE_DIR}/job_${SLURM_JOB_ID}"
-  mkdir "${job_dir}"
-  echo "Job directory is ${job_dir}."
-
-  # Copy the code.
-  cp -Rd "${SLURM_SUBMIT_DIR}/"* "${job_dir}/"
-
-  # Link to the input data directory and venv.
-  rm -rf "${job_dir}/data"
-  ln -s "${LARGE_FILES_DIR}/data" "${job_dir}/data"
-  ln -s "${LARGE_FILES_DIR}/.venv" "${job_dir}/.venv"
-
-  # Create output directories.
-  mkdir "${job_dir}/output_data"
-  mkdir "${job_dir}/logs"
-
-  # Set the working directory correctly for Kedro.
-  cd "${job_dir}"
-}
+source scripts/common.sh
 
 # Prepare the environment.
 prepare_environment
-
-source scripts/load_common.sh
 
 # Run the training.
 export PYTHONPATH=${PYTHONPATH}:src/
 poetry run yolo detect train model=data/01_raw/yolov8l.yml \
   epochs=100 \
-  pretrained=yolov8l_ssl_moco_boll_1s.pt \
-  batch=128 imgsz=640 cache=ram workers=8 \
+  pretrained=yolov8l_ssl_moco_boll_1.5s.pt \
+  batch=48 imgsz=640 cache=ram workers=8 \
   project=self_supervised name=yolo_val freeze=10 \
   data=data/05_model_input/boll_dataset/ground_dataset_small.yaml

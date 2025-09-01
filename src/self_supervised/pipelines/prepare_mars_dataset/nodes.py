@@ -11,7 +11,7 @@ import cv2
 import kedro.io
 import numpy as np
 import pandas as pd
-from kedro.io import PartitionedDataSet
+from kedro_datasets.partitions import PartitionedDataset
 from loguru import logger
 from PIL import Image
 from ultralytics import YOLO
@@ -151,7 +151,7 @@ def _resize_shortest(image: np.array, *, shortest_side: int) -> np.array:
 
 @cache
 def _load_dataset_once(
-    dataset: PartitionedDataSet,
+    dataset: PartitionedDataset,
 ) -> Dict[str, Callable[[], Any]]:
     """
     Loads the partitioned dataset exactly once.
@@ -173,7 +173,7 @@ def _load_dataset_once(
 def _write_until_clip_end(
     frame_iter: Iterable[Tuple[float, List[LazyFrame]]],
     *,
-    frame_dataset: PartitionedDataSet,
+    frame_dataset: PartitionedDataset,
     detection_model: YOLO | None = None,
     clip_num: int,
     max_gap: float,

@@ -5,10 +5,15 @@ description = "Multi-object tracking for cotton flowers."
 authors = ["Daniel Petti <djpetti@gmail.com>"]
 license = "MIT"
 
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
+priority = "supplemental"
+
 [tool.poetry.dependencies]
 python = "~3.10"
-kedro = {extras = ["matplotlib", "pandas"], version = "^0.18.1"}
-pandas = "1.5"
+kedro = "^0.19.14"
+pandas = "^2.3.0"
 loguru = "^0.5.3"
 seaborn = "^0.13.2"
 matplotlib = "^3.3.4"
@@ -18,10 +23,10 @@ opencv-contrib-python = "^4.5"
 tqdm = "^4.64.0"
 python-json-logger = "^2.0.4"
 setuptools = "^65.7.0"
-torch = "^2.2.1"
-torchvision = "^0.17.1"
+torch = {version = "^2.7.1", source = "pytorch"}
+torchvision = "^0.22.1"
 methodtools = "^0.4.5"
-wandb = "^0.13.9"
+wandb = "^0.20.1"
 torchmetrics = "^0.11.0"
 scikit-learn = "^1.2.1"
 segment-anything = {git = "https://github.com/facebookresearch/segment-anything.git"}
@@ -35,6 +40,10 @@ requests-toolbelt = "^1.0.0"
 yaspin = "^3.1.0"
 shapely = "^2.0.6"
 pyrr = "^0.10.3"
+opencv-python = "^4.11.0.86"
+kedro-datasets = "^7.0.0"
+pyarrow = "^20.0.0"
+openpyxl = "^3.1.5"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
@@ -76,8 +85,11 @@ skip = "('.eggs', '.git', '.venv', 'build', 'dist')"
 [tool.kedro]
 package_name = "self_supervised"
 project_name = "Self-Supervised Learning"
-project_version = "0.18.1"
+kedro_init_version = "0.19.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.kedro_telemetry]
+project_id = "bceea18bd7f340a38d0c31fe14971674"

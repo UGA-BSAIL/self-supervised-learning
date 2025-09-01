@@ -4,11 +4,11 @@ Loads/stores YOLO models.
 
 from pathlib import Path, PurePosixPath
 
-from kedro.io import AbstractDataSet, Version
+from kedro.io import AbstractDataset
 from ultralytics import YOLO
 
 
-class YoloModelDataSet(AbstractDataSet):
+class YoloModelDataSet(AbstractDataset):
     """
     Loads/stores YOLO models.
     """
@@ -18,10 +18,10 @@ class YoloModelDataSet(AbstractDataSet):
 
         self.__filepath = Path(filepath)
 
-    def _load(self):
+    def load(self):
         return YOLO(self.__filepath)
 
-    def _save(self, model: YOLO):
+    def save(self, model: YOLO):
         model.save(self.__filepath)
 
     def _describe(self):

@@ -9,11 +9,11 @@ directory.
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Optional
 
-from kedro.io import AbstractDataSet, AbstractVersionedDataSet, Version
+from kedro.io import AbstractDataset, AbstractVersionedDataset, Version
 from loguru import logger
 
 
-class MultiFileDataSet(AbstractVersionedDataSet):
+class MultiFileDataSet(AbstractVersionedDataset):
     """
     This is actually a sort of meta-dataset that is designed to wrap other
     datasets which produce a file. It take an arbitrary number of the outputs
@@ -59,7 +59,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
 
     def __create_dataset(
         self, index: int, *, base_path: Path
-    ) -> AbstractDataSet:
+    ) -> AbstractDataset:
         """
         Creates a new dataset.
 
@@ -91,7 +91,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
             load_version = self.__version.load
             save_version = self.__version.save
 
-        return AbstractVersionedDataSet.from_config(
+        return AbstractVersionedDataset.from_config(
             f"{self.__dataset_type}_{index}",
             config,
             load_version=load_version,
@@ -100,7 +100,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
 
     def __iter_datasets(
         self, base_path: Optional[Path] = None
-    ) -> Iterable[AbstractDataSet]:
+    ) -> Iterable[AbstractDataset]:
         """
         Iterates through all of the internal datasets in-order, creating
         those that don't exist on-the-fly.
@@ -128,7 +128,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
 
             yield dataset
 
-    def _load(self) -> Iterable[Any]:
+    def load(self) -> Iterable[Any]:
         # Figure out how many saved files there are.
         load_path = Path(self._get_load_path())
         saved_files = load_path.iterdir()
@@ -144,7 +144,7 @@ class MultiFileDataSet(AbstractVersionedDataSet):
             else:
                 yield dataset.load()
 
-    def _save(self, data: Iterable[Any]) -> None:
+    def save(self, data: Iterable[Any]) -> None:
         for data_item, dataset in zip(data, self.__iter_datasets()):
             # Save the data.
             dataset.save(data_item)

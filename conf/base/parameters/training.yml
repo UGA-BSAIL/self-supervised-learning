@@ -3,7 +3,7 @@ wandb_entity: djpetti
 
 # Tensorboard parameters.
 # Log directory.
-tensorboard_output_dir: ${log_dir}/tensorboard
+tensorboard_output_dir: ${globals:log_dir}/tensorboard
 # Period at which to write histograms, in epochs.
 histogram_period: 2
 # Period at which to write metrics, in batches.

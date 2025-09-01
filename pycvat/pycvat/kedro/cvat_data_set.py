@@ -4,17 +4,17 @@ A Kedro `DataSet` for data from CVAT.
 
 
 from contextlib import ExitStack
+from functools import cached_property
 from typing import Any, Dict, Tuple
 
-from backports.cached_property import cached_property
-from kedro.io import AbstractDataSet
+from kedro.io import AbstractDataset
 from loguru import logger
 
 from ..dataset.api import make_api_client
 from ..dataset.task import Task
 
 
-class CvatDataSet(AbstractDataSet):
+class CvatDataSet(AbstractDataset):
     """
     A Kedro `DataSet` for data from CVAT.
     """
@@ -70,7 +70,8 @@ class CvatDataSet(AbstractDataSet):
 
         """
         logger.info(
-            "Initializing connection to task {}.", self.__task_id,
+            "Initializing connection to task {}.",
+            self.__task_id,
         )
 
         self.__connected_to_cvat = True
@@ -117,10 +118,10 @@ class CvatDataSet(AbstractDataSet):
             self.__cvat_context.close()
             self.__connected_to_cvat = False
 
-    def _load(self) -> Task:
+    def load(self) -> Task:
         return self.__cvat_task
 
-    def _save(self, data: Task) -> None:
+    def save(self, data: Task) -> None:
         # Force the data to be uploaded now.
         data.upload()
 

@@ -7,12 +7,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Optional
 
 import torch
-from kedro.io import AbstractVersionedDataSet, Version
+from kedro.io import AbstractVersionedDataset, Version
 from loguru import logger
 from torch import nn
 
 
-class PytorchModelDataSet(AbstractVersionedDataSet[nn.Module, nn.Module]):
+class PytorchModelDataset(AbstractVersionedDataset[nn.Module, nn.Module]):
     """
     Loads/stores Pytorch models.
     """
@@ -30,7 +30,7 @@ class PytorchModelDataSet(AbstractVersionedDataSet[nn.Module, nn.Module]):
         """
         super().__init__(PurePosixPath(filepath), version)
 
-    def _load(self) -> nn.Module:
+    def load(self) -> nn.Module:
         """
         Returns:
             The loaded model.
@@ -47,7 +47,7 @@ class PytorchModelDataSet(AbstractVersionedDataSet[nn.Module, nn.Module]):
 
         return torch.load(self._get_load_path().as_posix(), **load_args)
 
-    def _save(self, model: nn.Module) -> None:
+    def save(self, model: nn.Module) -> None:
         """
         Args:
             model: The model to save.

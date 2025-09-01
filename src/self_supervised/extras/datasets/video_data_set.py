@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 import cv2
 import numpy as np
-from kedro.io import AbstractVersionedDataSet, Version
+from kedro.io import AbstractVersionedDataset, Version
 from loguru import logger
 
 
@@ -77,7 +77,7 @@ class FrameReader:
             yield frame
 
 
-class VideoDataSet(AbstractVersionedDataSet):
+class VideoDataSet(AbstractVersionedDataset):
     """
     Loads/stores a video from/to a sequence of frame images.
     """
@@ -110,7 +110,7 @@ class VideoDataSet(AbstractVersionedDataSet):
         self.__resolution = resolution
         self.__bgr_color = bgr_color
 
-    def _load(self) -> FrameReader:
+    def load(self) -> FrameReader:
         """
         Loads the video frame-by-frame.
 
@@ -122,7 +122,7 @@ class VideoDataSet(AbstractVersionedDataSet):
         reader = cv2.VideoCapture(self._get_load_path().as_posix())
         return FrameReader(reader, bgr_color=self.__bgr_color)
 
-    def _save(self, data: Iterable[np.ndarray]) -> None:
+    def save(self, data: Iterable[np.ndarray]) -> None:
         """
         Saves the video frame-by-frame.
 

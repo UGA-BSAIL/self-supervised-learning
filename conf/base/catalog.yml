@@ -1,47 +1,47 @@
 # Specification for the raw MARS dataset.
 mars_flower_dataset_spec:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/mars_dataset_flower.yml
 
 mars_boll_dataset_spec:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/mars_dataset_boll.yml
 
 mars_boll_2024_dataset_spec:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/mars_dataset_boll_2024.yml
 
 mars_flower_dataset_rs_spec:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/mars_dataset_flower_realsense.yml
 
 gpheno_2020_dataset_spec:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/gpheno_dataset_flower.yml
 
 synthetic_boll_dataset_spec:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/synthetic_boll_dataset.yml
 
 # Metadata associated with the MARS dataset.
 mars_dataset_meta:
-  type: pandas.FeatherDataSet
+  type: pandas.FeatherDataset
   filepath: data/05_model_input/mars_dataset_meta.feather
   versioned: True
 
 # Description of the YOLOv5-S model.
 yolov5_s_description:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/yolov5_s.yml
 
 # Description of the YOLOv5-L model.
 yolov5_l_description:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/yolov5_l.yml
 
 # Description of the YOLOv8-L model.
 yolov8_l_description:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/yolov8l.yml
 
 # Flower detection model.
@@ -51,45 +51,45 @@ yolov8l_moco_round_1:
 
 # Description of the YOLOv8-L model with a ResNet backbone.
 yolov8_l_resnet50_description:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/01_raw/yolov8-resnet50.yml
 
 # Initial, untrained model
 initial_model:
-  type: MemoryDataSet
+  type: MemoryDataset
   copy_mode: assign
 
 # Pre-trained MoCo model.
 moco_pretrained_model:
-  type: self_supervised.extras.datasets.PytorchModelDataSet
+  type: self_supervised.extras.datasets.PytorchModelDataset
   filepath: data/06_models/moco_pretrained/yolov8l_resnet50_moco_pretrained.pt
 
 # Trained model
 trained_model:
   versioned: True
-  type: self_supervised.extras.datasets.PytorchModelDataSet
-  filepath: ${output_data_dir}/06_models/last.pt
+  type: self_supervised.extras.datasets.PytorchModelDataset
+  filepath: ${globals:output_data_dir}/06_models/last.pt
 
 trained_model_input:
   versioned: True
-  type: self_supervised.extras.datasets.PytorchModelDataSet
+  type: self_supervised.extras.datasets.PytorchModelDataset
   filepath: data/06_models/last.pt
 
 # Training dataset
 training_data:
-  type: MemoryDataSet
+  type: MemoryDataset
   copy_mode: assign
 
 # Learned representations for the dataset images.
 mars_image_reps:
-  type: PartitionedDataSet
+  type: partitions.PartitionedDataset
   path: data/03_primary/mars_image_reps
   dataset:
-    type: pandas.FeatherDataSet
+    type: pandas.FeatherDataset
   filename_suffix: ".feather"
 
 # Optimal image selection ordering to use for active learning.
 image_order:
-  type: yaml.YAMLDataSet
+  type: yaml.YAMLDataset
   filepath: data/08_reporting/image_order.yml
   versioned: True
