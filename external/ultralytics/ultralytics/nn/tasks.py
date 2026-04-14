@@ -267,7 +267,7 @@ class DetectionModel(BaseModel):
     """YOLOv8 detection model."""
 
     def __init__(
-        self, cfg="yolov8n.yaml", ch=3, nc=None, verbose=True
+        self, cfg="yolov8n.yaml", ch=3, nc=None, verbose=True, shuffle_bn=True
     ):  # model, input channels, number of classes
         """Initialize the YOLOv8 detection model with the given config and parameters."""
         super().__init__()
@@ -283,7 +283,7 @@ class DetectionModel(BaseModel):
             )
             self.yaml["nc"] = nc  # override YAML value
         self.model, self.save = parse_model(
-            deepcopy(self.yaml), ch=ch, verbose=verbose
+            deepcopy(self.yaml), ch=ch, verbose=verbose, shuffle_bn=shuffle_bn
         )  # model, savelist
         self.names = {
             i: f"{i}" for i in range(self.yaml["nc"])
@@ -927,7 +927,8 @@ def attempt_load_one_weight(weight, device=None, inplace=True, fuse=False):
     return model, ckpt
 
 
-def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
+def parse_model(d, ch, verbose=True, shuffle_bn=True):  # model_dict,
+    # input_channels(3)
     """Parse a YOLO model.yaml dictionary into a PyTorch model."""
     import ast
 
@@ -1084,7 +1085,9 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
     sequential_model = nn.Sequential(*layers)
 
     # Handle the batch shuffling/un-shuffling for shuffling BN.
-    return ShuffledModule(sequential_model), sorted(save)
+    if shuffle_bn:
+        sequential_model = ShuffledModule(sequential_model)
+    return sequential_model, sorted(save)
 
 
 def yaml_model_load(path):
